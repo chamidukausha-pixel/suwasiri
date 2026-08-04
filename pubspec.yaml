@@ -1,0 +1,41 @@
+name: suwasiri
+description: Suwasiri — Sri Lankan digital health companion (Flutter + Firebase).
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  flutter_bloc: ^9.1.1
+  equatable: ^2.0.7
+  shared_preferences: ^2.5.3
+  google_fonts: ^6.2.1
+  intl: ^0.20.2
+  geolocator: ^14.0.1
+  geocoding: ^4.0.0
+  local_auth: ^2.3.0
+  url_launcher: ^6.3.1
+  uuid: ^4.5.1
+  collection: ^1.19.1
+  # Firebase — enable when google-services / GoogleService-Info are configured
+  firebase_core: ^3.13.0
+  firebase_auth: ^5.5.2
+  cloud_firestore: ^5.6.6
+  firebase_storage: ^12.4.5
+  firebase_messaging: ^15.2.5
+  google_sign_in: ^6.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
