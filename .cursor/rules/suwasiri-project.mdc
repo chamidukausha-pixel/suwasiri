@@ -1,0 +1,35 @@
+---
+description: Suwasiri project context — Firebase backend, docs, conventions
+alwaysApply: true
+---
+
+# Suwasiri
+
+Sri Lankan digital health Flutter app. **Production backend is Firebase** (`suwasiri-91824`).
+
+## Before changing code
+
+Read and keep updated:
+
+- `docs/STATUS.md` — what works / what's next
+- `docs/FIREBASE.md` — project IDs, collections, CLI
+- `docs/ARCHITECTURE.md` — where code lives
+- `docs/ROADMAP.md` — prioritized work
+
+## Backend rules
+
+- `AppConstants.useDemoBackend` must stay **`false`**.
+- Production wiring: `FirebaseAuthRepository` + `FirebaseHealthRepository` via `AppServices.bootstrap()`.
+- Demo repos only through `AppServices.forTesting` (widget tests).
+- Package / bundle: `com.thepatientcare.suwasiri`.
+
+## Implementation rules
+
+- UI → Cubits → repository interfaces → Firebase implementations.
+- Persist via Firestore collections documented in `docs/FIREBASE.md`; update `firestore.rules` when adding collections.
+- After finishing a chunk: tick items in `docs/STATUS.md` and adjust `docs/ROADMAP.md`.
+
+## Phone / Google notes
+
+- Phone OTP still uses demo code `123456` (synthetic Firebase email) until real Phone Auth.
+- Google Sign-In needs SHA fingerprints in Firebase Console for Android.

@@ -4,9 +4,9 @@ abstract final class AppConstants {
   static const String emergencyNumber = '1990';
   static const String emergencyDialUri = 'tel:1990';
 
-  /// When true, uses local demo repositories (no Firebase project required).
-  /// Set to false after adding Firebase config (google-services.json / GoogleService-Info.plist).
-  static const bool useDemoBackend = true;
+  /// Production uses Firebase Auth + Firestore.
+  /// Keep `false`. Demo repos remain only for widget tests via [AppServices.forTesting].
+  static const bool useDemoBackend = false;
 
   static const List<String> mohDistricts = [
     'Colombo',

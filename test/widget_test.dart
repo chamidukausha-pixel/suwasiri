@@ -9,7 +9,8 @@ void main() {
 
   testWidgets('Suwasiri boots to splash', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    final services = await AppServices.bootstrap();
+    final prefs = await SharedPreferences.getInstance();
+    final services = AppServices.forTesting(prefs);
     await tester.pumpWidget(SuwasiriApp(services: services));
     await tester.pump();
     expect(find.byType(SplashScreen), findsOneWidget);

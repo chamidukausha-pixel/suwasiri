@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "900720308322",
+    "project_id": "suwasiri-91824",
+    "storage_bucket": "suwasiri-91824.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:900720308322:android:b8f00a226b5317ed7f613b",
+        "android_client_info": {
+          "package_name": "com.thepatientcare.suwasiri"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "900720308322-tp9iek9vr221i85d7h0o7kj9ae70n5f3.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCBgdW47IyLRtDPn7YMNbtkOyyl3MlWMPg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "900720308322-tp9iek9vr221i85d7h0o7kj9ae70n5f3.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

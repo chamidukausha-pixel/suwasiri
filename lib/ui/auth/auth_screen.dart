@@ -141,7 +141,7 @@ class _AuthScreenState extends State<AuthScreen>
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Demo OTP: 123456 · Demo mode (no Firebase config required)',
+                  'Phone OTP demo code: 123456',
                   style: Theme.of(context).textTheme.bodyMedium,
                   textAlign: TextAlign.center,
                 ),
