@@ -23,20 +23,20 @@ abstract final class AppTheme {
     final textTheme = GoogleFonts.interTextTheme(base.textTheme).copyWith(
       displayLarge: GoogleFonts.inter(
         fontWeight: FontWeight.w700,
-        color: AppColors.cosmicSlate,
+        color: AppColors.trustBlueDark,
       ),
       headlineMedium: GoogleFonts.inter(
         fontWeight: FontWeight.w700,
-        color: AppColors.cosmicSlate,
-        fontSize: 24,
+        color: AppColors.trustBlueDark,
+        fontSize: 26,
       ),
       titleLarge: GoogleFonts.inter(
-        fontWeight: FontWeight.w600,
-        color: AppColors.cosmicSlate,
+        fontWeight: FontWeight.w700,
+        color: AppColors.trustBlueDark,
         fontSize: 18,
       ),
       bodyLarge: GoogleFonts.inter(
-        color: AppColors.cosmicSlate,
+        color: AppColors.trustBlueDark,
         fontSize: 16,
         height: 1.45,
       ),

@@ -44,6 +44,7 @@ Aligned with `firestore.rules` and `FirebaseHealthRepository` / `FirebaseAuthRep
 | `vault` | `patientId`, `title`, `issuedBy`, `date`, `metrics` | `patientId == uid` |
 | `vaccinations` | `patientId`, facility, `slot`, `status` | write if `patientId == uid` |
 | `appointments` | `patientId`, doctor fields, `timeSlot`, `token` | `patientId == uid` |
+| `prescriptions` | `patientId`, `medicine`, `schedule`, `doseBadge`, `sessionId`, `sentToPharmacare` | `patientId == uid` |
 | `notifications` | `title`, `body`, `timestamp`, `type`, `read` | any signed-in (tighten later) |
 
 ## CLI (Windows)

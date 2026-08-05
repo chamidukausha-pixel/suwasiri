@@ -9,6 +9,19 @@ abstract class HealthRepository {
   Future<void> syncLankaLab(String patientId);
   Future<void> syncGpCare(String patientId);
 
+  /// GP issues e-prescription during a telehealth session (Lanka GP Care sync).
+  Future<List<Prescription>> issueTelehealthPrescription({
+    required String patientId,
+    required String doctorName,
+    required String sessionId,
+  });
+
+  /// Forward session Rx lines to the PharmaCare pharmacist portal.
+  Future<void> sendPrescriptionsToPharmacare({
+    required String patientId,
+    required String sessionId,
+  });
+
   Future<List<VaccineProtocol>> getVaccineProtocols(String patientId);
   Future<List<ClinicFacility>> getClinics({
     String? district,

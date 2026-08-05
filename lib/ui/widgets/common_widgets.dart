@@ -9,11 +9,13 @@ class MinTap extends StatelessWidget {
     required this.onTap,
     required this.child,
     this.haptic = true,
+    this.enforceMinSize = true,
   });
 
   final VoidCallback? onTap;
   final Widget child;
   final bool haptic;
+  final bool enforceMinSize;
 
   @override
   Widget build(BuildContext context) {
@@ -27,10 +29,12 @@ class MinTap extends StatelessWidget {
                 onTap!();
               },
         borderRadius: BorderRadius.circular(12),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
-          child: child,
-        ),
+        child: enforceMinSize
+            ? ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+                child: child,
+              )
+            : child,
       ),
     );
   }

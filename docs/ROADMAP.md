@@ -20,8 +20,9 @@ Prioritized next work. Move items to **Done** in [STATUS.md](STATUS.md) when shi
 
 1. Real Phone Auth (Firebase) instead of OTP `123456`
 2. Vault PDF/image upload via Firebase Storage
-3. Telehealth: real signaling / video provider
-4. Payment tokens → real gateway if required
+3. Telehealth: real signaling / video provider (e-Rx + PharmaCare handoff already simulated)
+4. Live PharmaCare API (replace notification-only portal handoff)
+5. Payment tokens → real gateway if required
 
 ## P3 — product polish
 
@@ -29,6 +30,7 @@ Prioritized next work. Move items to **Done** in [STATUS.md](STATUS.md) when shi
 2. Crashlytics / Analytics
 3. CI: `flutter test` + analyze on PR
 4. App Store / Play listing assets
+5. Home empty-state polish when no appointments (currently soft card)
 
 ## Do not regress
 

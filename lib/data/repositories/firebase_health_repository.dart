@@ -27,6 +27,8 @@ class FirebaseHealthRepository implements HealthRepository {
       _db.collection('appointments');
   CollectionReference<Map<String, dynamic>> get _notifications =>
       _db.collection('notifications');
+  CollectionReference<Map<String, dynamic>> get _prescriptions =>
+      _db.collection('prescriptions');
 
   final _clinics = const [
     ClinicFacility(
@@ -76,31 +78,68 @@ class FirebaseHealthRepository implements HealthRepository {
   final _doctors = const [
     Doctor(
       id: 'd1',
-      name: 'Dr. Perera',
+      name: 'Dr. Aruni Perera',
       specialty: 'Cardiology',
-      hospital: 'NHSL',
-      rating: 4.8,
+      hospital: 'Durdans Hospital',
+      rating: 4.9,
+      region: 'Colombo',
+      yearsExperience: 12,
+      feeLkr: 2500,
+      bio:
+          'Board-certified cardiologist specialising in preventive heart care and echocardiography.',
+      nextAvailable: 'Mon–Thu · 09:30–12:00',
     ),
     Doctor(
       id: 'd2',
-      name: 'Dr. Fernando',
+      name: 'Dr. Sandeep Bandara',
       specialty: 'General Practice',
       hospital: 'Asiri Central',
-      rating: 4.6,
+      rating: 4.7,
+      region: 'Colombo',
+      yearsExperience: 9,
+      feeLkr: 1800,
+      bio:
+          'Family physician focused on chronic disease management and same-day consultations.',
+      nextAvailable: 'Tue–Sat · 10:00–14:00',
     ),
     Doctor(
       id: 'd3',
-      name: 'Dr. Silva',
+      name: 'Dr. Nimali Silva',
       specialty: 'Pediatrics',
       hospital: 'Lady Ridgeway',
       rating: 4.9,
+      region: 'Colombo',
+      yearsExperience: 15,
+      feeLkr: 2200,
+      bio:
+          'Paediatric consultant with expertise in childhood immunisation and developmental care.',
+      nextAvailable: 'Wed–Fri · 08:30–11:30',
     ),
     Doctor(
       id: 'd4',
-      name: 'Dr. Jayawardena',
+      name: 'Dr. Kavinda Jayawardena',
       specialty: 'Endocrinology',
       hospital: 'Nawaloka',
-      rating: 4.7,
+      rating: 4.8,
+      region: 'Colombo',
+      yearsExperience: 11,
+      feeLkr: 2800,
+      bio:
+          'Endocrinologist supporting diabetes, thyroid, and metabolic health pathways.',
+      nextAvailable: 'Mon–Wed · 14:00–17:00',
+    ),
+    Doctor(
+      id: 'd5',
+      name: 'Dr. Farah Mohamed',
+      specialty: 'Cardiology',
+      hospital: 'Lanka Hospitals',
+      rating: 4.6,
+      region: 'Gampaha',
+      yearsExperience: 8,
+      feeLkr: 2400,
+      bio:
+          'Interventional cardiology interest with patient education–first clinic approach.',
+      nextAvailable: 'Thu–Sat · 09:00–12:30',
     ),
   ];
 
@@ -111,27 +150,174 @@ class FirebaseHealthRepository implements HealthRepository {
         .map((d) => VaultReport.fromMap(d.id, d.data()))
         .toList()
       ..sort((a, b) => b.date.compareTo(a.date));
-    return list;
+    if (list.isNotEmpty) return list;
+    return _sampleVault(patientId);
+  }
+
+  List<VaultReport> _sampleVault(String patientId) {
+    return [
+      VaultReport(
+        id: 'sample-hba1c',
+        patientId: patientId,
+        title: 'LankaLab: Glycated Hemoglobin (HbA1c)',
+        issuedBy: 'LankaLab',
+        date: DateTime(2026, 6, 13),
+        category: 'Blood Work',
+        facility: 'LankaLab Central',
+        fileSizeMb: 1.6,
+        kind: VaultRecordKind.upload,
+        metrics: const [
+          MetricReading(name: 'HbA1c', value: '5.9%', status: 'attention'),
+        ],
+      ),
+      VaultReport(
+        id: 'sample-fbc',
+        patientId: patientId,
+        title: 'Full Blood Count (FBC)',
+        issuedBy: 'LankaLab',
+        date: DateTime(2023, 10, 12),
+        category: 'Hematology',
+        facility: 'Lanka Hospitals PLC',
+        requestedBy: 'Dr. S. Perera',
+        kind: VaultRecordKind.lab,
+        metrics: const [
+          MetricReading(name: 'Hemoglobin', value: '13.8 g/dL', status: 'normal'),
+          MetricReading(name: 'WBC', value: '6.2 ×10⁹/L', status: 'normal'),
+        ],
+      ),
+      VaultReport(
+        id: 'sample-flu',
+        patientId: patientId,
+        title: 'Influenza Vaccine (Seasonal)',
+        issuedBy: 'MOH',
+        date: DateTime(2023, 9, 22),
+        facility: 'National Hospital of Sri Lanka',
+        kind: VaultRecordKind.vaccine,
+        batchCode: 'IN-044-L',
+      ),
+      VaultReport(
+        id: 'sample-lipid',
+        patientId: patientId,
+        title: 'Lipid Profile',
+        issuedBy: 'LankaLab',
+        date: DateTime(2023, 9, 15),
+        facility: 'Asiri Medical Hospital',
+        requestedBy: 'Dr. M. Silva',
+        kind: VaultRecordKind.lab,
+        metrics: const [
+          MetricReading(name: 'LDL', value: '118 mg/dL', status: 'attention'),
+          MetricReading(name: 'HDL', value: '52 mg/dL', status: 'normal'),
+        ],
+      ),
+    ];
   }
 
   @override
   Future<List<Prescription>> getPrescriptions(String patientId) async {
-    return const [
+    final snap =
+        await _prescriptions.where('patientId', isEqualTo: patientId).get();
+    final list = snap.docs
+        .map((d) => Prescription.fromMap(d.id, d.data()))
+        .where((p) => p.active)
+        .toList()
+      ..sort((a, b) => (b.issuedAt ?? DateTime(0))
+          .compareTo(a.issuedAt ?? DateTime(0)));
+    if (list.isNotEmpty) return list;
+    // Seeded fallback until a telehealth GP issues live Rx.
+    return [
       Prescription(
         id: 'p1',
         medicine: 'Atorvastatin 20mg',
-        doctor: 'Dr. Perera',
+        doctor: 'Dr. Aruni Perera',
         code: 'EP-5290',
         active: true,
+        patientId: patientId,
+        schedule: 'Cardiovascular (nightly)',
+        doseBadge: '1x1',
       ),
       Prescription(
         id: 'p2',
         medicine: 'Metformin 500mg',
-        doctor: 'Dr. Jayawardena',
+        doctor: 'Dr. Kavinda Jayawardena',
         code: 'EP-5312',
         active: true,
+        patientId: patientId,
+        schedule: 'Diabetes (BD with meals)',
+        doseBadge: '1x2',
       ),
     ];
+  }
+
+  @override
+  Future<List<Prescription>> issueTelehealthPrescription({
+    required String patientId,
+    required String doctorName,
+    required String sessionId,
+  }) async {
+    final now = DateTime.now();
+    final batch = [
+      Prescription(
+        id: _uuid.v4(),
+        medicine: 'Amoxicillin 500mg',
+        doctor: doctorName,
+        code: 'EP-${now.millisecondsSinceEpoch % 10000}',
+        active: true,
+        patientId: patientId,
+        schedule: 'Antibiotic (TDS Schedule)',
+        doseBadge: '1x3',
+        sessionId: sessionId,
+        issuedAt: now,
+      ),
+      Prescription(
+        id: _uuid.v4(),
+        medicine: 'Paracetamol 500mg',
+        doctor: doctorName,
+        code: 'EP-${(now.millisecondsSinceEpoch + 1) % 10000}',
+        active: true,
+        patientId: patientId,
+        schedule: 'As Needed for Pain/Fever',
+        doseBadge: 'PRN',
+        sessionId: sessionId,
+        issuedAt: now,
+      ),
+    ];
+    for (final rx in batch) {
+      await _prescriptions.doc(rx.id).set(rx.toMap());
+    }
+    await pushNotification(
+      AppNotification(
+        id: _uuid.v4(),
+        title: 'E-Prescription issued',
+        body: '$doctorName issued ${batch.length} medicines via Lanka GP Care.',
+        timestamp: DateTime.now(),
+        type: NotificationPayloadType.sync,
+      ),
+    );
+    return batch;
+  }
+
+  @override
+  Future<void> sendPrescriptionsToPharmacare({
+    required String patientId,
+    required String sessionId,
+  }) async {
+    final snap = await _prescriptions
+        .where('patientId', isEqualTo: patientId)
+        .get();
+    for (final doc in snap.docs) {
+      if (doc.data()['sessionId'] != sessionId) continue;
+      await doc.reference.update({'sentToPharmacare': true, 'updating': false});
+    }
+    await pushNotification(
+      AppNotification(
+        id: _uuid.v4(),
+        title: 'Sent to PharmaCare',
+        body:
+            'E-prescription forwarded to PharmaCare pharmacist portal for dispensing.',
+        timestamp: DateTime.now(),
+        type: NotificationPayloadType.sync,
+      ),
+    );
   }
 
   @override
@@ -139,20 +325,41 @@ class FirebaseHealthRepository implements HealthRepository {
     final report = VaultReport(
       id: _uuid.v4(),
       patientId: patientId,
-      title: 'Lipid Profile (Auto-sync)',
+      title: 'LankaLab: Glycated Hemoglobin (HbA1c)',
       issuedBy: 'LankaLab',
       date: DateTime.now(),
+      category: 'Blood Work',
+      facility: 'LankaLab Central Registrar',
+      fileSizeMb: 1.6,
+      kind: VaultRecordKind.upload,
+      metrics: const [
+        MetricReading(name: 'HbA1c', value: '5.9%', status: 'attention'),
+        MetricReading(
+            name: 'Fasting Glucose', value: '108 mg/dL', status: 'attention'),
+      ],
+    );
+    await _vault.doc(report.id).set(report.toMap());
+    final lipid = VaultReport(
+      id: _uuid.v4(),
+      patientId: patientId,
+      title: 'Lipid Profile',
+      issuedBy: 'LankaLab',
+      date: DateTime.now().subtract(const Duration(hours: 1)),
+      category: 'Biochemistry',
+      facility: 'Asiri Medical Hospital',
+      requestedBy: 'Dr. M. Silva',
+      kind: VaultRecordKind.lab,
       metrics: const [
         MetricReading(name: 'LDL', value: '118 mg/dL', status: 'attention'),
         MetricReading(name: 'HDL', value: '52 mg/dL', status: 'normal'),
       ],
     );
-    await _vault.doc(report.id).set(report.toMap());
+    await _vault.doc(lipid.id).set(lipid.toMap());
     await pushNotification(
       AppNotification(
         id: _uuid.v4(),
         title: 'LankaLab sync',
-        body: 'New diagnostic records pulled into your vault.',
+        body: 'HbA1c & pathology indexes pulled into your Medical Vault.',
         timestamp: DateTime.now(),
         type: NotificationPayloadType.sync,
       ),
@@ -165,7 +372,7 @@ class FirebaseHealthRepository implements HealthRepository {
       AppNotification(
         id: _uuid.v4(),
         title: 'Lanka GP Care sync',
-        body: 'Active cardiovascular medicines refreshed (EP-5290).',
+        body: 'Active medicines refreshed from registered GP care record.',
         timestamp: DateTime.now(),
         type: NotificationPayloadType.sync,
       ),
@@ -177,24 +384,34 @@ class FirebaseHealthRepository implements HealthRepository {
     return [
       VaccineProtocol(
         id: 'v1',
-        name: 'Dengue Vaccine',
+        name: 'Dengue Prevention (Dose 2)',
         doseLabel: 'Dose 2 of 3',
-        progress: 0.75,
-        nextDue: DateTime.now().add(const Duration(days: 21)),
+        productName: 'Qdenga® Tetravalent Vaccine',
+        progress: 0.60,
+        nextDue: DateTime.now().add(const Duration(days: 12)),
+        status: VaccineStatus.pending,
+        statusDetail: 'Schedule required',
       ),
       VaccineProtocol(
         id: 'v2',
-        name: 'COVID-19 Booster',
+        name: 'COVID-19 Booster Dose',
         doseLabel: 'Completed',
+        productName: 'Comirnaty Pfizer-BioNTech Booster',
         progress: 1.0,
         nextDue: null,
+        status: VaccineStatus.completed,
+        statusDetail: 'All doses administered',
       ),
       VaccineProtocol(
         id: 'v3',
-        name: 'Influenza (Seasonal)',
+        name: 'Influenza (Flu Shot) Annual',
         doseLabel: 'Dose 1 of 1',
+        productName: 'Influvac Tetra 2026 Season',
         progress: 0.0,
-        nextDue: DateTime.now().add(const Duration(days: 45)),
+        nextDue: DateTime(2026, 7, 13),
+        status: VaccineStatus.scheduled,
+        statusDetail: 'Booked at clinic',
+        booked: true,
       ),
     ];
   }

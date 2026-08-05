@@ -10,7 +10,6 @@ import '../profile/profile_screen.dart';
 import '../telehealth/telehealth_screen.dart';
 import '../vaccine/vaccine_screen.dart';
 import '../vault/vault_screen.dart';
-import '../widgets/notification_tray.dart';
 import '../widgets/toast_overlay.dart';
 
 class MainShell extends StatefulWidget {
@@ -22,15 +21,6 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _index = 0;
-
-  static const _titles = [
-    'home',
-    'appointments',
-    'telehealth',
-    'vault',
-    'vaccines',
-    'profile',
-  ];
 
   @override
   void initState() {
@@ -51,24 +41,7 @@ class _MainShellState extends State<MainShell> {
     ];
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l.t(_titles[_index])),
-        actions: [
-          BlocBuilder<NotificationCubit, NotificationState>(
-            builder: (context, state) {
-              return IconButton(
-                tooltip: l.t('notifications'),
-                onPressed: () => showNotificationTray(context),
-                icon: Badge(
-                  isLabelVisible: state.unreadCount > 0,
-                  label: Text('${state.unreadCount}'),
-                  child: const Icon(Icons.notifications_outlined),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
+      appBar: null,
       body: Stack(
         children: [
           IndexedStack(index: _index, children: pages),
@@ -79,7 +52,9 @@ class _MainShellState extends State<MainShell> {
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         backgroundColor: AppColors.surface,
-        indicatorColor: AppColors.trustBlue.withValues(alpha: 0.12),
+        indicatorColor: (_index == 3 || _index == 4)
+            ? AppColors.emerald.withValues(alpha: 0.18)
+            : AppColors.trustBlue.withValues(alpha: 0.12),
         destinations: [
           NavigationDestination(
             icon: const Icon(Icons.home_outlined),
@@ -98,12 +73,18 @@ class _MainShellState extends State<MainShell> {
           ),
           NavigationDestination(
             icon: const Icon(Icons.folder_outlined),
-            selectedIcon: const Icon(Icons.folder_special),
+            selectedIcon: Icon(
+              Icons.folder_special,
+              color: _index == 3 ? AppColors.vaultGreen : null,
+            ),
             label: l.t('vault'),
           ),
           NavigationDestination(
             icon: const Icon(Icons.vaccines_outlined),
-            selectedIcon: const Icon(Icons.vaccines),
+            selectedIcon: Icon(
+              Icons.vaccines,
+              color: _index == 4 ? AppColors.vaultGreen : null,
+            ),
             label: l.t('vaccines'),
           ),
           NavigationDestination(

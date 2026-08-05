@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+enum VaccineStatus { pending, scheduled, completed }
+
 class VaccineProtocol extends Equatable {
   const VaccineProtocol({
     required this.id,
@@ -7,6 +9,10 @@ class VaccineProtocol extends Equatable {
     required this.doseLabel,
     required this.progress,
     required this.nextDue,
+    this.productName = '',
+    this.status = VaccineStatus.pending,
+    this.statusDetail = '',
+    this.booked = false,
   });
 
   final String id;
@@ -14,9 +20,23 @@ class VaccineProtocol extends Equatable {
   final String doseLabel;
   final double progress; // 0.0 – 1.0
   final DateTime? nextDue;
+  final String productName;
+  final VaccineStatus status;
+  final String statusDetail;
+  final bool booked;
 
   @override
-  List<Object?> get props => [id, name, doseLabel, progress, nextDue];
+  List<Object?> get props => [
+        id,
+        name,
+        doseLabel,
+        progress,
+        nextDue,
+        productName,
+        status,
+        statusDetail,
+        booked,
+      ];
 }
 
 enum FacilityType { all, mohClinic, hospital }

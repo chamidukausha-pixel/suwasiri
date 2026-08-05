@@ -7,6 +7,12 @@ class Doctor extends Equatable {
     required this.specialty,
     required this.hospital,
     required this.rating,
+    this.region = 'Colombo',
+    this.yearsExperience = 10,
+    this.feeLkr = 2500,
+    this.bio =
+        'Experienced consultant providing patient-centred care at accredited Sri Lankan hospitals.',
+    this.nextAvailable = 'Mon–Fri · 09:00–13:00',
   });
 
   final String id;
@@ -14,9 +20,25 @@ class Doctor extends Equatable {
   final String specialty;
   final String hospital;
   final double rating;
+  final String region;
+  final int yearsExperience;
+  final int feeLkr;
+  final String bio;
+  final String nextAvailable;
 
   @override
-  List<Object?> get props => [id, name, specialty, hospital, rating];
+  List<Object?> get props => [
+        id,
+        name,
+        specialty,
+        hospital,
+        rating,
+        region,
+        yearsExperience,
+        feeLkr,
+        bio,
+        nextAvailable,
+      ];
 }
 
 enum AppointmentStatus { upcoming, completed, cancelled }

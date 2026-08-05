@@ -36,15 +36,29 @@ class VaultReport extends Equatable {
     required this.date,
     this.fileUrl,
     this.metrics = const [],
+    this.category,
+    this.facility,
+    this.requestedBy,
+    this.fileSizeMb,
+    this.kind = VaultRecordKind.lab,
+    this.batchCode,
   });
 
   final String id;
   final String patientId;
   final String title;
-  final String issuedBy; // LankaLab | GP
+  final String issuedBy; // LankaLab | GP | MOH | …
   final DateTime date;
   final String? fileUrl;
   final List<MetricReading> metrics;
+  final String? category;
+  final String? facility;
+  final String? requestedBy;
+  final double? fileSizeMb;
+  final VaultRecordKind kind;
+  final String? batchCode;
+
+  bool get readyForAi => metrics.isNotEmpty || kind == VaultRecordKind.lab;
 
   Map<String, dynamic> toMap() => {
         'patientId': patientId,
@@ -53,6 +67,12 @@ class VaultReport extends Equatable {
         'date': date.toIso8601String(),
         'fileUrl': fileUrl,
         'metrics': metrics.map((m) => m.toMap()).toList(),
+        'category': category,
+        'facility': facility,
+        'requestedBy': requestedBy,
+        'fileSizeMb': fileSizeMb,
+        'kind': kind.name,
+        'batchCode': batchCode,
       };
 
   factory VaultReport.fromMap(String id, Map<String, dynamic> map) {
@@ -67,13 +87,37 @@ class VaultReport extends Equatable {
               ?.map((e) => MetricReading.fromMap(e as Map<String, dynamic>))
               .toList() ??
           const [],
+      category: map['category'] as String?,
+      facility: map['facility'] as String?,
+      requestedBy: map['requestedBy'] as String?,
+      fileSizeMb: (map['fileSizeMb'] as num?)?.toDouble(),
+      kind: VaultRecordKind.values.firstWhere(
+        (k) => k.name == map['kind'],
+        orElse: () => VaultRecordKind.lab,
+      ),
+      batchCode: map['batchCode'] as String?,
     );
   }
 
   @override
-  List<Object?> get props =>
-      [id, patientId, title, issuedBy, date, fileUrl, metrics];
+  List<Object?> get props => [
+        id,
+        patientId,
+        title,
+        issuedBy,
+        date,
+        fileUrl,
+        metrics,
+        category,
+        facility,
+        requestedBy,
+        fileSizeMb,
+        kind,
+        batchCode,
+      ];
 }
+
+enum VaultRecordKind { lab, vaccine, upload }
 
 class Prescription extends Equatable {
   const Prescription({
@@ -82,6 +126,13 @@ class Prescription extends Equatable {
     required this.doctor,
     required this.code,
     required this.active,
+    this.patientId = '',
+    this.schedule = '',
+    this.doseBadge = '',
+    this.sessionId,
+    this.sentToPharmacare = false,
+    this.updating = false,
+    this.issuedAt,
   });
 
   final String id;
@@ -89,7 +140,90 @@ class Prescription extends Equatable {
   final String doctor;
   final String code;
   final bool active;
+  final String patientId;
+  final String schedule;
+  final String doseBadge;
+  final String? sessionId;
+  final bool sentToPharmacare;
+  final bool updating;
+  final DateTime? issuedAt;
+
+  Prescription copyWith({
+    String? id,
+    String? medicine,
+    String? doctor,
+    String? code,
+    bool? active,
+    String? patientId,
+    String? schedule,
+    String? doseBadge,
+    String? sessionId,
+    bool? sentToPharmacare,
+    bool? updating,
+    DateTime? issuedAt,
+  }) {
+    return Prescription(
+      id: id ?? this.id,
+      medicine: medicine ?? this.medicine,
+      doctor: doctor ?? this.doctor,
+      code: code ?? this.code,
+      active: active ?? this.active,
+      patientId: patientId ?? this.patientId,
+      schedule: schedule ?? this.schedule,
+      doseBadge: doseBadge ?? this.doseBadge,
+      sessionId: sessionId ?? this.sessionId,
+      sentToPharmacare: sentToPharmacare ?? this.sentToPharmacare,
+      updating: updating ?? this.updating,
+      issuedAt: issuedAt ?? this.issuedAt,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'patientId': patientId,
+        'medicine': medicine,
+        'doctor': doctor,
+        'code': code,
+        'active': active,
+        'schedule': schedule,
+        'doseBadge': doseBadge,
+        'sessionId': sessionId,
+        'sentToPharmacare': sentToPharmacare,
+        'updating': updating,
+        'issuedAt': (issuedAt ?? DateTime.now()).toIso8601String(),
+      };
+
+  factory Prescription.fromMap(String id, Map<String, dynamic> map) {
+    return Prescription(
+      id: id,
+      medicine: map['medicine'] as String? ?? '',
+      doctor: map['doctor'] as String? ?? '',
+      code: map['code'] as String? ?? '',
+      active: map['active'] as bool? ?? true,
+      patientId: map['patientId'] as String? ?? '',
+      schedule: map['schedule'] as String? ?? '',
+      doseBadge: map['doseBadge'] as String? ?? '',
+      sessionId: map['sessionId'] as String?,
+      sentToPharmacare: map['sentToPharmacare'] as bool? ?? false,
+      updating: map['updating'] as bool? ?? false,
+      issuedAt: map['issuedAt'] != null
+          ? DateTime.tryParse(map['issuedAt'] as String)
+          : null,
+    );
+  }
 
   @override
-  List<Object?> get props => [id, medicine, doctor, code, active];
+  List<Object?> get props => [
+        id,
+        medicine,
+        doctor,
+        code,
+        active,
+        patientId,
+        schedule,
+        doseBadge,
+        sessionId,
+        sentToPharmacare,
+        updating,
+        issuedAt,
+      ];
 }
