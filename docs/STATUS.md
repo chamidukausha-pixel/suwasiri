@@ -30,6 +30,8 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Medical Vault UI (AI Lab Assistant, LankaLab + GP Care sync cards, chronological timeline)
 - [x] Vaccines registry UI (MOH portal sync card, active dengue protocol, status-colored protocol cards)
 - [x] Profile UI (communication settings, treatment history timeline, security ID checks, logout)
+- [x] Home avatar (C) opens Profile tab; profile photo via camera or gallery (local prefs)
+- [x] Book Session → Confirm Appointment (more slots) → Secure Checkout (card / manual bank slip + document/image upload)
 
 ## In progress / next
 

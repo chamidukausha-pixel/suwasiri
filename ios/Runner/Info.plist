@@ -72,6 +72,12 @@
 	<string>Suwasiri may use location during an active 1990 SOS session.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Unlock your Health Vault with Face ID.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Suwasiri needs camera access to take your profile selfie.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Suwasiri needs photo library access to set your profile picture and upload bank slips.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Suwasiri may use the microphone during telehealth video consultations.</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>tel</string>

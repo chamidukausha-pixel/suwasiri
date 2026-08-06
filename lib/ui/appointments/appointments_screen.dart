@@ -3,13 +3,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
-import '../../bloc/notification/notification_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/appointment.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/suwasiri_brand_header.dart';
+import 'booking_checkout_flow.dart';
 
 class AppointmentsScreen extends StatefulWidget {
   const AppointmentsScreen({super.key});
@@ -67,82 +67,8 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   }
 
   Future<void> _book(Doctor doctor) async {
-    final health = context.read<HealthRepository>();
-    final user = context.read<AuthCubit>().state.user!;
-    final now = DateTime.now();
-    final fee = NumberFormat.decimalPattern().format(doctor.feeLkr);
-    final slots = List.generate(4, (i) {
-      final d = now.add(Duration(days: i + 1));
-      return DateTime(d.year, d.month, d.day, 10 + i);
-    });
-
-    final slot = await showModalBottomSheet<DateTime>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            ListTile(
-              title: Text('Select slot · ${doctor.name}'),
-              subtitle: Text('Mock payment: LKR $fee'),
-            ),
-            ...slots.map(
-              (s) => ListTile(
-                title: Text(DateFormat('EEE d MMM · HH:mm').format(s)),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.pop(ctx, s),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (slot == null || !mounted) return;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Confirm booking'),
-        content: Text(
-          '${doctor.name}\n${DateFormat('EEE d MMM · HH:mm').format(slot)}\n\n'
-          'Mock payment: LKR $fee',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Pay & book'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    final appt = await health.bookAppointment(
-      patientId: user.id,
-      doctor: doctor,
-      slot: slot,
-    );
+    await showBookingCheckoutFlow(context, doctor: doctor);
     if (!mounted) return;
-    await context.read<NotificationCubit>().load();
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Consultation token'),
-        content: Text('Token ${appt.token} issued for ${doctor.name}.'),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Done'),
-          ),
-        ],
-      ),
-    );
     await _refresh();
   }
 

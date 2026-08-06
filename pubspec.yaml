@@ -31,6 +31,10 @@ dependencies:
   firebase_storage: ^12.4.5
   firebase_messaging: ^15.2.5
   google_sign_in: ^6.3.0
+  image_picker: ^1.2.3
+  file_selector: ^1.1.0
+  # AGP 9+: does not apply KGP (Built-in Kotlin ready).
+  package_info_plus: ^10.2.1
 
 dev_dependencies:
   flutter_test:

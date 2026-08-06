@@ -892,6 +892,198 @@ class AppLocalizations {
       'si': 'සියල්ල යාවත්කාලීනයි',
       'ta': 'அனைத்தும் புதுப்பிக்கப்பட்டது',
     },
+    'takeSelfie': {
+      'en': 'Take selfie / photo',
+      'si': 'සෙල්ෆි / ඡායාරූපය ගන්න',
+      'ta': 'செல்ஃபி / புகைப்படம் எடு',
+    },
+    'takePhoto': {
+      'en': 'Take photo',
+      'si': 'ඡායාරූපය ගන්න',
+      'ta': 'புகைப்படம் எடு',
+    },
+    'chooseFromGallery': {
+      'en': 'Choose from gallery',
+      'si': 'ගැලරියෙන් තෝරන්න',
+      'ta': 'கேலரியில் இருந்து தேர்வு',
+    },
+    'chooseDocument': {
+      'en': 'Choose document',
+      'si': 'ලේඛනය තෝරන්න',
+      'ta': 'ஆவணத்தைத் தேர்வு',
+    },
+    'changeProfilePhoto': {
+      'en': 'Change profile photo',
+      'si': 'පැතිකඩ ඡායාරූපය වෙනස් කරන්න',
+      'ta': 'சுயவிவரப் புகைப்படம் மாற்று',
+    },
+    'profilePhotoUpdated': {
+      'en': 'Profile photo updated',
+      'si': 'පැතිකඩ ඡායාරූපය යාවත්කාලීනයි',
+      'ta': 'சுயவிவரப் புகைப்படம் புதுப்பிக்கப்பட்டது',
+    },
+    'confirmAppointment': {
+      'en': 'CONFIRM APPOINTMENT',
+      'si': 'හමුවීම තහවුරු කරන්න',
+      'ta': 'சந்திப்பை உறுதிப்படுத்து',
+    },
+    'consultationMode': {
+      'en': 'Consultation Mode',
+      'si': 'උපදේශන ක්‍රමය',
+      'ta': 'ஆலோசனை முறை',
+    },
+    'clinicConsult': {
+      'en': 'Clinic Consult (In-Person)',
+      'si': 'සායන උපදේශනය (පුද්ගලික)',
+      'ta': 'மருத்துவமனை ஆலோசனை (நேரில்)',
+    },
+    'onlineVideoConsult': {
+      'en': 'Online Video consultation',
+      'si': 'මාර්ගගත වීඩියෝ උපදේශනය',
+      'ta': 'ஆன்லைன் வீடியோ ஆலோசனை',
+    },
+    'availableDates': {
+      'en': 'Available Scheduled Dates',
+      'si': 'ලබා ගත හැකි දින',
+      'ta': 'கிடைக்கும் தேதிகள்',
+    },
+    'nextDays': {
+      'en': 'Next 7 Days',
+      'si': 'ඊළඟ දින 7',
+      'ta': 'அடுத்த 7 நாட்கள்',
+    },
+    'availableSlots': {
+      'en': 'Available Time Slots',
+      'si': 'ලබා ගත හැකි වේලාවන්',
+      'ta': 'கிடைக்கும் நேரங்கள்',
+    },
+    'consultationFeesLabel': {
+      'en': 'Consultation fees',
+      'si': 'උපදේශන ගාස්තු',
+      'ta': 'ஆலோசனை கட்டணம்',
+    },
+    'venueServiceCharge': {
+      'en': 'Hospital venue service charge',
+      'si': 'රෝහල් ස්ථාන සේවා ගාස්තුව',
+      'ta': 'மருத்துவமனை சேவைக் கட்டணம்',
+    },
+    'estimatedTotal': {
+      'en': 'ESTIMATED TOTAL',
+      'si': 'ඇස්තමේන්තු මුළු',
+      'ta': 'மதிப்பிடப்பட்ட மொத்தம்',
+    },
+    'proceedSecurePayment': {
+      'en': 'Proceed to secure payment',
+      'si': 'ආරක්ෂිත ගෙවීමට ඉදිරියට',
+      'ta': 'பாதுகாப்பான கட்டணத்திற்கு செல்',
+    },
+    'changeDateSlot': {
+      'en': 'Change Date / Slot',
+      'si': 'දිනය / වේලාව වෙනස් කරන්න',
+      'ta': 'தேதி / நேரம் மாற்று',
+    },
+    'secureCheckout': {
+      'en': 'SECURE CHECKOUT',
+      'si': 'ආරක්ෂිත ගෙවීම',
+      'ta': 'பாதுகாப்பான செக்அவுட்',
+    },
+    'payForAppointment': {
+      'en': 'Pay for Appointment Session',
+      'si': 'හමුවීම් සැසිය සඳහා ගෙවන්න',
+      'ta': 'சந்திப்பு அமர்வுக்கு செலுத்து',
+    },
+    'doctor': {'en': 'Doctor', 'si': 'වෛද්‍ය', 'ta': 'மருத்துவர்'},
+    'slot': {'en': 'Slot', 'si': 'වේලාව', 'ta': 'நேரம்'},
+    'paymentDue': {
+      'en': 'PAYMENT DUE',
+      'si': 'ගෙවිය යුතු මුදල',
+      'ta': 'செலுத்த வேண்டியது',
+    },
+    'consultationSessionFee': {
+      'en': 'Consultation Session Fee',
+      'si': 'උපදේශන සැසි ගාස්තුව',
+      'ta': 'ஆலோசனை அமர்வு கட்டணம்',
+    },
+    'selectPaymentChannel': {
+      'en': 'Select Payment Channel',
+      'si': 'ගෙවීම් මාර්ගය තෝරන්න',
+      'ta': 'கட்டண வழியைத் தேர்வு',
+    },
+    'onlineDebitCard': {
+      'en': 'Online Debit/Card',
+      'si': 'මාර්ගගත ඩෙබිට්/කාඩ්',
+      'ta': 'ஆன்லைன் டெபிட்/கார்டு',
+    },
+    'manualBankSlip': {
+      'en': 'Manual Bank Slip',
+      'si': 'අතින් බැංකු ලදුපත',
+      'ta': 'கைமுறை வங்கி ரசீது',
+    },
+    'cardholderName': {
+      'en': 'CARDHOLDER NAME',
+      'si': 'කාඩ් හිමියාගේ නම',
+      'ta': 'கார்டு வைத்திருப்பவர் பெயர்',
+    },
+    'cardNumber': {
+      'en': 'CREDIT/DEBIT CARD NUMBER',
+      'si': 'ක්‍රෙඩිට්/ඩෙබිට් කාඩ් අංකය',
+      'ta': 'கிரெடிட்/டெபிட் கார்டு எண்',
+    },
+    'expiry': {'en': 'EXPIRY', 'si': 'කල් ඉකුත්', 'ta': 'காலாவதி'},
+    'cvv': {'en': 'CSV/CVV', 'si': 'CSV/CVV', 'ta': 'CSV/CVV'},
+    'authorizePay': {
+      'en': 'Authorize & Pay',
+      'si': 'අනුමත කර ගෙවන්න',
+      'ta': 'அங்கீகரித்து செலுத்து',
+    },
+    'depositToAccount': {
+      'en': 'DEPOSIT TO LOCAL CEYLON ACCOUNT',
+      'si': 'දේශීය ගිණුමට තැන්පත් කරන්න',
+      'ta': 'உள்ளூர் கணக்கில் வைப்பு',
+    },
+    'bank': {'en': 'Bank', 'si': 'බැංකුව', 'ta': 'வங்கி'},
+    'accountName': {
+      'en': 'Account Name',
+      'si': 'ගිණුම් නාමය',
+      'ta': 'கணக்கு பெயர்',
+    },
+    'accountNumber': {
+      'en': 'Account Number',
+      'si': 'ගිණුම් අංකය',
+      'ta': 'கணக்கு எண்',
+    },
+    'branch': {'en': 'Branch', 'si': 'ශාඛාව', 'ta': 'கிளை'},
+    'attachReceiptSlip': {
+      'en': 'Click to Attach Receipt Slip',
+      'si': 'ලදුපත අමුණන්න',
+      'ta': 'ரசீதை இணைக்க அழுத்தவும்',
+    },
+    'uploadDepositSlip': {
+      'en': 'Upload photos of deposit counter slip',
+      'si': 'තැන්පතු ලදුපතේ ඡායාරූප උඩුගත කරන්න',
+      'ta': 'வைப்பு ரசீது புகைப்படங்களைப் பதிவேற்றுங்கள்',
+    },
+    'submitReceiptBook': {
+      'en': 'Submit Receipt & Book',
+      'si': 'ලදුපත ඉදිරිපත් කර වෙන්කරන්න',
+      'ta': 'ரசீதை சமர்ப்பித்து முன்பதிவு',
+    },
+    'bookingConfirmed': {
+      'en': 'Booking confirmed',
+      'si': 'වෙන්කිරීම තහවුරුයි',
+      'ta': 'முன்பதிவு உறுதி',
+    },
+    'consultationToken': {
+      'en': 'Consultation token',
+      'si': 'උපදේශන ටෝකනය',
+      'ta': 'ஆலோசனை டோக்கன்',
+    },
+    'attachSlipFirst': {
+      'en': 'Please attach your bank slip first',
+      'si': 'කරුණාකර පළමුව බැංකු ලදුපත අමුණන්න',
+      'ta': 'முதலில் வங்கி ரசீதை இணைக்கவும்',
+    },
+    'done': {'en': 'Done', 'si': 'අවසන්', 'ta': 'முடிந்தது'},
   };
 
   String t(String key) {

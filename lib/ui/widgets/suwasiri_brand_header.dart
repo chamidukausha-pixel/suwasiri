@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../bloc/auth/auth_cubit.dart';
-import '../../bloc/locale/locale_cubit.dart';
 import '../../bloc/notification/notification_cubit.dart';
 import '../../bloc/sos/sos_cubit.dart';
+import '../../bloc/locale/locale_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../localization/app_localizations.dart';
 import '../sos/sos_overlay.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/notification_tray.dart';
+import '../widgets/profile_avatar.dart';
 
 /// Shared top bar used on Home and Doctors directory.
 class SuwasiriBrandHeader extends StatelessWidget {
@@ -18,43 +18,13 @@ class SuwasiriBrandHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AuthCubit>().state.user;
-    final firstName = user?.name.split(' ').first ?? '';
-    final initials = firstName.isNotEmpty
-        ? firstName.substring(0, 1).toUpperCase()
-        : 'S';
     final unread = context.watch<NotificationCubit>().state.unreadCount;
 
     return Row(
       children: [
-        Stack(
-          children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: AppColors.trustBlueSoft,
-              child: Text(
-                initials,
-                style: const TextStyle(
-                  color: AppColors.trustBlue,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
-                ),
-              ),
-            ),
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: Container(
-                width: 9,
-                height: 9,
-                decoration: BoxDecoration(
-                  color: AppColors.onlineGreen,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 1.5),
-                ),
-              ),
-            ),
-          ],
+        ProfileAvatar(
+          radius: 18,
+          onTap: () => MainTabScope.go(context, 5),
         ),
         const SizedBox(width: 6),
         Expanded(

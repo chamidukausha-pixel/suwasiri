@@ -10,6 +10,7 @@ import '../profile/profile_screen.dart';
 import '../telehealth/telehealth_screen.dart';
 import '../vaccine/vaccine_screen.dart';
 import '../vault/vault_screen.dart';
+import '../widgets/profile_avatar.dart';
 import '../widgets/toast_overlay.dart';
 
 class MainShell extends StatefulWidget {
@@ -28,11 +29,13 @@ class _MainShellState extends State<MainShell> {
     context.read<NotificationCubit>().load();
   }
 
+  void _goTo(int index) => setState(() => _index = index);
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final pages = [
-      HomeScreen(onNavigate: (i) => setState(() => _index = i)),
+      HomeScreen(onNavigate: _goTo),
       const AppointmentsScreen(),
       const TelehealthScreen(),
       const VaultScreen(),
@@ -40,59 +43,62 @@ class _MainShellState extends State<MainShell> {
       const ProfileScreen(),
     ];
 
-    return Scaffold(
-      appBar: null,
-      body: Stack(
-        children: [
-          IndexedStack(index: _index, children: pages),
-          const ToastOverlay(),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        backgroundColor: AppColors.surface,
-        indicatorColor: (_index == 3 || _index == 4)
-            ? AppColors.emerald.withValues(alpha: 0.18)
-            : AppColors.trustBlue.withValues(alpha: 0.12),
-        destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.home_outlined),
-            selectedIcon: const Icon(Icons.home_rounded),
-            label: l.t('home'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.calendar_month_outlined),
-            selectedIcon: const Icon(Icons.calendar_month),
-            label: l.t('appointments'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.video_call_outlined),
-            selectedIcon: const Icon(Icons.video_call),
-            label: l.t('telehealth'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.folder_outlined),
-            selectedIcon: Icon(
-              Icons.folder_special,
-              color: _index == 3 ? AppColors.vaultGreen : null,
+    return MainTabScope(
+      goTo: _goTo,
+      child: Scaffold(
+        appBar: null,
+        body: Stack(
+          children: [
+            IndexedStack(index: _index, children: pages),
+            const ToastOverlay(),
+          ],
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: _goTo,
+          backgroundColor: AppColors.surface,
+          indicatorColor: (_index == 3 || _index == 4)
+              ? AppColors.emerald.withValues(alpha: 0.18)
+              : AppColors.trustBlue.withValues(alpha: 0.12),
+          destinations: [
+            NavigationDestination(
+              icon: const Icon(Icons.home_outlined),
+              selectedIcon: const Icon(Icons.home_rounded),
+              label: l.t('home'),
             ),
-            label: l.t('vault'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.vaccines_outlined),
-            selectedIcon: Icon(
-              Icons.vaccines,
-              color: _index == 4 ? AppColors.vaultGreen : null,
+            NavigationDestination(
+              icon: const Icon(Icons.calendar_month_outlined),
+              selectedIcon: const Icon(Icons.calendar_month),
+              label: l.t('appointments'),
             ),
-            label: l.t('vaccines'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.person_outline),
-            selectedIcon: const Icon(Icons.person),
-            label: l.t('profile'),
-          ),
-        ],
+            NavigationDestination(
+              icon: const Icon(Icons.video_call_outlined),
+              selectedIcon: const Icon(Icons.video_call),
+              label: l.t('telehealth'),
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.folder_outlined),
+              selectedIcon: Icon(
+                Icons.folder_special,
+                color: _index == 3 ? AppColors.vaultGreen : null,
+              ),
+              label: l.t('vault'),
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.vaccines_outlined),
+              selectedIcon: Icon(
+                Icons.vaccines,
+                color: _index == 4 ? AppColors.vaultGreen : null,
+              ),
+              label: l.t('vaccines'),
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.person_outline),
+              selectedIcon: const Icon(Icons.person),
+              label: l.t('profile'),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/locale/locale_cubit.dart';
@@ -8,6 +9,7 @@ import '../../core/theme/app_theme.dart';
 import '../../data/models/user_profile.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/profile_avatar.dart';
 import '../widgets/suwasiri_brand_header.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -92,6 +94,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Navigator.of(context).pushNamedAndRemoveUntil('/auth', (_) => false);
   }
 
+  Future<void> _changePhoto() async {
+    final l = AppLocalizations.of(context);
+    final user = context.read<AuthCubit>().state.user;
+    if (user == null) return;
+
+    final choice = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: Text(l.t('takeSelfie')),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: Text(l.t('chooseFromGallery')),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+
+    final shot = await ImagePicker().pickImage(
+      source: choice,
+      imageQuality: 85,
+      maxWidth: 1024,
+    );
+    if (shot == null || !mounted) return;
+
+    final prefs = context.read<LocaleCubit>().prefs;
+    await ProfileAvatarStore.save(prefs, user.id, shot.path);
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l.t('profilePhotoUpdated'))),
+    );
+  }
+
   @override
   void dispose() {
     _waCtrl.dispose();
@@ -114,7 +159,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           const SuwasiriBrandHeader(),
           const SizedBox(height: 18),
-          _IdentityCard(user: user),
+          _IdentityCard(user: user, onChangePhoto: _changePhoto),
           const SizedBox(height: 14),
           _CommunicationCard(
             sms: _sms,
@@ -213,29 +258,49 @@ class _HistoryEntry {
 }
 
 class _IdentityCard extends StatelessWidget {
-  const _IdentityCard({required this.user});
+  const _IdentityCard({
+    required this.user,
+    required this.onChangePhoto,
+  });
 
   final UserProfile user;
+  final VoidCallback onChangePhoto;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final initial = user.name.isNotEmpty ? user.name[0].toUpperCase() : '?';
 
     return SoftCard(
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: AppColors.trustBlueSoft,
-            child: Text(
-              initial,
-              style: const TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w800,
-                color: AppColors.trustBlue,
+          Stack(
+            children: [
+              ProfileAvatar(
+                radius: 30,
+                showOnlineDot: false,
+                onTap: onChangePhoto,
               ),
-            ),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Material(
+                  color: AppColors.trustBlue,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: onChangePhoto,
+                    child: const Padding(
+                      padding: EdgeInsets.all(5),
+                      child: Icon(
+                        Icons.camera_alt,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -270,6 +335,19 @@ class _IdentityCard extends StatelessWidget {
                       fontSize: 12,
                     ),
                   ),
+                const SizedBox(height: 4),
+                MinTap(
+                  enforceMinSize: false,
+                  onTap: onChangePhoto,
+                  child: Text(
+                    l.t('changeProfilePhoto'),
+                    style: const TextStyle(
+                      color: AppColors.trustBlue,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
