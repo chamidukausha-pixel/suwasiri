@@ -1149,6 +1149,36 @@ class AppLocalizations {
       'si': 'සුවසැරිය මධ්‍යස්ථානයට සජීවී GPS යවමින්',
       'ta': 'சுவசரியா டிஸ்பாட்சுக்கு நேரடி GPS அனுப்பப்படுகிறது',
     },
+    'clinicPlace': {
+      'en': 'Clinic place',
+      'si': 'සායන ස්ථානය',
+      'ta': 'மருத்துவமனை இடம்',
+    },
+    'openClinicInMaps': {
+      'en': 'Open clinic address in maps',
+      'si': 'සිතියමේ සායන ලිපිනය විවෘත කරන්න',
+      'ta': 'வரைபடத்தில் மருத்துவமனை முகவரியைத் திற',
+    },
+    'openInGoogleMaps': {
+      'en': 'Open in Google Maps',
+      'si': 'Google Maps හි විවෘත කරන්න',
+      'ta': 'Google Maps-இல் திற',
+    },
+    'openInAppleMaps': {
+      'en': 'Open in Apple Maps',
+      'si': 'Apple Maps හි විවෘත කරන්න',
+      'ta': 'Apple Maps-இல் திற',
+    },
+    'googleMaps': {
+      'en': 'Google Maps',
+      'si': 'Google Maps',
+      'ta': 'Google Maps',
+    },
+    'appleMaps': {
+      'en': 'Apple Maps',
+      'si': 'Apple Maps',
+      'ta': 'Apple Maps',
+    },
   };
 
   String t(String key) {
