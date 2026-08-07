@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/app_notification.dart';
 import '../models/appointment.dart';
+import '../models/sos_location.dart';
 import '../models/vaccine_models.dart';
 import '../models/vault_report.dart';
 import 'health_repository.dart';
@@ -669,4 +670,17 @@ class DemoHealthRepository implements HealthRepository {
     return 'I reviewed "${report.title}". No structured metrics were attached. '
         'Upload the full PDF or ask a more specific question.';
   }
+
+  @override
+  Future<String> upsertSosSession({
+    required String patientId,
+    required SosLocation location,
+    required bool shareLiveGps,
+    String? sessionId,
+  }) async {
+    return sessionId ?? _uuid.v4();
+  }
+
+  @override
+  Future<void> endSosSession(String sessionId) async {}
 }

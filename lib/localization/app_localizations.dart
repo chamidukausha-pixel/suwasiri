@@ -1084,6 +1084,71 @@ class AppLocalizations {
       'ta': 'முதலில் வங்கி ரசீதை இணைக்கவும்',
     },
     'done': {'en': 'Done', 'si': 'අවසන්', 'ta': 'முடிந்தது'},
+    'lankaRescueSystem': {
+      'en': 'LANKA RESCUE SYSTEM',
+      'si': 'ලංකා ගැලවීම් පද්ධතිය',
+      'ta': 'இலங்கை மீட்பு அமைப்பு',
+    },
+    'suwasariyaTitle': {
+      'en': 'Suwasariya 1990',
+      'si': 'සුවසැරිය 1990',
+      'ta': 'சுவசரியா 1990',
+    },
+    'dispatcherLocationLock': {
+      'en': 'DISPATCHER LOCATION LOCK',
+      'si': 'ආපදා මධ්‍යස්ථාන ස්ථාන අගුල',
+      'ta': 'டிஸ்பாட்சர் இருப்பிட பூட்டு',
+    },
+    'gpsSafe': {'en': 'GPS SAFE', 'si': 'GPS ආරක්ෂිත', 'ta': 'GPS பாதுகாப்பு'},
+    'gpsWeak': {'en': 'GPS WEAK', 'si': 'GPS දුර්වල', 'ta': 'GPS பலவீனம்'},
+    'latitude': {'en': 'Latitude', 'si': 'අක්ෂාංශය', 'ta': 'அட்சரேகை'},
+    'longitude': {'en': 'Longitude', 'si': 'දේශාංශය', 'ta': 'தீர்க்கரேகை'},
+    'approxLocationAddress': {
+      'en': 'APPROXIMATE LOCATION ADDRESS',
+      'si': 'ආසන්න ස්ථාන ලිපිනය',
+      'ta': 'தோராயமான இருப்பிட முகவரி',
+    },
+    'resolvingAddress': {
+      'en': 'Resolving street address…',
+      'si': 'වීදි ලිපිනය සොයමින්…',
+      'ta': 'தெரு முகவரியைத் தேடுகிறது…',
+    },
+    'precisionStatus': {
+      'en': 'Precision Status',
+      'si': 'නිරවද්‍යතා තත්ත්වය',
+      'ta': 'துல்லிய நிலை',
+    },
+    'permitSuwasariyaGps': {
+      'en':
+          'Permit Suwasariya Paramedic Dispatcher to extract live GPS telemetry coordinates from this phone on call.',
+      'si':
+          'ඇමතුමේදී මෙම දුරකථනයෙන් සජීවී GPS ඛණ්ඩාංක ලබා ගැනීමට සුවසැරිය පැරාමෙඩික් ආපදා මධ්‍යස්ථානයට අවසර දෙන්න.',
+      'ta':
+          'அழைப்பின் போது இந்த தொலைபேசியிலிருந்து நேரடி GPS ஆயத்தொலைவுகளைப் பெற சுவசரியா பாராமெடிக் டிஸ்பாட்சருக்கு அனுமதி அளிக்கவும்.',
+    },
+    'suwasariyaBlurb': {
+      'en':
+          'Suwasariya (1990) is Sri Lanka\'s free national pre-hospital ambulance care. Calling securely dispatches certified EMT staff and routes them using live server localization.',
+      'si':
+          'සුවසැරිය (1990) ශ්‍රී ලංකාවේ නොමිලේ ජාතික පෙර-රෝහල් ගිලන්රථ සේවාවයි. ඇමතීමෙන් සහතික EMT කාර්ය මණ්ඩලය යවා සජීවී ස්ථානගත කිරීමෙන් මාර්ගගත කරයි.',
+      'ta':
+          'சுவசரியா (1990) இலங்கையின் இலவச தேசிய முன்-மருத்துவமனை ஆம்புலன்ஸ் பராமரிப்பு. அழைப்பது சான்றளிக்கப்பட்ட EMT பணியாளர்களை அனுப்பி நேரடி சேவையக இருப்பிடத்துடன் வழிநடத்துகிறது.',
+    },
+    'directCallSuwasariya': {
+      'en': 'DIRECT CALL SUWASARIYA (1990)',
+      'si': 'සුවසැරිය (1990) කෙලින්ම අමතන්න',
+      'ta': 'சுவசரியாவை நேரடி அழை (1990)',
+    },
+    'lkNhdFooter': {
+      'en': 'LK-NHD SECURED CELLULAR LINK • FREE EMERGENCY HOTLINE',
+      'si': 'LK-NHD ආරක්ෂිත සෙලියුලර් සම්බන්ධතාව • නොමිලේ හදිසි ඇමතුම',
+      'ta': 'LK-NHD பாதுகாப்பான செல்லுலார் இணைப்பு • இலவச அவசர ஹாட்லைன்',
+    },
+    'liveGpsStreaming': {
+      'en': 'Live GPS streaming to Suwasariya dispatch',
+      'si': 'සුවසැරිය මධ්‍යස්ථානයට සජීවී GPS යවමින්',
+      'ta': 'சுவசரியா டிஸ்பாட்சுக்கு நேரடி GPS அனுப்பப்படுகிறது',
+    },
   };
 
   String t(String key) {

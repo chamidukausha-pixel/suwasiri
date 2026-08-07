@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../bloc/notification/notification_cubit.dart';
-import '../../bloc/sos/sos_cubit.dart';
 import '../../bloc/locale/locale_cubit.dart';
+import '../../bloc/notification/notification_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../localization/app_localizations.dart';
 import '../sos/sos_overlay.dart';
@@ -76,8 +75,6 @@ class SuwasiriBrandHeader extends StatelessWidget {
           enforceMinSize: false,
           onTap: () async {
             HapticFeedback.heavyImpact();
-            await context.read<SosCubit>().triggerEmergency();
-            if (!context.mounted) return;
             await showSosOverlay(context);
           },
           child: Container(

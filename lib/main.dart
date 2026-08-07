@@ -42,7 +42,7 @@ class SuwasiriApp extends StatelessWidget {
           BlocProvider(create: (_) => AuthCubit(services.auth)),
           BlocProvider(create: (_) => LocaleCubit(services.prefs)),
           BlocProvider(create: (_) => NotificationCubit(services.health)),
-          BlocProvider(create: (_) => SosCubit(services.sos)),
+          BlocProvider(create: (_) => SosCubit(services.sos, services.health)),
           BlocProvider(create: (_) => VaccineCubit(services.health)),
           BlocProvider(create: (_) => VaultCubit(services.health)),
         ],

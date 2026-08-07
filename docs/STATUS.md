@@ -32,6 +32,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Profile UI (communication settings, treatment history timeline, security ID checks, logout)
 - [x] Home avatar (C) opens Profile tab; profile photo via camera or gallery (local prefs)
 - [x] Book Session → Confirm Appointment (more slots) → Secure Checkout (card / manual bank slip + document/image upload)
+- [x] Suwasariya 1990 SOS overlay (dark rescue UI, GPS lock, share-live-GPS consent → Firestore `sos_sessions`)
 
 ## In progress / next
 

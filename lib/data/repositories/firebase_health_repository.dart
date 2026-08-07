@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/app_notification.dart';
 import '../models/appointment.dart';
+import '../models/sos_location.dart';
 import '../models/vaccine_models.dart';
 import '../models/vault_report.dart';
 import 'health_repository.dart';
@@ -29,6 +30,8 @@ class FirebaseHealthRepository implements HealthRepository {
       _db.collection('notifications');
   CollectionReference<Map<String, dynamic>> get _prescriptions =>
       _db.collection('prescriptions');
+  CollectionReference<Map<String, dynamic>> get _sosSessions =>
+      _db.collection('sos_sessions');
 
   final _clinics = const [
     ClinicFacility(
@@ -590,5 +593,41 @@ class FirebaseHealthRepository implements HealthRepository {
     }
     return 'I reviewed "${report.title}". No structured metrics were attached. '
         'Upload the full PDF or ask a more specific question.';
+  }
+
+  @override
+  Future<String> upsertSosSession({
+    required String patientId,
+    required SosLocation location,
+    required bool shareLiveGps,
+    String? sessionId,
+  }) async {
+    final id = sessionId ?? _uuid.v4();
+    final ref = _sosSessions.doc(id);
+    final existing = await ref.get();
+    final payload = <String, dynamic>{
+      'patientId': patientId,
+      'shareLiveGps': shareLiveGps,
+      'active': true,
+      'updatedAt': DateTime.now().toIso8601String(),
+      ...location.toMap(),
+    };
+    if (!existing.exists) {
+      payload['createdAt'] = DateTime.now().toIso8601String();
+      await ref.set(payload);
+    } else {
+      await ref.update(payload);
+    }
+    return id;
+  }
+
+  @override
+  Future<void> endSosSession(String sessionId) async {
+    await _sosSessions.doc(sessionId).set({
+      'active': false,
+      'shareLiveGps': false,
+      'endedAt': DateTime.now().toIso8601String(),
+      'updatedAt': DateTime.now().toIso8601String(),
+    }, SetOptions(merge: true));
   }
 }

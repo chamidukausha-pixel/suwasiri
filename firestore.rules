@@ -43,5 +43,16 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.patientId == request.auth.uid;
     }
+
+    // Live Suwasariya dispatcher GPS — owner writes; signed-in can read active sessions.
+    match /sos_sessions/{sessionId} {
+      allow create: if isSignedIn()
+        && request.resource.data.patientId == request.auth.uid;
+      allow update, delete: if isSignedIn()
+        && resource.data.patientId == request.auth.uid;
+      allow read: if isSignedIn()
+        && (resource.data.patientId == request.auth.uid
+            || resource.data.shareLiveGps == true);
+    }
   }
 }

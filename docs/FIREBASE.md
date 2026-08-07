@@ -45,6 +45,7 @@ Aligned with `firestore.rules` and `FirebaseHealthRepository` / `FirebaseAuthRep
 | `vaccinations` | `patientId`, facility, `slot`, `status` | write if `patientId == uid` |
 | `appointments` | `patientId`, doctor fields, `timeSlot`, `token` | `patientId == uid` |
 | `prescriptions` | `patientId`, `medicine`, `schedule`, `doseBadge`, `sessionId`, `sentToPharmacare` | `patientId == uid` |
+| `sos_sessions` | `patientId`, lat/lng, `accuracyMeters`, `address`, `shareLiveGps`, `active` | owner write; readable when `shareLiveGps` |
 | `notifications` | `title`, `body`, `timestamp`, `type`, `read` | any signed-in (tighten later) |
 
 ## CLI (Windows)

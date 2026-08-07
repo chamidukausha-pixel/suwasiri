@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,6 +9,8 @@ import '../models/sos_location.dart';
 
 /// Suwasariya 1990 SOS — GPS + dialer integration.
 class SosService {
+  StreamSubscription<Position>? _liveSub;
+
   Future<bool> ensureLocationPermission() async {
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
@@ -20,15 +24,29 @@ class SosService {
     return enabled;
   }
 
-  /// Balanced accuracy to limit battery drain during SOS.
+  /// High accuracy for emergency incident pin.
   Future<SosLocation> fetchLiveLocation() async {
     final position = await Geolocator.getCurrentPosition(
       locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.medium,
-        distanceFilter: 10,
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
+        timeLimit: Duration(seconds: 20),
       ),
     );
+    return _fromPosition(position);
+  }
 
+  /// Continuous updates while dispatcher share is approved.
+  Stream<SosLocation> watchLiveLocation() {
+    return Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 8,
+      ),
+    ).asyncMap(_fromPosition);
+  }
+
+  Future<SosLocation> _fromPosition(Position position) async {
     String? address;
     try {
       final places = await placemarkFromCoordinates(
@@ -62,5 +80,10 @@ class SosService {
       return launchUrl(uri);
     }
     return false;
+  }
+
+  Future<void> stopLiveWatch() async {
+    await _liveSub?.cancel();
+    _liveSub = null;
   }
 }

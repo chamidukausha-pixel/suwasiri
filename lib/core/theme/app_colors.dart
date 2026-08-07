@@ -8,6 +8,10 @@ abstract final class AppColors {
   static const Color trustBlueSoft = Color(0xFFE8F0FF);
   static const Color emergencyRed = Color(0xFFE11D24);
   static const Color emergencyRedSoft = Color(0xFFFEE2E2);
+  static const Color sosBackground = Color(0xFF08080C);
+  static const Color sosCard = Color(0xFF12141D);
+  static const Color sosAccentRed = Color(0xFFFF3B5C);
+  static const Color sosSafeGreen = Color(0xFF00C853);
   static const Color emerald = Color(0xFF059669);
   static const Color vaultGreen = Color(0xFF004D40);
   static const Color emeraldSoft = Color(0xFFECFDF5);

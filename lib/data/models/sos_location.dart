@@ -16,6 +16,41 @@ class SosLocation extends Equatable {
   String get coordinateLabel =>
       '${latitude.toStringAsFixed(6)}, ${longitude.toStringAsFixed(6)}';
 
+  String get latitudeLabel {
+    final hemi = latitude >= 0 ? 'N' : 'S';
+    return '${latitude.abs().toStringAsFixed(6)}° $hemi';
+  }
+
+  String get longitudeLabel {
+    final hemi = longitude >= 0 ? 'E' : 'W';
+    return '${longitude.abs().toStringAsFixed(6)}° $hemi';
+  }
+
+  /// Human precision label for dispatcher UI.
+  String get precisionStatus {
+    if (accuracyMeters <= 20) return 'GPS Fixed';
+    if (accuracyMeters <= 80) return 'GPS Safe';
+    return 'Cell-Tower Triangulated';
+  }
+
+  bool get isGpsSafe => accuracyMeters <= 80;
+
+  Map<String, dynamic> toMap() => {
+        'latitude': latitude,
+        'longitude': longitude,
+        'accuracyMeters': accuracyMeters,
+        'address': address,
+      };
+
+  factory SosLocation.fromMap(Map<String, dynamic> map) {
+    return SosLocation(
+      latitude: (map['latitude'] as num).toDouble(),
+      longitude: (map['longitude'] as num).toDouble(),
+      accuracyMeters: (map['accuracyMeters'] as num?)?.toDouble() ?? 999,
+      address: map['address'] as String?,
+    );
+  }
+
   @override
   List<Object?> get props => [latitude, longitude, accuracyMeters, address];
 }

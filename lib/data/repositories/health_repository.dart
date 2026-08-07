@@ -1,5 +1,6 @@
 import '../models/app_notification.dart';
 import '../models/appointment.dart';
+import '../models/sos_location.dart';
 import '../models/vaccine_models.dart';
 import '../models/vault_report.dart';
 
@@ -55,4 +56,14 @@ abstract class HealthRepository {
     required VaultReport report,
     required String question,
   });
+
+  /// Publish / update a live Suwasariya dispatcher GPS session.
+  Future<String> upsertSosSession({
+    required String patientId,
+    required SosLocation location,
+    required bool shareLiveGps,
+    String? sessionId,
+  });
+
+  Future<void> endSosSession(String sessionId);
 }
