@@ -12,163 +12,13 @@ import '../../localization/app_localizations.dart';
 import '../telehealth/prescription_detail_sheet.dart';
 import '../widgets/common_widgets.dart';
 
-/// Active patient health: Issued Medicines / Lab Reports / Vaccine History.
-class PatientHealthHistorySection extends StatelessWidget {
-  const PatientHealthHistorySection({
-    super.key,
-    required this.state,
-    required this.onOpenLab,
-  });
-
-  final VaultState state;
-  final void Function(VaultReport report) onOpenLab;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final pending = state.pendingMedicines;
-    final labs = state.labReports;
-    final vaccines = state.vaccineHistory;
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            l.t('patientHealthTreatmentHistory'),
-            style: const TextStyle(
-              color: AppColors.trustBlueDark,
-              fontWeight: FontWeight.w800,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            l.t('patientHealthHint'),
-            style: const TextStyle(
-              color: AppColors.slateMuted,
-              fontSize: 12,
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _TabChip(
-                  label: l.t('issuedMedicines'),
-                  count: pending.length,
-                  selected: state.healthTab == HealthHistoryTab.medicines,
-                  onTap: () => context
-                      .read<VaultCubit>()
-                      .setHealthTab(HealthHistoryTab.medicines),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _TabChip(
-                  label: l.t('labReports'),
-                  count: labs.length,
-                  selected: state.healthTab == HealthHistoryTab.labs,
-                  onTap: () => context
-                      .read<VaultCubit>()
-                      .setHealthTab(HealthHistoryTab.labs),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _TabChip(
-                  label: l.t('vaccineHistory'),
-                  count: vaccines.length,
-                  selected: state.healthTab == HealthHistoryTab.vaccines,
-                  onTap: () => context
-                      .read<VaultCubit>()
-                      .setHealthTab(HealthHistoryTab.vaccines),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (state.healthTab == HealthHistoryTab.medicines)
-            _PendingMedicinesPanel(state: state)
-          else if (state.healthTab == HealthHistoryTab.labs)
-            _LabsPanel(labs: labs, onOpen: onOpenLab)
-          else
-            _VaccinesPanel(entries: vaccines),
-        ],
-      ),
-    );
-  }
-}
-
-class _TabChip extends StatelessWidget {
-  const _TabChip({
-    required this.label,
-    required this.count,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final int count;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return MinTap(
-      enforceMinSize: false,
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.trustBlueSoft : const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? AppColors.trustBlue : AppColors.border,
-          ),
-        ),
-        child: Column(
-          children: [
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: selected ? AppColors.trustBlueDark : AppColors.slateMuted,
-                fontWeight: FontWeight.w800,
-                fontSize: 11,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              '$count',
-              style: TextStyle(
-                color: selected ? AppColors.trustBlue : AppColors.slateMuted,
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PendingMedicinesPanel extends StatelessWidget {
-  const _PendingMedicinesPanel({required this.state});
+/// Pending e-prescriptions only — shown above AI Lab Assistant in Vault.
+class VaultEPrescriptionSection extends StatelessWidget {
+  const VaultEPrescriptionSection({super.key, required this.state});
 
   final VaultState state;
 
-  Future<void> _openGroup(
+  Future<void> _openClinic(
     BuildContext context,
     List<Prescription> meds,
   ) async {
@@ -182,6 +32,7 @@ class _PendingMedicinesPanel extends StatelessWidget {
       doctorName: first.doctor,
       patient: user,
       mediLankaSynced: false,
+      showFormalForm: true,
       onSyncMediLanka: () async {
         await context.read<VaultCubit>().sendMedicinesToMediLanka(
               patientId: user.id,
@@ -197,57 +48,383 @@ class _PendingMedicinesPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final pending = state.pendingMedicines;
-    if (pending.isEmpty) {
-      return Text(
-        l.t('noPendingMedicines'),
-        style: const TextStyle(
-          color: AppColors.slateMuted,
-          fontSize: 13,
-          fontStyle: FontStyle.italic,
-        ),
-      );
-    }
-
     final byClinic = <String, List<Prescription>>{};
     for (final p in pending) {
       byClinic.putIfAbsent(p.clinicName, () => []).add(p);
     }
 
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.trustBlueDark.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 5,
+              decoration: const BoxDecoration(
+                color: AppColors.trustBlue,
+                borderRadius: BorderRadius.horizontal(left: Radius.circular(20)),
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 16, 16, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.description_outlined,
+                            color: AppColors.trustBlue, size: 22),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            l.t('ePrescription'),
+                            style: const TextStyle(
+                              color: AppColors.trustBlueDark,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      l.t('vaultERxHint'),
+                      style: const TextStyle(
+                        color: AppColors.slateMuted,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (byClinic.isEmpty)
+                      Text(
+                        l.t('noPendingMedicines'),
+                        style: const TextStyle(
+                          color: AppColors.slateMuted,
+                          fontStyle: FontStyle.italic,
+                          fontSize: 13,
+                        ),
+                      )
+                    else
+                      ...byClinic.entries.map((e) {
+                        final first = e.value.first;
+                        final date = first.issuedAt != null
+                            ? DateFormat('d MMM yyyy · hh:mm a')
+                                .format(first.issuedAt!)
+                            : '—';
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${l.t('issuedDate')}: $date',
+                                style: const TextStyle(
+                                  color: AppColors.slateMuted,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${l.t('medicalClinic')}:',
+                                style: const TextStyle(
+                                  color: AppColors.slateMuted,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              MinTap(
+                                enforceMinSize: false,
+                                onTap: () => _openClinic(context, e.value),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        e.key,
+                                        style: const TextStyle(
+                                          color: AppColors.trustBlue,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w800,
+                                          decoration: TextDecoration.underline,
+                                          decorationColor: AppColors.trustBlue,
+                                        ),
+                                      ),
+                                    ),
+                                    const Icon(Icons.open_in_new,
+                                        size: 16, color: AppColors.trustBlue),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              ...e.value.map(
+                                (m) => Text(
+                                  '• ${m.medicine}',
+                                  style: const TextStyle(
+                                    color: AppColors.trustBlueDark,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Issued Medical History with four colored category tiles.
+class IssuedMedicalHistorySection extends StatelessWidget {
+  const IssuedMedicalHistorySection({super.key, required this.state});
+
+  final VaultState state;
+
+  static const _medColor = Color(0xFF1A66FF);
+  static const _labColor = Color(0xFF0D9488);
+  static const _vaxColor = Color(0xFF059669);
+  static const _noteColor = Color(0xFFD97706);
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final history = state.historyMedicines;
+    final labs = state.labReports;
+    final vaccines = state.vaccineHistory;
+    final notes = state.treatmentNotes;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          l.t('pendingPharmacyRx'),
+          l.t('issuedMedicalHistory'),
           style: const TextStyle(
-            color: AppColors.slateMuted,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
+            color: AppColors.trustBlueDark,
+            fontWeight: FontWeight.w800,
+            fontSize: 17,
           ),
         ),
+        const SizedBox(height: 4),
+        Text(
+          l.t('issuedMedicalHistoryHint'),
+          style: const TextStyle(
+            color: AppColors.slateMuted,
+            fontSize: 12,
+            height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _CategoryTile(
+                icon: Icons.medication_outlined,
+                title: l.t('issuedMedicines'),
+                count: history.length,
+                color: _medColor,
+                selected: state.healthTab == HealthHistoryTab.medicines,
+                onTap: () => context
+                    .read<VaultCubit>()
+                    .setHealthTab(HealthHistoryTab.medicines),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _CategoryTile(
+                icon: Icons.biotech_outlined,
+                title: l.t('labReports'),
+                count: labs.length,
+                color: _labColor,
+                selected: state.healthTab == HealthHistoryTab.labs,
+                onTap: () => context
+                    .read<VaultCubit>()
+                    .setHealthTab(HealthHistoryTab.labs),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 8),
-        ...byClinic.entries.map((e) {
-          final first = e.value.first;
-          final date = first.issuedAt != null
-              ? DateFormat('d MMM yyyy').format(first.issuedAt!)
-              : '—';
-          return Padding(
+        Row(
+          children: [
+            Expanded(
+              child: _CategoryTile(
+                icon: Icons.vaccines_outlined,
+                title: l.t('vaccineHistory'),
+                count: vaccines.length,
+                color: _vaxColor,
+                selected: state.healthTab == HealthHistoryTab.vaccines,
+                onTap: () => context
+                    .read<VaultCubit>()
+                    .setHealthTab(HealthHistoryTab.vaccines),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _CategoryTile(
+                icon: Icons.note_alt_outlined,
+                title: l.t('treatmentNotes'),
+                count: notes.length,
+                color: _noteColor,
+                selected: state.healthTab == HealthHistoryTab.notes,
+                onTap: () =>
+                    context.read<VaultCubit>().setHealthTab(HealthHistoryTab.notes),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (state.healthTab == HealthHistoryTab.medicines)
+          _HistoryMedicinesList(medicines: history)
+        else if (state.healthTab == HealthHistoryTab.labs)
+          _LabsList(labs: labs)
+        else if (state.healthTab == HealthHistoryTab.vaccines)
+          _VaccinesList(entries: vaccines)
+        else
+          _NotesList(notes: notes),
+      ],
+    );
+  }
+}
+
+class _CategoryTile extends StatelessWidget {
+  const _CategoryTile({
+    required this.icon,
+    required this.title,
+    required this.count,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final int count;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return MinTap(
+      enforceMinSize: false,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
+        decoration: BoxDecoration(
+          color: selected ? color.withValues(alpha: 0.14) : AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? color : AppColors.border,
+            width: selected ? 1.6 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              l.t('recordsCount').replaceAll('{count}', '$count'),
+              style: const TextStyle(
+                color: AppColors.slateMuted,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HistoryMedicinesList extends StatelessWidget {
+  const _HistoryMedicinesList({required this.medicines});
+
+  final List<Prescription> medicines;
+
+  Future<void> _open(BuildContext context, List<Prescription> group) async {
+    final user = context.read<AuthCubit>().state.user;
+    if (group.isEmpty) return;
+    final first = group.first;
+    await showPrescriptionDetailSheet(
+      context: context,
+      medicines: group,
+      clinicName: first.clinicName,
+      doctorName: first.doctor,
+      patient: user,
+      mediLankaSynced: true,
+      showFormalForm: true,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    if (medicines.isEmpty) {
+      return EmptyHint(l.t('noMedicines'));
+    }
+    final byClinic = <String, List<Prescription>>{};
+    for (final p in medicines) {
+      byClinic.putIfAbsent(p.clinicName, () => []).add(p);
+    }
+    return Column(
+      children: [
+        for (final e in byClinic.entries)
+          Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: MinTap(
               enforceMinSize: false,
-              onTap: () => _openGroup(context, e.value),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
-                ),
+              onTap: () => _open(context, e.value),
+              child: SoftCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${l.t('issuedDate')}: $date',
+                      '${l.t('issuedDate')}: ${e.value.first.issuedAt != null ? DateFormat('d MMM yyyy').format(e.value.first.issuedAt!) : '—'}',
                       style: const TextStyle(
                         color: AppColors.slateMuted,
                         fontSize: 11,
@@ -257,14 +434,14 @@ class _PendingMedicinesPanel extends StatelessWidget {
                     Text(
                       e.key,
                       style: const TextStyle(
-                        color: AppColors.trustBlue,
+                        color: Color(0xFF1A66FF),
                         fontWeight: FontWeight.w800,
-                        fontSize: 13,
+                        fontSize: 14,
                         decoration: TextDecoration.underline,
                       ),
                     ),
                     Text(
-                      first.doctor,
+                      e.value.first.doctor,
                       style: const TextStyle(
                         color: AppColors.trustBlueDark,
                         fontSize: 12,
@@ -284,85 +461,21 @@ class _PendingMedicinesPanel extends StatelessWidget {
                 ),
               ),
             ),
-          );
-        }),
-        if (state.treatmentNotes.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(
-            l.t('treatmentNotes'),
-            style: const TextStyle(
-              color: AppColors.trustBlueDark,
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-            ),
           ),
-          const SizedBox(height: 6),
-          ...state.treatmentNotes.take(3).map(
-                (n) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.trustBlueSoft.withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          n.title,
-                          style: const TextStyle(
-                            color: AppColors.trustBlueDark,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12,
-                          ),
-                        ),
-                        Text(
-                          '${n.doctor} · ${DateFormat('d MMM yyyy').format(n.date)}',
-                          style: const TextStyle(
-                            color: AppColors.slateMuted,
-                            fontSize: 11,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          n.body,
-                          style: const TextStyle(
-                            color: AppColors.trustBlueDark,
-                            fontSize: 12,
-                            height: 1.35,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-        ],
       ],
     );
   }
 }
 
-class _LabsPanel extends StatelessWidget {
-  const _LabsPanel({required this.labs, required this.onOpen});
+class _LabsList extends StatelessWidget {
+  const _LabsList({required this.labs});
 
   final List<VaultReport> labs;
-  final void Function(VaultReport report) onOpen;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    if (labs.isEmpty) {
-      return Text(
-        l.t('noReports'),
-        style: const TextStyle(
-          color: AppColors.slateMuted,
-          fontStyle: FontStyle.italic,
-        ),
-      );
-    }
+    if (labs.isEmpty) return EmptyHint(l.t('noReports'));
     return Column(
       children: [
         for (final r in labs)
@@ -370,19 +483,20 @@ class _LabsPanel extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 8),
             child: MinTap(
               enforceMinSize: false,
-              onTap: () => onOpen(r),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
-                ),
+              onTap: () => showLabReportDetailSheet(context: context, report: r),
+              child: SoftCard(
                 child: Row(
                   children: [
-                    const Icon(Icons.biotech_outlined,
-                        color: AppColors.trustBlue),
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0D9488).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.biotech_outlined,
+                          color: Color(0xFF0D9488)),
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
@@ -417,12 +531,12 @@ class _LabsPanel extends StatelessWidget {
   }
 }
 
-class _VaccinesPanel extends StatelessWidget {
-  const _VaccinesPanel({required this.entries});
+class _VaccinesList extends StatelessWidget {
+  const _VaccinesList({required this.entries});
 
   final List<VaccineHistoryEntry> entries;
 
-  void _openDetail(BuildContext context, VaccineHistoryEntry e) {
+  void _open(BuildContext context, VaccineHistoryEntry e) {
     final l = AppLocalizations.of(context);
     showModalBottomSheet<void>(
       context: context,
@@ -451,7 +565,7 @@ class _VaccinesPanel extends StatelessWidget {
                   color: AppColors.trustBlueDark,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               _kv(l.t('issuedByLabel'), e.issuer),
               _kv(l.t('medicalClinic'), e.facility),
               _kv(l.t('issuedDate'), DateFormat('d MMM yyyy').format(e.date)),
@@ -499,15 +613,7 @@ class _VaccinesPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    if (entries.isEmpty) {
-      return Text(
-        l.t('noVaccineHistory'),
-        style: const TextStyle(
-          color: AppColors.slateMuted,
-          fontStyle: FontStyle.italic,
-        ),
-      );
-    }
+    if (entries.isEmpty) return EmptyHint(l.t('noVaccineHistory'));
     return Column(
       children: [
         for (final e in entries)
@@ -515,19 +621,20 @@ class _VaccinesPanel extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 8),
             child: MinTap(
               enforceMinSize: false,
-              onTap: () => _openDetail(context, e),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
-                ),
+              onTap: () => _open(context, e),
+              child: SoftCard(
                 child: Row(
                   children: [
-                    const Icon(Icons.vaccines_outlined,
-                        color: AppColors.emerald),
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF059669).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.vaccines_outlined,
+                          color: Color(0xFF059669)),
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
@@ -543,6 +650,136 @@ class _VaccinesPanel extends StatelessWidget {
                           ),
                           Text(
                             '${e.issuer} · ${DateFormat('d MMM yyyy').format(e.date)}',
+                            style: const TextStyle(
+                              color: AppColors.slateMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right, color: AppColors.slateMuted),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _NotesList extends StatelessWidget {
+  const _NotesList({required this.notes});
+
+  final List<TreatmentNote> notes;
+
+  void _open(BuildContext context, TreatmentNote n) {
+    final l = AppLocalizations.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            8,
+            20,
+            20 + MediaQuery.paddingOf(ctx).bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l.t('treatmentNotes'),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                  color: AppColors.trustBlueDark,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                n.title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                  color: AppColors.trustBlueDark,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${n.doctor} · ${n.clinicName}',
+                style: const TextStyle(
+                  color: AppColors.slateMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                DateFormat('d MMM yyyy').format(n.date),
+                style: const TextStyle(color: AppColors.slateMuted, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                n.body,
+                style: const TextStyle(
+                  color: AppColors.trustBlueDark,
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    if (notes.isEmpty) {
+      return EmptyHint(l.t('noTreatmentNotes'));
+    }
+    return Column(
+      children: [
+        for (final n in notes)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: MinTap(
+              enforceMinSize: false,
+              onTap: () => _open(context, n),
+              child: SoftCard(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.note_alt_outlined,
+                          color: Color(0xFFD97706)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            n.title,
+                            style: const TextStyle(
+                              color: AppColors.trustBlueDark,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            '${n.doctor} · ${DateFormat('d MMM yyyy').format(n.date)}',
                             style: const TextStyle(
                               color: AppColors.slateMuted,
                               fontSize: 11,

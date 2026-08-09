@@ -6,6 +6,7 @@ import '../../data/models/user_profile.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/services/prescription_export_service.dart';
 import '../../localization/app_localizations.dart';
+import '../vault/prescription_form_view.dart';
 
 /// Sheet showing a doctor's issued script with email / MediLanka / PDF actions.
 Future<void> showPrescriptionDetailSheet({
@@ -16,6 +17,7 @@ Future<void> showPrescriptionDetailSheet({
   UserProfile? patient,
   Future<void> Function()? onSyncMediLanka,
   bool mediLankaSynced = false,
+  bool showFormalForm = false,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -32,6 +34,7 @@ Future<void> showPrescriptionDetailSheet({
         patient: patient,
         onSyncMediLanka: onSyncMediLanka,
         mediLankaSynced: mediLankaSynced,
+        showFormalForm: showFormalForm,
       );
     },
   );
@@ -45,6 +48,7 @@ class _PrescriptionDetailSheet extends StatefulWidget {
     this.patient,
     this.onSyncMediLanka,
     this.mediLankaSynced = false,
+    this.showFormalForm = false,
   });
 
   final List<Prescription> medicines;
@@ -53,6 +57,7 @@ class _PrescriptionDetailSheet extends StatefulWidget {
   final UserProfile? patient;
   final Future<void> Function()? onSyncMediLanka;
   final bool mediLankaSynced;
+  final bool showFormalForm;
 
   @override
   State<_PrescriptionDetailSheet> createState() =>
@@ -217,65 +222,75 @@ class _PrescriptionDetailSheetState extends State<_PrescriptionDetailSheet> {
                 ),
               ),
               const SizedBox(height: 14),
-              ...widget.medicines.map(
-                (m) => Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              m.medicine,
-                              style: const TextStyle(
-                                color: AppColors.trustBlueDark,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 14,
-                              ),
-                            ),
-                            if (m.schedule.isNotEmpty) ...[
-                              const SizedBox(height: 3),
+              if (widget.showFormalForm) ...[
+                PrescriptionFormView(
+                  medicines: widget.medicines,
+                  doctorName: widget.doctorName,
+                  clinicName: widget.clinicName,
+                  patient: widget.patient,
+                ),
+                const SizedBox(height: 14),
+              ],
+              if (!widget.showFormalForm)
+                ...widget.medicines.map(
+                  (m) => Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Text(
-                                m.schedule,
+                                m.medicine,
                                 style: const TextStyle(
-                                  color: AppColors.slateMuted,
-                                  fontSize: 12,
+                                  color: AppColors.trustBlueDark,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
                                 ),
                               ),
+                              if (m.schedule.isNotEmpty) ...[
+                                const SizedBox(height: 3),
+                                Text(
+                                  m.schedule,
+                                  style: const TextStyle(
+                                    color: AppColors.slateMuted,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE2E8F0),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          m.doseBadge.isEmpty ? m.code : m.doseBadge,
-                          style: const TextStyle(
-                            color: AppColors.trustBlueDark,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
                           ),
                         ),
-                      ),
-                    ],
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE2E8F0),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            m.doseBadge.isEmpty ? m.code : m.doseBadge,
+                            style: const TextStyle(
+                              color: AppColors.trustBlueDark,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
               const SizedBox(height: 8),
               Text(
                 l.t('rxActionsHint'),

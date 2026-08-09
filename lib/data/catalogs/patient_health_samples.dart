@@ -1,8 +1,8 @@
 import '../models/vault_report.dart';
 
-/// Sample patient health records for Vault (pending Rx, labs, vaccines, notes).
+/// Sample patient health records for **Vault only** (pending Rx, labs, vaccines, notes).
 abstract final class PatientHealthSamples {
-  /// Active / pending e-Rx (not yet sent to pharmacy via MediLanka).
+  /// Pending e-Rx for Vault E-Prescription (not yet sent via MediLanka).
   static List<Prescription> pendingMedicines({required String patientId}) {
     final now = DateTime.now();
     return [
@@ -45,10 +45,49 @@ abstract final class PatientHealthSamples {
         clinicName: 'Asiri Medical · Allergy Clinic',
         sentToPharmacare: false,
       ),
+      Prescription(
+        id: 'pending-eye-1',
+        medicine: 'Fluorometholone 0.1% eye drops, 5 mL',
+        doctor: 'Dr. Andrew Practitioner',
+        code: 'EP-00003194',
+        active: true,
+        patientId: patientId,
+        schedule: '4× per day right eye',
+        doseBadge: '1×4',
+        issuedAt: now.subtract(const Duration(days: 2)),
+        clinicName: 'Lanka Eye Care · Colombo 07',
+        sentToPharmacare: false,
+      ),
+      Prescription(
+        id: 'pending-gp-1',
+        medicine: 'Paracetamol 500mg tablets',
+        doctor: 'Dr. Aruni Perera',
+        code: 'EP-GP-4410',
+        active: true,
+        patientId: patientId,
+        schedule: '1–2 tablets every 6 hours if fever or pain',
+        doseBadge: 'PRN',
+        issuedAt: now.subtract(const Duration(hours: 18)),
+        clinicName: 'Lanka GP Care · Durdans Teleclinic',
+        sentToPharmacare: false,
+      ),
+      Prescription(
+        id: 'pending-gp-2',
+        medicine: 'ORS sachets (WHO formula)',
+        doctor: 'Dr. Aruni Perera',
+        code: 'EP-GP-4410',
+        active: true,
+        patientId: patientId,
+        schedule: '1 sachet in 1L water after each loose stool',
+        doseBadge: 'PRN',
+        issuedAt: now.subtract(const Duration(hours: 18)),
+        clinicName: 'Lanka GP Care · Durdans Teleclinic',
+        sentToPharmacare: false,
+      ),
     ];
   }
 
-  /// Already dispensed / sent to MediLanka — Issued Medical History.
+  /// Already sent to MediLanka — Issued Medicines (history).
   static List<Prescription> historyMedicines({required String patientId}) {
     final issued = DateTime.now().subtract(const Duration(days: 21));
     return [
@@ -89,6 +128,32 @@ abstract final class PatientHealthSamples {
         doseBadge: 'PRN',
         issuedAt: issued.subtract(const Duration(days: 20)),
         clinicName: 'Asiri Central · Respiratory Unit',
+        sentToPharmacare: true,
+      ),
+      Prescription(
+        id: 'hist-amlo',
+        medicine: 'Amlodipine 5mg tablets',
+        doctor: 'Dr. Malini Silva',
+        code: 'EP-00007022',
+        active: true,
+        patientId: patientId,
+        schedule: '1 tablet daily in the morning',
+        doseBadge: '1×1',
+        issuedAt: issued.subtract(const Duration(days: 40)),
+        clinicName: 'Lanka Hospitals · Cardiology',
+        sentToPharmacare: true,
+      ),
+      Prescription(
+        id: 'hist-vitd',
+        medicine: 'Vitamin D3 1000 IU capsules',
+        doctor: 'Dr. Malini Silva',
+        code: 'EP-00007022',
+        active: true,
+        patientId: patientId,
+        schedule: '1 capsule daily with food × 90 days',
+        doseBadge: '1×1',
+        issuedAt: issued.subtract(const Duration(days: 40)),
+        clinicName: 'Lanka Hospitals · Cardiology',
         sentToPharmacare: true,
       ),
     ];
@@ -132,6 +197,26 @@ abstract final class PatientHealthSamples {
         body:
             'Likely viral illness. Paracetamol PRN. Monitor hydration. Telehealth e-Rx issued during call.',
         date: now.subtract(const Duration(days: 7)),
+      ),
+      TreatmentNote(
+        id: 'note-4',
+        patientId: patientId,
+        doctor: 'Dr. Andrew Practitioner',
+        clinicName: 'Lanka Eye Care · Colombo 07',
+        title: 'Ophthalmology review — right eye inflammation',
+        body:
+            'Prescribed Fluorometholone 0.1% drops QID OD. Avoid contact lenses for 7 days. Review in 1 week.',
+        date: now.subtract(const Duration(days: 2)),
+      ),
+      TreatmentNote(
+        id: 'note-5',
+        patientId: patientId,
+        doctor: 'Dr. Kavinda Jayawardena',
+        clinicName: 'Nawaloka Heart Clinic · Colombo 02',
+        title: 'Cardiology follow-up — lipid management',
+        body:
+            'Continue Atorvastatin nightly. Lifestyle counselling given. Repeat lipid profile in 3 months.',
+        date: now.subtract(const Duration(days: 21)),
       ),
     ];
   }
@@ -188,6 +273,37 @@ abstract final class PatientHealthSamples {
           MetricReading(name: 'Platelets', value: '245 ×10⁹/L', status: 'normal'),
         ],
       ),
+      VaultReport(
+        id: 'lab-lft',
+        patientId: patientId,
+        title: 'Liver Function Test (LFT)',
+        issuedBy: 'LankaLab',
+        date: now.subtract(const Duration(days: 25)),
+        category: 'Biochemistry',
+        facility: 'LankaLab Central · Colombo',
+        requestedBy: 'Dr. Samanthi Wickramasinghe',
+        kind: VaultRecordKind.lab,
+        metrics: const [
+          MetricReading(name: 'ALT', value: '32 U/L', status: 'normal'),
+          MetricReading(name: 'AST', value: '28 U/L', status: 'normal'),
+          MetricReading(name: 'Bilirubin', value: '0.8 mg/dL', status: 'normal'),
+        ],
+      ),
+      VaultReport(
+        id: 'lab-tsh',
+        patientId: patientId,
+        title: 'Thyroid Stimulating Hormone (TSH)',
+        issuedBy: 'Durdans Lab',
+        date: now.subtract(const Duration(days: 45)),
+        category: 'Endocrinology',
+        facility: 'Durdans Hospital Lab',
+        requestedBy: 'Dr. Malini Silva',
+        kind: VaultRecordKind.lab,
+        metrics: const [
+          MetricReading(name: 'TSH', value: '2.1 mIU/L', status: 'normal'),
+          MetricReading(name: 'Free T4', value: '1.2 ng/dL', status: 'normal'),
+        ],
+      ),
     ];
   }
 
@@ -232,6 +348,26 @@ abstract final class PatientHealthSamples {
         facility: 'Asiri Central · Emergency',
         date: DateTime.now().subtract(const Duration(days: 400)),
         doseLabel: 'Booster',
+      ),
+      VaccineHistoryEntry(
+        id: 'vh-mmr',
+        patientId: patientId,
+        vaccineName: 'MMR (Measles, Mumps, Rubella)',
+        batchCode: 'MMR-3301',
+        issuer: 'HNR · MOH',
+        facility: 'MOH Clinic · Dehiwala',
+        date: DateTime.now().subtract(const Duration(days: 2200)),
+        doseLabel: 'Dose 2 of 2',
+      ),
+      VaccineHistoryEntry(
+        id: 'vh-dengue',
+        patientId: patientId,
+        vaccineName: 'Qdenga® Dengue (Dose 1)',
+        batchCode: 'QD-1188',
+        issuer: 'Asiri Medical Hospital',
+        facility: 'Asiri Medical · Vaccine Desk',
+        date: DateTime.now().subtract(const Duration(days: 60)),
+        doseLabel: 'Dose 1 of 2',
       ),
     ];
   }

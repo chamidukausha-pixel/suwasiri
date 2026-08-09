@@ -657,6 +657,27 @@ class AppLocalizations {
       'si': 'නිකුත් කළ වෛද්‍ය ඉතිහාසය',
       'ta': 'வழங்கப்பட்ட மருத்துவ வரலாறு',
     },
+    'issuedMedicalHistoryHint': {
+      'en':
+          'Past medicines sent to pharmacy, lab reports, vaccines, and doctor notes. Tap a category, then an item for full details.',
+      'si':
+          'ඖෂධාගාරයට යවන ලද බෙහෙත්, රසායනාගාර වාර්තා, එන්නත් සහ වෛද්‍ය සටහන්. කාණ්ඩයක් තෝරා විස්තර බලන්න.',
+      'ta':
+          'மருந்தகத்திற்கு அனுப்பிய மருந்துகள், ஆய்வக அறிக்கைகள், தடுப்பூசிகள், மருத்துவர் குறிப்புகள். வகையைத் தேர்ந்து விவரங்களைக் காணவும்.',
+    },
+    'vaultERxHint': {
+      'en':
+          'Pending e-prescriptions only. Tap the clinic name to view the formal script, email, MediLanka sync, or PDF.',
+      'si':
+          'අපේක්ෂිත ඊ-වට්ටෝරු පමණි. නිල පෝරමය, ඊමේල්, MediLanka හෝ PDF සඳහා සායන නම තට්ටු කරන්න.',
+      'ta':
+          'நிலுவை மின் மருந்துச்சீட்டுகள் மட்டும். முறையான படிவம், மின்னஞ்சல், MediLanka அல்லது PDFக்கு கிளினிக் பெயரைத் தட்டவும்.',
+    },
+    'noTreatmentNotes': {
+      'en': 'No doctor treatment notes yet.',
+      'si': 'වෛද්‍ය ප්‍රතිකාර සටහන් නැත.',
+      'ta': 'மருத்துவர் சிகிச்சை குறிப்புகள் இல்லை.',
+    },
     'patientHealthTreatmentHistory': {
       'en': 'Patient Health & Treatment History',
       'si': 'රෝගී සෞඛ්‍ය හා ප්‍රතිකාර ඉතිහාසය',

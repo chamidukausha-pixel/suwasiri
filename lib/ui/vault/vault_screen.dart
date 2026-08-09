@@ -1,15 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:intl/intl.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/notification/notification_cubit.dart';
 import '../../bloc/vault/vault_cubit.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_theme.dart';
-import '../../data/models/vault_report.dart';
 import '../../localization/app_localizations.dart';
-import '../widgets/common_widgets.dart';
 import '../widgets/suwasiri_brand_header.dart';
 import 'patient_health_section.dart';
 
@@ -171,8 +167,6 @@ class _VaultScreenState extends State<VaultScreen> {
         }
 
         final user = context.watch<AuthCubit>().state.user!;
-        final labCount = state.labReports.length;
-        final historyCount = state.historyMedicines.length;
 
         return SafeArea(
           bottom: false,
@@ -215,77 +209,12 @@ class _VaultScreenState extends State<VaultScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              PatientHealthHistorySection(
-                state: state,
-                onOpenLab: (r) async {
-                  context.read<VaultCubit>().selectReport(r);
-                  await showLabReportDetailSheet(context: context, report: r);
-                },
-              ),
+              VaultEPrescriptionSection(state: state),
               const SizedBox(height: 12),
               _AiLabAssistantCard(
                 onTry: () => _showAiSheet(state),
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _SummaryTile(
-                      icon: Icons.history_edu_outlined,
-                      iconBg: const Color(0xFFF1F5F9),
-                      iconColor: AppColors.slateMuted,
-                      title: l.t('issuedMedicalHistory'),
-                      subtitle: l
-                          .t('recordsCount')
-                          .replaceAll('{count}', '$historyCount'),
-                      selected: state.filter == VaultFilter.history ||
-                          state.filter == VaultFilter.medicines,
-                      onTap: () => context
-                          .read<VaultCubit>()
-                          .setFilter(VaultFilter.history),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _SummaryTile(
-                      icon: Icons.description_outlined,
-                      iconBg: AppColors.trustBlue,
-                      iconColor: Colors.white,
-                      title: l.t('labReports'),
-                      subtitle: l
-                          .t('recordsCount')
-                          .replaceAll('{count}', '$labCount'),
-                      selected: state.filter == VaultFilter.labs,
-                      onTap: () => context
-                          .read<VaultCubit>()
-                          .setFilter(VaultFilter.labs),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Text(
-                    l.t('recentTimeline'),
-                    style: const TextStyle(
-                      color: AppColors.slateMuted,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 12,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    l.t('chronological'),
-                    style: const TextStyle(
-                      color: AppColors.slateMuted,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
               _GpCareSyncedBar(
                   active: state.gpCareSynced || state.prescriptions.isNotEmpty),
               const SizedBox(height: 14),
@@ -301,15 +230,14 @@ class _VaultScreenState extends State<VaultScreen> {
                       iconColor: AppColors.trustBlue,
                       title: l.t('lankaLabPortal'),
                       subtitle: l.t('centralLabRegistrar'),
-                      synced: state.lankaLabSynced || labCount > 0,
+                      synced:
+                          state.lankaLabSynced || state.labReports.isNotEmpty,
                       body: l.t('lankaLabBody'),
                       buttonLabel: l.t('syncLankaLab'),
                       buttonColor: AppColors.trustBlueDark,
                       loading: state.syncingLankaLab,
                       onSync: () async {
-                        await context
-                            .read<VaultCubit>()
-                            .syncLankaLab(user.id);
+                        await context.read<VaultCubit>().syncLankaLab(user.id);
                         if (!context.mounted) return;
                         await context.read<NotificationCubit>().load();
                       },
@@ -346,101 +274,13 @@ class _VaultScreenState extends State<VaultScreen> {
                 const SizedBox(height: 12),
                 const LinearProgressIndicator(),
               ],
-              const SizedBox(height: 18),
-              if (state.filter == VaultFilter.labs)
-                _VaultTimeline(
-                  reports: state.labReports,
-                  onSelect: (r) async {
-                    context.read<VaultCubit>().selectReport(r);
-                    await showLabReportDetailSheet(context: context, report: r);
-                    if (r.readyForAi && context.mounted) {
-                      _showAiSheet(context.read<VaultCubit>().state);
-                    }
-                  },
-                )
-              else ...[
-                Text(
-                  l.t('issuedMedicalHistory'),
-                  style: const TextStyle(
-                    color: AppColors.trustBlueDark,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ..._buildMedicines(context, state),
-              ],
+              const SizedBox(height: 20),
+              IssuedMedicalHistorySection(state: state),
             ],
           ),
         );
       },
     );
-  }
-
-  List<Widget> _buildMedicines(BuildContext context, VaultState state) {
-    final l = AppLocalizations.of(context);
-    final history = state.historyMedicines;
-    if (history.isEmpty) {
-      return [EmptyHint(l.t('noMedicines'))];
-    }
-    return [
-      for (final p in history)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: SoftCard(
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: AppColors.emeraldSoft,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.medication, color: AppColors.emerald),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        p.medicine,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.trustBlueDark,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${p.doctor} · ${p.code}',
-                        style: const TextStyle(
-                          color: AppColors.slateMuted,
-                          fontSize: 12,
-                        ),
-                      ),
-                      if (p.schedule.isNotEmpty)
-                        Text(
-                          p.schedule,
-                          style: const TextStyle(
-                            color: AppColors.slateMuted,
-                            fontSize: 12,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                StatusChip(
-                  label: p.doseBadge.isNotEmpty
-                      ? p.doseBadge
-                      : (p.active ? 'Active' : 'Ended'),
-                  color: AppColors.emerald,
-                ),
-              ],
-            ),
-          ),
-        ),
-    ];
   }
 }
 
@@ -519,85 +359,6 @@ class _AiLabAssistantCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SummaryTile extends StatelessWidget {
-  const _SummaryTile({
-    required this.icon,
-    required this.iconBg,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final Color iconBg;
-  final Color iconColor;
-  final String title;
-  final String subtitle;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return MinTap(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: selected ? AppColors.trustBlue : AppColors.border,
-            width: selected ? 1.8 : 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.trustBlueDark.withValues(alpha: 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: iconBg,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: iconColor, size: 22),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: TextStyle(
-                color: selected
-                    ? AppColors.trustBlueDark
-                    : AppColors.trustBlueDark,
-                fontWeight: FontWeight.w800,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: TextStyle(
-                color: selected ? AppColors.trustBlue : AppColors.slateMuted,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -820,316 +581,3 @@ class _PortalSyncCard extends StatelessWidget {
   }
 }
 
-class _VaultTimeline extends StatelessWidget {
-  const _VaultTimeline({
-    required this.reports,
-    required this.onSelect,
-  });
-
-  final List<VaultReport> reports;
-  final ValueChanged<VaultReport> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    if (reports.isEmpty) {
-      return EmptyHint(l.t('noLabReports'));
-    }
-
-    final sorted = [...reports]
-      ..sort((a, b) => b.date.compareTo(a.date));
-
-    String? lastMonthKey;
-    final children = <Widget>[];
-
-    // Self uploads header for first upload-kind item
-    final hasUpload = sorted.any((r) => r.kind == VaultRecordKind.upload);
-    if (hasUpload) {
-      children.add(_TimelineMonthChip(label: l.t('selfUploads'), accent: true));
-    }
-
-    for (final report in sorted) {
-      final monthKey = DateFormat('MMMM yyyy').format(report.date);
-      if (report.kind != VaultRecordKind.upload && monthKey != lastMonthKey) {
-        lastMonthKey = monthKey;
-        children.add(_TimelineMonthChip(label: monthKey, accent: false));
-      }
-      children.add(
-        _TimelineRecordCard(
-          report: report,
-          onTap: () => onSelect(report),
-        ),
-      );
-    }
-
-    return Column(children: children);
-  }
-}
-
-class _TimelineMonthChip extends StatelessWidget {
-  const _TimelineMonthChip({required this.label, required this.accent});
-
-  final String label;
-  final bool accent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: accent ? AppColors.trustBlueSoft : const Color(0xFFE2E8F0),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                color: accent ? AppColors.trustBlue : AppColors.slateMuted,
-                fontWeight: FontWeight.w800,
-                fontSize: 11,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Divider(color: AppColors.border),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TimelineRecordCard extends StatelessWidget {
-  const _TimelineRecordCard({
-    required this.report,
-    required this.onTap,
-  });
-
-  final VaultReport report;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final isVaccine = report.kind == VaultRecordKind.vaccine;
-    final accent = isVaccine ? AppColors.emerald : AppColors.trustBlueDark;
-    final dateColor = isVaccine ? AppColors.emerald : AppColors.trustBlue;
-    final date = DateFormat('d MMM yyyy').format(report.date);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              width: 36,
-              child: Column(
-                children: [
-                  Container(
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: accent, width: 1.5),
-                    ),
-                    child: Icon(
-                      isVaccine
-                          ? Icons.vaccines_outlined
-                          : report.kind == VaultRecordKind.upload
-                              ? Icons.add
-                              : Icons.biotech_outlined,
-                      size: 16,
-                      color: accent,
-                    ),
-                  ),
-                  Expanded(
-                    child: Container(
-                      width: 2,
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      color: AppColors.border,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: MinTap(
-                onTap: onTap,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.trustBlueDark.withValues(alpha: 0.04),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Container(
-                          width: 5,
-                          decoration: BoxDecoration(
-                            color: accent,
-                            borderRadius: const BorderRadius.horizontal(
-                              left: Radius.circular(16),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        report.title,
-                                        style: const TextStyle(
-                                          color: AppColors.trustBlueDark,
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                    ),
-                                    if (report.fileSizeMb != null)
-                                      Container(
-                                        margin: const EdgeInsets.only(left: 6),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 3,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFF1F5F9),
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                        ),
-                                        child: Text(
-                                          '${report.fileSizeMb} MB',
-                                          style: const TextStyle(
-                                            color: AppColors.slateMuted,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      )
-                                    else if (report.readyForAi &&
-                                        report.kind == VaultRecordKind.lab)
-                                      Container(
-                                        margin: const EdgeInsets.only(left: 6),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 3,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.emeraldSoft,
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                        ),
-                                        child: Text(
-                                          l.t('readyForAi'),
-                                          style: const TextStyle(
-                                            color: AppColors.emerald,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                if (report.category != null) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${l.t('category')}: ${report.category}',
-                                    style: const TextStyle(
-                                      color: AppColors.slateMuted,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                                if (report.facility != null) ...[
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        isVaccine
-                                            ? Icons.health_and_safety_outlined
-                                            : Icons.info_outline,
-                                        size: 14,
-                                        color: isVaccine
-                                            ? AppColors.trustBlue
-                                            : const Color(0xFF9F7AEA),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Text(
-                                          report.facility!,
-                                          style: const TextStyle(
-                                            color: AppColors.slateMuted,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                                const SizedBox(height: 6),
-                                Text(
-                                  date,
-                                  style: TextStyle(
-                                    color: dateColor,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                                if (report.requestedBy != null) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${l.t('requestedBy')} ${report.requestedBy}',
-                                    style: const TextStyle(
-                                      color: AppColors.slateMuted,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                                if (report.batchCode != null) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Batch: ${report.batchCode}',
-                                    style: AppTheme.mono(
-                                      fontSize: 11,
-                                      color: AppColors.slateMuted,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

@@ -5,7 +5,7 @@ import '../../data/catalogs/patient_health_samples.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/repositories/health_repository.dart';
 
-enum HealthHistoryTab { medicines, labs, vaccines }
+enum HealthHistoryTab { medicines, labs, vaccines, notes }
 
 enum VaultFilter { labs, medicines, history }
 
@@ -123,8 +123,17 @@ class VaultCubit extends Cubit<VaultState> {
     emit(state.copyWith(loading: true));
     final reports = await _health.getVaultReports(patientId);
     final rx = await _health.getPrescriptions(patientId);
+    final sampleLabs =
+        PatientHealthSamples.sampleLabReports(patientId: patientId);
+    final reportIds = {for (final r in reports) r.id};
+    final mergedReports = [
+      ...reports,
+      for (final s in sampleLabs)
+        if (!reportIds.contains(s.id)) s,
+    ]..sort((a, b) => b.date.compareTo(a.date));
+
     emit(state.copyWith(
-      reports: reports,
+      reports: mergedReports,
       prescriptions: rx,
       treatmentNotes:
           PatientHealthSamples.treatmentNotes(patientId: patientId),
@@ -143,8 +152,16 @@ class VaultCubit extends Cubit<VaultState> {
     emit(state.copyWith(syncingLankaLab: true));
     await _health.syncLankaLab(patientId);
     final reports = await _health.getVaultReports(patientId);
+    final sampleLabs =
+        PatientHealthSamples.sampleLabReports(patientId: patientId);
+    final reportIds = {for (final r in reports) r.id};
+    final mergedReports = [
+      ...reports,
+      for (final s in sampleLabs)
+        if (!reportIds.contains(s.id)) s,
+    ]..sort((a, b) => b.date.compareTo(a.date));
     emit(state.copyWith(
-      reports: reports,
+      reports: mergedReports,
       syncingLankaLab: false,
       lankaLabSynced: true,
     ));
