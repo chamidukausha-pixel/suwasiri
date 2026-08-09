@@ -20,7 +20,7 @@ Prioritized next work. Move items to **Done** in [STATUS.md](STATUS.md) when shi
 
 1. Real Phone Auth (Firebase) instead of OTP `123456`
 2. Vault PDF/image upload via Firebase Storage
-3. Telehealth: real signaling / video provider (e-Rx + PharmaCare handoff already simulated)
+3. Telehealth/Call: real signaling / video provider (e-Rx formal form + PharmaCare handoff already in UI)
 4. Live PharmaCare API (replace notification-only portal handoff)
 5. Payment tokens → real gateway if required
 

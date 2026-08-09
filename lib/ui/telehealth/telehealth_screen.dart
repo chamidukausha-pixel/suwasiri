@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/notification/notification_cubit.dart';
 import '../../core/theme/app_colors.dart';
+import '../../data/models/user_profile.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../localization/app_localizations.dart';
@@ -23,6 +24,7 @@ class TelehealthScreen extends StatefulWidget {
 
 class _TelehealthScreenState extends State<TelehealthScreen> {
   static const _doctorName = 'Dr. Aruni Perera';
+  static const _clinicName = 'Lanka GP Care · Durdans Teleclinic';
 
   final _noteCtrl = TextEditingController();
   final _aiCtrl = TextEditingController();
@@ -36,20 +38,24 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     'Avoid self-medicating antibiotics without clinician advice.',
     'If breathing worsens or fever lasts >3 days, seek urgent care.',
   ];
-  bool _showAllTips = false;
-  bool _rxExpanded = true;
 
-  bool _inCall = false;
+  bool _showAllTips = false;
   bool _muted = false;
   bool _camOff = false;
   bool _showAiOverlay = true;
-  bool _rxUpdating = false;
+  bool _rxUpdating = true;
   bool _sendingPharmacare = false;
   String? _sessionId;
   List<Prescription> _sessionRx = [];
   Duration _remaining = const Duration(minutes: 8, seconds: 18);
   Timer? _callTimer;
   Timer? _rxTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startSession());
+  }
 
   @override
   void dispose() {
@@ -60,24 +66,58 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     super.dispose();
   }
 
-  Future<void> _joinCall() async {
+  /// Always present the live Telehealth layout (matches product mockups).
+  Future<void> _startSession() async {
     final user = context.read<AuthCubit>().state.user;
     if (user == null) return;
+
+    _callTimer?.cancel();
+    _rxTimer?.cancel();
+
+    setState(() {
+      _sessionId = const Uuid().v4();
+      _sessionRx = [
+        Prescription(
+          id: 'preview-amox',
+          medicine: 'Amoxicillin 500mg',
+          doctor: _doctorName,
+          code: 'EP-PREVIEW',
+          active: true,
+          patientId: user.id,
+          schedule: 'Antibiotic (TDS Schedule)',
+          doseBadge: '1×3',
+          sessionId: _sessionId,
+          issuedAt: DateTime.now(),
+          clinicName: _clinicName,
+          updating: true,
+        ),
+        Prescription(
+          id: 'preview-para',
+          medicine: 'Paracetamol 500mg',
+          doctor: _doctorName,
+          code: 'EP-PREVIEW-2',
+          active: true,
+          patientId: user.id,
+          schedule: 'As Needed for Pain/Fever',
+          doseBadge: 'PRN',
+          sessionId: _sessionId,
+          issuedAt: DateTime.now(),
+          clinicName: _clinicName,
+          updating: true,
+        ),
+      ];
+      _rxUpdating = true;
+      _remaining = const Duration(minutes: 8, seconds: 18);
+      _showAiOverlay = true;
+      _muted = false;
+      _camOff = false;
+    });
+
     await context.read<HealthRepository>().syncGpCare(user.id);
     if (!mounted) return;
 
-    setState(() {
-      _inCall = true;
-      _sessionId = const Uuid().v4();
-      _sessionRx = [];
-      _rxUpdating = false;
-      _remaining = const Duration(minutes: 8, seconds: 18);
-      _showAiOverlay = true;
-    });
-
-    _callTimer?.cancel();
     _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted || !_inCall) return;
+      if (!mounted) return;
       setState(() {
         if (_remaining.inSeconds > 0) {
           _remaining -= const Duration(seconds: 1);
@@ -85,13 +125,9 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
       });
     });
 
-    // Simulate Lanka GP Care: doctor drafts then issues e-Rx mid-call.
-    _rxTimer?.cancel();
-    _rxTimer = Timer(const Duration(seconds: 4), () async {
-      if (!mounted || !_inCall) return;
-      setState(() => _rxUpdating = true);
-      await Future<void>.delayed(const Duration(seconds: 2));
-      if (!mounted || !_inCall || _sessionId == null) return;
+    // Persist e-Rx via Lanka GP Care portal sync after a short draft delay.
+    _rxTimer = Timer(const Duration(seconds: 5), () async {
+      if (!mounted || _sessionId == null) return;
       final issued =
           await context.read<HealthRepository>().issueTelehealthPrescription(
                 patientId: user.id,
@@ -111,7 +147,10 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   void _endCall() {
     _callTimer?.cancel();
     _rxTimer?.cancel();
-    setState(() => _inCall = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppLocalizations.of(context).t('callEndedRestart'))),
+    );
+    _startSession();
   }
 
   Future<void> _sendToPharmacare() async {
@@ -127,9 +166,8 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     if (!mounted) return;
     setState(() {
       _sendingPharmacare = false;
-      _sessionRx = _sessionRx
-          .map((p) => p.copyWith(sentToPharmacare: true))
-          .toList();
+      _sessionRx =
+          _sessionRx.map((p) => p.copyWith(sentToPharmacare: true)).toList();
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(AppLocalizations.of(context).t('pharmacareSent'))),
@@ -150,11 +188,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     if (q.isEmpty) return;
     _aiCtrl.clear();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          AppLocalizations.of(context).t('aiCopilotReply'),
-        ),
-      ),
+      SnackBar(content: Text(AppLocalizations.of(context).t('aiCopilotReply'))),
     );
   }
 
@@ -164,16 +198,24 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     return '$m:$s';
   }
 
+  String _patientLabel(BuildContext context) {
+    final user = context.watch<AuthCubit>().state.user;
+    if (user == null) return 'Kamal Gunasekara (28, M)';
+    final age = user.dateOfBirth == null
+        ? 28
+        : DateTime.now().year - user.dateOfBirth!.year;
+    return '${user.name} ($age, M)';
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final user = context.watch<AuthCubit>().state.user;
-    final age = user?.dateOfBirth == null
-        ? null
-        : DateTime.now().year - user!.dateOfBirth!.year;
-    final patientLabel = user == null
-        ? '—'
-        : '${user.name}${age != null ? ' ($age)' : ''}';
+    final patientLabel = _patientLabel(context);
+    final canSendPharmacare = _sessionRx.isNotEmpty &&
+        !_rxUpdating &&
+        !_sessionRx.every((p) => p.sentToPharmacare);
+    final sent = _sessionRx.isNotEmpty &&
+        _sessionRx.every((p) => p.sentToPharmacare);
 
     return SafeArea(
       bottom: false,
@@ -185,106 +227,66 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
           Text(
             l.t('telehealthTitle'),
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontSize: 26,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.trustBlueDark,
                 ),
           ),
           const SizedBox(height: 6),
           Text(
             l.t('telehealthSubtitle'),
-            style: Theme.of(context).textTheme.bodyMedium,
+            style: const TextStyle(
+              color: AppColors.slateMuted,
+              fontSize: 14,
+              height: 1.35,
+            ),
           ),
           const SizedBox(height: 16),
-          if (!_inCall)
-            SoftCard(
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppColors.trustBlueSoft,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.video_call_rounded,
-                      color: AppColors.trustBlue,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      l.t('joinConsultHint'),
-                      style: const TextStyle(
-                        color: AppColors.trustBlueDark,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: _joinCall,
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(0, 40),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                    ),
-                    child: Text(l.t('joinCall')),
-                  ),
-                ],
-              ),
-            )
-          else ...[
-            _VideoStage(
-              muted: _muted,
-              camOff: _camOff,
-              showAiOverlay: _showAiOverlay,
-              doctorName: _doctorName,
-              onMute: () => setState(() => _muted = !_muted),
-              onCam: () => setState(() => _camOff = !_camOff),
-              onAi: () => setState(() => _showAiOverlay = !_showAiOverlay),
-              onShare: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(l.t('shareSimulated'))),
-                );
-              },
-              onEnd: _endCall,
-            ),
-            const SizedBox(height: 14),
-            _LiveConsultationCard(
-              patientLabel: patientLabel,
-              timerLabel: _timerLabel,
-            ),
-          ],
-          if (_inCall) ...[
-            const SizedBox(height: 14),
-            _EPrescriptionCard(
-              medicines: _sessionRx,
-              updating: _rxUpdating,
-              sending: _sendingPharmacare,
-              expanded: _rxExpanded,
-              onToggle: () => setState(() => _rxExpanded = !_rxExpanded),
-              onSendPharmacare: _sessionRx.isNotEmpty &&
-                      !_rxUpdating &&
-                      !_sessionRx.every((p) => p.sentToPharmacare)
-                  ? _sendToPharmacare
-                  : null,
-              sent: _sessionRx.isNotEmpty &&
-                  _sessionRx.every((p) => p.sentToPharmacare),
-            ),
-            const SizedBox(height: 14),
-            _QuickNotesCard(
-              notes: _notes,
-              showAll: _showAllTips,
-              controller: _noteCtrl,
-              onAdd: _addNote,
-              onToggleViewAll: () =>
-                  setState(() => _showAllTips = !_showAllTips),
-            ),
-            const SizedBox(height: 14),
-            _AiCopilotCard(
-              controller: _aiCtrl,
-              onSend: _askAi,
-            ),
-          ],
+          _VideoStage(
+            muted: _muted,
+            camOff: _camOff,
+            showAiOverlay: _showAiOverlay,
+            doctorName: _doctorName,
+            onMute: () => setState(() => _muted = !_muted),
+            onCam: () => setState(() => _camOff = !_camOff),
+            onAi: () => setState(() => _showAiOverlay = !_showAiOverlay),
+            onShare: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(l.t('shareSimulated'))),
+              );
+            },
+            onEnd: _endCall,
+          ),
+          const SizedBox(height: 14),
+          _LiveConsultationCard(
+            patientLabel: patientLabel,
+            timerLabel: _timerLabel,
+          ),
+          const SizedBox(height: 14),
+          _EPrescriptionCard(
+            medicines: _sessionRx,
+            updating: _rxUpdating,
+            sending: _sendingPharmacare,
+            sent: sent,
+            patient: context.watch<AuthCubit>().state.user,
+            doctorName: _doctorName,
+            clinicName: _clinicName,
+            onSendPharmacare: canSendPharmacare ? _sendToPharmacare : null,
+          ),
+          const SizedBox(height: 14),
+          _QuickNotesCard(
+            notes: _notes,
+            showAll: _showAllTips,
+            controller: _noteCtrl,
+            onAdd: _addNote,
+            onToggleViewAll: () =>
+                setState(() => _showAllTips = !_showAllTips),
+          ),
+          const SizedBox(height: 14),
+          _AiCopilotCard(
+            controller: _aiCtrl,
+            onSend: _askAi,
+          ),
         ],
       ),
     );
@@ -319,69 +321,84 @@ class _VideoStage extends StatelessWidget {
     final l = AppLocalizations.of(context);
 
     return Container(
-      height: 320,
+      height: 340,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF1E3A5F), Color(0xFF0B1F3A)],
-        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.trustBlueDark.withValues(alpha: 0.12),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
+        fit: StackFit.expand,
         children: [
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    AppColors.trustBlue.withValues(alpha: 0.35),
-                    const Color(0xFF0B1F3A),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+          // Simulated doctor video feed
+          DecoratedBox(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF4A6FA5),
+                  Color(0xFF2C4A6E),
+                  Color(0xFF1A2F45),
+                ],
               ),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircleAvatar(
-                      radius: 42,
-                      backgroundColor: Colors.white.withValues(alpha: 0.15),
-                      child: const Icon(
-                        Icons.person,
-                        size: 48,
-                        color: Colors.white70,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF5B8DEF),
+                    border: Border.all(color: Colors.white24, width: 3),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        blurRadius: 16,
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      doctorName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                      ),
-                    ),
-                    Text(
-                      l.t('gpCareLive'),
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.7),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.medical_services_rounded,
+                    size: 56,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 14),
+                Text(
+                  doctorName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  l.t('gpCareLive'),
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.75),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 48),
+              ],
             ),
           ),
           Positioned(
-            top: 12,
-            left: 12,
+            top: 14,
+            left: 14,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: AppColors.emergencyRed,
                 borderRadius: BorderRadius.circular(20),
@@ -398,14 +415,14 @@ class _VideoStage extends StatelessWidget {
             ),
           ),
           Positioned(
-            top: 12,
-            right: 12,
+            top: 14,
+            right: 14,
             child: Container(
-              width: 86,
-              height: 110,
+              width: 88,
+              height: 118,
               decoration: BoxDecoration(
                 color: const Color(0xFF1A2332),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: Colors.white24),
               ),
               child: Column(
@@ -414,16 +431,15 @@ class _VideoStage extends StatelessWidget {
                   Icon(
                     camOff ? Icons.videocam_off : Icons.person,
                     color: Colors.white70,
-                    size: 28,
+                    size: 30,
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Text(
                     l.t('youFeed'),
-                    textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white70,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
@@ -432,14 +448,21 @@ class _VideoStage extends StatelessWidget {
           ),
           if (showAiOverlay)
             Positioned(
-              left: 12,
-              right: 108,
-              top: 52,
+              left: 14,
+              right: 110,
+              top: 54,
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.trustBlue.withValues(alpha: 0.92),
-                  borderRadius: BorderRadius.circular(14),
+                  color: AppColors.trustBlue.withValues(alpha: 0.94),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.trustBlue.withValues(alpha: 0.35),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -466,7 +489,7 @@ class _VideoStage extends StatelessWidget {
                     Text(
                       l.t('aiTranslateBody'),
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.92),
+                        color: Colors.white.withValues(alpha: 0.95),
                         fontSize: 12,
                         height: 1.35,
                       ),
@@ -476,45 +499,45 @@ class _VideoStage extends StatelessWidget {
               ),
             ),
           Positioned(
-            left: 12,
-            right: 12,
-            bottom: 14,
+            left: 0,
+            right: 0,
+            bottom: 16,
             child: Center(
               child: Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   color: const Color(0xE61A2332),
-                  borderRadius: BorderRadius.circular(32),
+                  borderRadius: BorderRadius.circular(36),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _CallControl(
-                      icon: muted ? Icons.mic_off : Icons.mic,
+                      icon: muted ? Icons.mic_off : Icons.mic_none_rounded,
                       onTap: onMute,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     _CallControl(
                       icon: camOff ? Icons.videocam_off : Icons.videocam,
                       onTap: onCam,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     _CallControl(
                       icon: Icons.auto_awesome,
                       onTap: onAi,
                       color: AppColors.trustBlue,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     _CallControl(
-                      icon: Icons.ios_share_rounded,
+                      icon: Icons.file_upload_outlined,
                       onTap: onShare,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     _CallControl(
-                      icon: Icons.call_end,
+                      icon: Icons.phone_disabled_rounded,
                       onTap: onEnd,
-                      color: AppColors.emergencyRed,
+                      color: const Color(0xFF3A4454),
                     ),
                   ],
                 ),
@@ -547,9 +570,9 @@ class _CallControl extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onTap,
         child: SizedBox(
-          width: 42,
-          height: 42,
-          child: Icon(icon, color: Colors.white, size: 20),
+          width: 44,
+          height: 44,
+          child: Icon(icon, color: Colors.white, size: 22),
         ),
       ),
     );
@@ -573,13 +596,13 @@ class _LiveConsultationCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: AppColors.trustBlueDark.withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: AppColors.trustBlueDark.withValues(alpha: 0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -601,13 +624,13 @@ class _LiveConsultationCard extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: AppColors.emeraldSoft,
+                  color: const Color(0xFFE6F4EA),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   l.t('secureV3'),
                   style: const TextStyle(
-                    color: AppColors.emerald,
+                    color: Color(0xFF1E8E3E),
                     fontWeight: FontWeight.w800,
                     fontSize: 11,
                   ),
@@ -657,11 +680,11 @@ class _InfoRow extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 40,
-          height: 40,
+          width: 42,
+          height: 42,
           decoration: BoxDecoration(
             color: iconBg,
-            borderRadius: BorderRadius.circular(12),
+            shape: BoxShape.circle,
           ),
           child: Icon(icon, color: iconColor, size: 22),
         ),
@@ -704,8 +727,9 @@ class _EPrescriptionCard extends StatelessWidget {
     required this.updating,
     required this.sending,
     required this.sent,
-    required this.expanded,
-    required this.onToggle,
+    required this.doctorName,
+    required this.clinicName,
+    this.patient,
     this.onSendPharmacare,
   });
 
@@ -713,8 +737,9 @@ class _EPrescriptionCard extends StatelessWidget {
   final bool updating;
   final bool sending;
   final bool sent;
-  final bool expanded;
-  final VoidCallback onToggle;
+  final UserProfile? patient;
+  final String doctorName;
+  final String clinicName;
   final VoidCallback? onSendPharmacare;
 
   @override
@@ -723,257 +748,690 @@ class _EPrescriptionCard extends StatelessWidget {
     final first = medicines.isNotEmpty ? medicines.first : null;
     final issuedLabel = first?.issuedAt != null
         ? DateFormat('d MMM yyyy · hh:mm a').format(first!.issuedAt!)
-        : l.t('awaitingIssue');
-    final clinic = first?.clinicName ?? 'Lanka GP Care Virtual Clinic';
+        : '—';
+    final clinic = first?.clinicName ?? clinicName;
+    final showFormal = !updating && medicines.isNotEmpty;
 
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
-        onTap: onToggle,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.trustBlueDark.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(
-                  width: 5,
-                  decoration: const BoxDecoration(
-                    color: AppColors.trustBlueDark,
-                    borderRadius: BorderRadius.horizontal(
-                      left: Radius.circular(20),
-                    ),
-                  ),
+        ],
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 5,
+              decoration: const BoxDecoration(
+                color: AppColors.trustBlue,
+                borderRadius: BorderRadius.horizontal(
+                  left: Radius.circular(20),
                 ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 16, 16, 14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 16, 16, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Row(
+                        const Icon(
+                          Icons.description_outlined,
+                          color: AppColors.trustBlue,
+                          size: 22,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            l.t('ePrescription'),
+                            style: const TextStyle(
+                              color: AppColors.trustBlueDark,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${l.t('issuedDate')}: $issuedLabel',
+                      style: const TextStyle(
+                        color: AppColors.slateMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      '${l.t('medicalClinic')}: $clinic',
+                      style: const TextStyle(
+                        color: AppColors.trustBlueDark,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (showFormal)
+                      _IssuedPrescriptionDocument(
+                        medicines: medicines,
+                        patient: patient,
+                        doctorName: first?.doctor ?? doctorName,
+                        clinicName: clinic,
+                      )
+                    else ...[
+                      ...medicines.map(
+                        (m) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        m.medicine,
+                                        style: const TextStyle(
+                                          color: AppColors.trustBlueDark,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      if (m.schedule.isNotEmpty) ...[
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          m.schedule,
+                                          style: const TextStyle(
+                                            color: AppColors.slateMuted,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE2E8F0),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    m.doseBadge.isEmpty ? m.code : m.doseBadge,
+                                    style: const TextStyle(
+                                      color: AppColors.trustBlueDark,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2, bottom: 4),
+                        child: Row(
                           children: [
-                            const Icon(
-                              Icons.description_outlined,
-                              color: AppColors.trustBlue,
-                              size: 22,
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: AppColors.trustBlueLight,
+                                shape: BoxShape.circle,
+                              ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                l.t('ePrescription'),
+                                l.t('doctorUpdatingRx'),
                                 style: const TextStyle(
-                                  color: AppColors.trustBlueDark,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 16,
+                                  color: AppColors.slateMuted,
+                                  fontStyle: FontStyle.italic,
+                                  fontSize: 12,
                                 ),
                               ),
                             ),
-                            Icon(
-                              expanded
-                                  ? Icons.expand_less
-                                  : Icons.expand_more,
-                              color: AppColors.trustBlue,
-                            ),
                           ],
                         ),
-                        const SizedBox(height: 10),
-                        Text(
-                          '${l.t('issuedDate')}: $issuedLabel',
-                          style: const TextStyle(
-                            color: AppColors.slateMuted,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                      ),
+                    ],
+                    const SizedBox(height: 6),
+                    Text(
+                      l.t('gpCarePortalSync'),
+                      style: const TextStyle(
+                        color: AppColors.slateMuted,
+                        fontSize: 11,
+                      ),
+                    ),
+                    if (onSendPharmacare != null) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: sending ? null : onSendPharmacare,
+                          icon: sending
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.local_pharmacy_outlined),
+                          label: Text(l.t('sendPharmacare')),
+                        ),
+                      ),
+                    ] else if (sent) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle,
+                            color: AppColors.emerald,
+                            size: 18,
                           ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              l.t('pharmacareSent'),
+                              style: const TextStyle(
+                                color: AppColors.emerald,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Formal dual-copy prescription form (patient + PharmaCare), matching
+/// regulated script layout for issued e-Rx under E-Prescription.
+class _IssuedPrescriptionDocument extends StatelessWidget {
+  const _IssuedPrescriptionDocument({
+    required this.medicines,
+    required this.doctorName,
+    required this.clinicName,
+    this.patient,
+  });
+
+  final List<Prescription> medicines;
+  final UserProfile? patient;
+  final String doctorName;
+  final String clinicName;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          l.t('issuedPrescriptionForm'),
+          style: const TextStyle(
+            color: AppColors.slateMuted,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
+          ),
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _PrescriptionFormCopy(
+                width: 280,
+                sidebarLabel: l.t('rxPharmacistCopy'),
+                patientFooter: false,
+                medicines: medicines,
+                patient: patient,
+                doctorName: doctorName,
+                clinicName: clinicName,
+              ),
+              const SizedBox(width: 10),
+              _PrescriptionFormCopy(
+                width: 280,
+                sidebarLabel: l.t('rxAgencyCopy'),
+                patientFooter: true,
+                medicines: medicines,
+                patient: patient,
+                doctorName: doctorName,
+                clinicName: clinicName,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PrescriptionFormCopy extends StatelessWidget {
+  const _PrescriptionFormCopy({
+    required this.width,
+    required this.sidebarLabel,
+    required this.patientFooter,
+    required this.medicines,
+    required this.doctorName,
+    required this.clinicName,
+    this.patient,
+  });
+
+  final double width;
+  final String sidebarLabel;
+  final bool patientFooter;
+  final List<Prescription> medicines;
+  final UserProfile? patient;
+  final String doctorName;
+  final String clinicName;
+
+  static const _ink = Color(0xFF1A1A1A);
+  static const _teal = Color(0xFFB8D4D8);
+  static const _tealDeep = Color(0xFF7BA8B0);
+  static const _bodyWash = Color(0xFFE8F4F6);
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final issued = medicines.first.issuedAt ?? DateTime.now();
+    final dateStr = DateFormat('dd/MM/yyyy').format(issued);
+    final digits = medicines.first.code.replaceAll(RegExp(r'[^0-9]'), '');
+    final scriptNo = digits.isEmpty
+        ? '00003194'
+        : digits.padLeft(8, '0').substring(digits.padLeft(8, '0').length - 8);
+    final patientName = patient?.name.isNotEmpty == true
+        ? patient!.name
+        : 'Kamal Gunasekara';
+    final healthId = patient?.ceylonHealthId?.isNotEmpty == true
+        ? patient!.ceylonHealthId!
+        : (patient?.nic?.isNotEmpty == true
+            ? patient!.nic!
+            : '1234 56789 0-1');
+    final address = [
+      if (patient?.region != null && patient!.region!.isNotEmpty)
+        patient!.region!,
+      'Sri Lanka',
+    ].join(', ');
+    final phone = patient?.mobileNo?.isNotEmpty == true
+        ? patient!.mobileNo!
+        : '+94 11 214 0000';
+
+    return Container(
+      width: width,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFF9CA3AF), width: 1.2),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 22,
+              color: _teal,
+              alignment: Alignment.center,
+              child: RotatedBox(
+                quarterTurns: 3,
+                child: Text(
+                  sidebarLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF334155),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          doctorName,
+                          style: const TextStyle(
+                            color: _ink,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                          ),
+                        ),
+                        Text(
+                          clinicName,
+                          style: const TextStyle(color: _ink, fontSize: 9),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${l.t('medicalClinic')}: $clinic',
-                          style: const TextStyle(
-                            color: AppColors.trustBlueDark,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          '${l.t('rxPrescriberNo')} 1234567',
+                          style: const TextStyle(color: _ink, fontSize: 9),
                         ),
-                        if (expanded) ...[
-                          const SizedBox(height: 12),
-                          if (medicines.isEmpty && updating)
-                            Text(
-                              l.t('doctorUpdatingRx'),
-                              style: const TextStyle(
-                                color: AppColors.slateMuted,
-                                fontStyle: FontStyle.italic,
-                                fontSize: 13,
-                              ),
-                            )
-                          else if (medicines.isEmpty)
-                            Text(
-                              l.t('rxWaitingGpCare'),
-                              style: const TextStyle(
-                                color: AppColors.slateMuted,
-                                fontSize: 13,
-                              ),
-                            )
-                          else ...[
-                            ...medicines.map(
-                              (m) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF1F5F9),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              m.medicine,
-                                              style: const TextStyle(
-                                                color: AppColors.trustBlueDark,
-                                                fontWeight: FontWeight.w800,
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                            if (m.schedule.isNotEmpty) ...[
-                                              const SizedBox(height: 3),
-                                              Text(
-                                                m.schedule,
-                                                style: const TextStyle(
-                                                  color: AppColors.slateMuted,
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 5,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFE2E8F0),
-                                          borderRadius:
-                                              BorderRadius.circular(16),
-                                        ),
-                                        child: Text(
-                                          m.doseBadge.isEmpty
-                                              ? m.code
-                                              : m.doseBadge,
-                                          style: const TextStyle(
-                                            color: AppColors.trustBlueDark,
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            if (updating)
-                              Padding(
-                                padding:
-                                    const EdgeInsets.only(top: 4, bottom: 8),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: const BoxDecoration(
-                                        color: AppColors.trustBlueLight,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        l.t('doctorUpdatingRx'),
-                                        style: const TextStyle(
-                                          color: AppColors.slateMuted,
-                                          fontStyle: FontStyle.italic,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            Text(
-                              l.t('gpCarePortalSync'),
-                              style: const TextStyle(
-                                color: AppColors.slateMuted,
-                                fontSize: 11,
-                              ),
-                            ),
-                            if (onSendPharmacare != null) ...[
-                              const SizedBox(height: 10),
-                              SizedBox(
-                                width: double.infinity,
-                                child: FilledButton.icon(
-                                  onPressed:
-                                      sending ? null : onSendPharmacare,
-                                  icon: sending
-                                      ? const SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Colors.white,
-                                          ),
-                                        )
-                                      : const Icon(
-                                          Icons.local_pharmacy_outlined),
-                                  label: Text(l.t('sendPharmacare')),
-                                ),
-                              ),
-                            ] else if (sent) ...[
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.check_circle,
-                                    color: AppColors.emerald,
-                                    size: 18,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      l.t('pharmacareSent'),
-                                      style: const TextStyle(
-                                        color: AppColors.emerald,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ],
-                        ],
+                        Text(
+                          'Phone: $phone',
+                          style: const TextStyle(color: _ink, fontSize: 9),
+                        ),
                       ],
                     ),
                   ),
-                ),
-              ],
+                  Container(
+                    width: double.infinity,
+                    color: _teal.withValues(alpha: 0.45),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 5,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "${l.t('rxPatientHealthId')}  $healthId",
+                          style: const TextStyle(
+                            color: _ink,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            border: Border.all(color: _tealDeep),
+                          ),
+                          child: Text(
+                            l.t('rxEntitlementNo'),
+                            style: const TextStyle(color: _ink, fontSize: 8),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "${l.t('rxPatientName')}: $patientName",
+                          style: const TextStyle(
+                            color: _ink,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          "${l.t('rxAddress')}: $address",
+                          style: const TextStyle(color: _ink, fontSize: 9),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
+                    child: Row(
+                      children: [
+                        Text(
+                          '${l.t('rxDate')} $dateStr',
+                          style: const TextStyle(
+                            color: _ink,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const Spacer(),
+                        _TinyCheck(label: l.t('rxPrivate'), checked: true),
+                        const SizedBox(width: 6),
+                        _TinyCheck(label: l.t('rxFormulary'), checked: false),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      children: [
+                        _TinyCheck(label: l.t('rxBrandSub'), checked: false),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.symmetric(horizontal: 6),
+                    padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
+                    decoration: BoxDecoration(
+                      color: _bodyWash,
+                      border: Border.all(color: _tealDeep.withValues(alpha: 0.6)),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            '${l.t('rxScriptNo')}: $scriptNo',
+                            style: const TextStyle(
+                              color: _ink,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        ...medicines.map((m) {
+                          final qty = m.doseBadge.toUpperCase() == 'PRN'
+                              ? '1'
+                              : (RegExp(r'(\d+)').firstMatch(m.doseBadge)?.group(1) ??
+                                  '1');
+                          final repeats =
+                              m.doseBadge.toUpperCase() == 'PRN' ? '0' : '0';
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  m.medicine,
+                                  style: const TextStyle(
+                                    color: _ink,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                if (m.schedule.isNotEmpty)
+                                  Text(
+                                    m.schedule,
+                                    style: const TextStyle(
+                                      color: _ink,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${l.t('rxQuantity')}: $qty    $repeats ${l.t('rxRepeats')}',
+                                  style: const TextStyle(
+                                    color: _ink,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '$doctorName, MBBS',
+                                style: const TextStyle(
+                                  color: _ink,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '${medicines.length} ${l.t('rxItemsPrinted')}',
+                              style: const TextStyle(
+                                color: _ink,
+                                fontSize: 8,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  if (!patientFooter)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+                      padding: const EdgeInsets.all(8),
+                      color: _teal,
+                      child: Text(
+                        l.t('rxDoctorSign'),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Color(0xFF1E3A3F),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    )
+                  else
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.fromLTRB(6, 0, 6, 6),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: _teal.withValues(alpha: 0.55),
+                        border: Border.all(color: _tealDeep),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l.t('rxPatientDeclare'),
+                            style: const TextStyle(
+                              color: _ink,
+                              fontSize: 8,
+                              height: 1.25,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            l.t('rxPatientSignature'),
+                            style: const TextStyle(color: _ink, fontSize: 8),
+                          ),
+                          Container(
+                            margin: const EdgeInsets.only(top: 2, bottom: 6),
+                            height: 1,
+                            color: _ink.withValues(alpha: 0.35),
+                          ),
+                          Text(
+                            '${l.t('rxDateOfSupply')}   /   /',
+                            style: const TextStyle(color: _ink, fontSize: 8),
+                          ),
+                        ],
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        l.t('rxPrivacyNote'),
+                        style: const TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 7,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+class _TinyCheck extends StatelessWidget {
+  const _TinyCheck({required this.label, required this.checked});
+
+  final String label;
+  final bool checked;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            border: Border.all(color: const Color(0xFF1A1A1A)),
+            color: checked ? const Color(0xFF1A1A1A) : Colors.white,
+          ),
+          child: checked
+              ? const Icon(Icons.check, size: 8, color: Colors.white)
+              : null,
+        ),
+        const SizedBox(width: 3),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF1A1A1A),
+            fontSize: 8,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1081,6 +1539,7 @@ class _QuickNotesCard extends StatelessWidget {
                   decoration: InputDecoration(
                     hintText: l.t('privateNoteHint'),
                   ),
+                  onSubmitted: (_) => onAdd(),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1119,7 +1578,7 @@ class _AiCopilotCard extends StatelessWidget {
         color: AppColors.trustBlueSoft,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: AppColors.trustBlue.withValues(alpha: 0.15),
+          color: AppColors.trustBlue.withValues(alpha: 0.12),
         ),
       ),
       child: Column(
@@ -1168,14 +1627,15 @@ class _AiCopilotCard extends StatelessWidget {
               const SizedBox(width: 8),
               Material(
                 color: AppColors.trustBlue,
-                shape: const CircleBorder(),
+                borderRadius: BorderRadius.circular(12),
                 child: InkWell(
-                  customBorder: const CircleBorder(),
+                  borderRadius: BorderRadius.circular(12),
                   onTap: onSend,
                   child: const SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: Icon(Icons.send_rounded, color: Colors.white, size: 20),
+                    width: 48,
+                    height: 48,
+                    child: Icon(Icons.send_rounded,
+                        color: Colors.white, size: 20),
                   ),
                 ),
               ),

@@ -29,7 +29,7 @@ class AppLocalizations {
     },
     'home': {'en': 'Home', 'si': 'මුල් පිටුව', 'ta': 'முகப்பு'},
     'appointments': {'en': 'Doctors', 'si': 'වෛද්‍යවරු', 'ta': 'மருத்துவர்கள்'},
-    'telehealth': {'en': 'Telehealth', 'si': 'දුරස්ථ සත්කාර', 'ta': 'தொலைசுகாதாரம்'},
+    'telehealth': {'en': 'Call', 'si': 'ඇමතුම', 'ta': 'அழைப்பு'},
     'vault': {'en': 'Vault', 'si': 'භාණ්ඩාගාරය', 'ta': 'பெட்டகம்'},
     'vaccines': {'en': 'Vaccines', 'si': 'එන්නත්', 'ta': 'தடுப்பூசி'},
     'profile': {'en': 'Profile', 'si': 'පැතිකඩ', 'ta': 'சுயவிவரம்'},
@@ -254,14 +254,122 @@ class AppLocalizations {
       'ta': '1990',
     },
     'telehealthTitle': {
-      'en': 'Telehealth',
-      'si': 'දුරස්ථ සත්කාර',
-      'ta': 'தொலைசுகாதாரம்',
+      'en': 'Call',
+      'si': 'ඇමතුම',
+      'ta': 'அழைப்பு',
     },
     'telehealthSubtitle': {
       'en': 'Secure encrypted video consult with registered practitioners.',
       'si': 'ලියාපදිංචි වෛද්‍යවරුන් සමඟ ආරක්ෂිත වීඩියෝ උපදේශනය.',
       'ta': 'பதிவுசெய்யப்பட்ட மருத்துவர்களுடன் பாதுகாப்பான வீடியோ ஆலோசனை.',
+    },
+    'rxPharmacistCopy': {
+      'en': 'Pharmacist patient COPY',
+      'si': 'ඖෂධකරු රෝගී පිටපත',
+      'ta': 'மருந்தாளர் நோயாளி நகல்',
+    },
+    'rxAgencyCopy': {
+      'en': 'PharmaCare / NMRA',
+      'si': 'PharmaCare / NMRA',
+      'ta': 'PharmaCare / NMRA',
+    },
+    'rxPrescriberNo': {
+      'en': 'Prescriber no.',
+      'si': 'වට්ටෝරු අංකය',
+      'ta': 'மருந்துச்சீட்டு எண்',
+    },
+    'rxPatientHealthId': {
+      'en': "Patient's Ceylon Health ID",
+      'si': 'රෝගියාගේ Ceylon Health ID',
+      'ta': 'நோயாளியின் Ceylon Health ID',
+    },
+    'rxPatientName': {
+      'en': "Patient's name",
+      'si': 'රෝගියාගේ නම',
+      'ta': 'நோயாளியின் பெயர்',
+    },
+    'rxAddress': {
+      'en': 'Address',
+      'si': 'ලිපිනය',
+      'ta': 'முகவரி',
+    },
+    'rxDate': {
+      'en': 'Date',
+      'si': 'දිනය',
+      'ta': 'தேதி',
+    },
+    'rxScriptNo': {
+      'en': 'Script No',
+      'si': 'වට්ටෝරු අංකය',
+      'ta': 'ஸ்கிரிப்ட் எண்',
+    },
+    'rxQuantity': {
+      'en': 'Quantity',
+      'si': 'ප්‍රමාණය',
+      'ta': 'அளவு',
+    },
+    'rxRepeats': {
+      'en': 'repeats',
+      'si': 'නැවත නිකුත්',
+      'ta': 'மீண்டும்',
+    },
+    'rxItemsPrinted': {
+      'en': 'items printed',
+      'si': 'අයිතම මුද්‍රණය කළා',
+      'ta': 'உருப்படிகள் அச்சிடப்பட்டன',
+    },
+    'rxDoctorSign': {
+      'en': 'Doctor to sign original and duplicate',
+      'si': 'වෛද්‍යවරයා මුල් පිටපත හා අනුපිටපත අත්සන් කරන්න',
+      'ta': 'மருத்துவர் அசல் மற்றும் நகலை கையொப்பமிடவும்',
+    },
+    'rxPatientDeclare': {
+      'en':
+          'I declare that I have received this/these medicine(s) and the information relating to any entitlement is correct.',
+      'si':
+          'මම මෙම බෙහෙත් ලැබූ බවත් අයිතිය පිළිබඳ තොරතුරු නිවැරදි බවත් ප්‍රකාශ කරමි.',
+      'ta':
+          'இந்த மருந்து(களை) பெற்றுள்ளேன் என்றும் உரிமை தொடர்பான தகவல் சரியானது என்றும் அறிவிக்கிறேன்.',
+    },
+    'rxPatientSignature': {
+      'en': "Patient's or agent's signature",
+      'si': 'රෝගියාගේ හෝ නියෝජිතයාගේ අත්සන',
+      'ta': 'நோயாளி அல்லது முகவர் கையொப்பம்',
+    },
+    'rxDateOfSupply': {
+      'en': 'Date of supply',
+      'si': 'සැපයුම් දිනය',
+      'ta': 'வழங்கல் தேதி',
+    },
+    'rxBrandSub': {
+      'en': 'Brand substitution not permitted',
+      'si': 'වෙළඳ නාම ආදේශනය අනුමත නොවේ',
+      'ta': 'பிராண்ட் மாற்று அனுமதிக்கப்படவில்லை',
+    },
+    'rxPrivacyNote': {
+      'en': 'Turn over for privacy note',
+      'si': 'පෞද්ගලිකත්ව සටහන සඳහා පිටුපස බලන්න',
+      'ta': 'தனியுரிமை குறிப்புக்கு பின்புறம் பார்க்கவும்',
+    },
+    'rxEntitlementNo': {
+      'en': 'Pharmaceutical benefits entitlement no.',
+      'si': 'ඖෂධ ප්‍රතිලාභ අයිති අංකය',
+      'ta': 'மருந்து நன்மை உரிமை எண்',
+    },
+    'rxPrivate': {
+      'en': 'Private',
+      'si': 'පෞද්ගලික',
+      'ta': 'தனியார்',
+    },
+    'rxFormulary': {
+      'en': 'NMRA',
+      'si': 'NMRA',
+      'ta': 'NMRA',
+    },
+    'issuedPrescriptionForm': {
+      'en': 'Issued prescription form',
+      'si': 'නිකුත් කළ වට්ටෝරු පෝරමය',
+      'ta': 'வழங்கப்பட்ட மருந்துச்சீட்டு படிவம்',
     },
     'joinConsultHint': {
       'en': 'Join your Lanka GP Care video consultation',
@@ -330,6 +438,11 @@ class AppLocalizations {
       'en': 'Doctor is currently updating these records…',
       'si': 'වෛද්‍යවරයා මෙම වාර්තා යාවත්කාලීන කරමින් සිටී…',
       'ta': 'மருத்துவர் இப்பதிவுகளை புதுப்பித்து வருகிறார்…',
+    },
+    'callEndedRestart': {
+      'en': 'Call ended — reconnecting your Lanka GP Care session…',
+      'si': 'ඇමතුම අවසන් — Lanka GP Care සැසිය නැවත සම්බන්ධ කරමින්…',
+      'ta': 'அழைப்பு முடிந்தது — Lanka GP Care அமர்வை மீண்டும் இணைக்கிறது…',
     },
     'sendPharmacare': {
       'en': 'Send to PharmaCare Portal',

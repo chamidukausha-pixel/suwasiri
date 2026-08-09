@@ -57,9 +57,11 @@ class _MainShellState extends State<MainShell> {
           selectedIndex: _index,
           onDestinationSelected: _goTo,
           backgroundColor: AppColors.surface,
-          indicatorColor: (_index == 3 || _index == 4)
-              ? AppColors.emerald.withValues(alpha: 0.18)
-              : AppColors.trustBlue.withValues(alpha: 0.12),
+          indicatorColor: _index == 2
+              ? const Color(0xFFD1FAE5)
+              : (_index == 3 || _index == 4)
+                  ? AppColors.emerald.withValues(alpha: 0.18)
+                  : AppColors.trustBlue.withValues(alpha: 0.12),
           destinations: [
             NavigationDestination(
               icon: const Icon(Icons.home_outlined),
@@ -72,8 +74,21 @@ class _MainShellState extends State<MainShell> {
               label: l.t('appointments'),
             ),
             NavigationDestination(
-              icon: const Icon(Icons.video_call_outlined),
-              selectedIcon: const Icon(Icons.video_call),
+              icon: const Icon(Icons.videocam_outlined),
+              selectedIcon: Container(
+                width: 40,
+                height: 28,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD1FAE5),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.videocam,
+                  color: Color(0xFF065F46),
+                  size: 20,
+                ),
+              ),
               label: l.t('telehealth'),
             ),
             NavigationDestination(

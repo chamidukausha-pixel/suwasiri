@@ -25,7 +25,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Demo repos retained only for `AppServices.forTesting`
 - [x] Home screen UI rebuilt to product mockups (header, quick actions, upcoming card, vaccination status, health tip)
 - [x] Doctors directory UI (search filters, clinics map, fixed doctor result cards)
-- [x] Care/Telehealth UI (video stage, Lanka GP Care e-Rx → PharmaCare send, notes, AI co-pilot)
+- [x] Care/Call UI (video stage, Lanka GP Care e-Rx → PharmaCare send, notes, AI co-pilot)
 - [x] Firestore `prescriptions` collection + rules
 - [x] Medical Vault UI (AI Lab Assistant, LankaLab + GP Care sync cards, chronological timeline)
 - [x] Vaccines registry UI (MOH portal sync card, active dengue protocol, status-colored protocol cards)
@@ -36,6 +36,8 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Doctors: expanded specialty categories + clinic address with Google/Apple Maps choice after booking
 - [x] Doctors: ≥3 dummy clinicians per specialty + specialty dropdown; Book Session keeps full checkout
 - [x] Telehealth tab rename (Care → Telehealth); e-Rx shows issued date + clinic; more quick health tips
+- [x] Telehealth page always shows full mockup layout (video, live consult, e-Rx, notes, AI — nothing hidden)
+- [x] Call tab rename (Telehealth → Call); issued e-Rx shown as dual-copy formal prescription form under E-Prescription
 
 ## In progress / next
 
@@ -47,7 +49,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [ ] FCM push (`firebase_messaging` is in pubspec, not wired in UI yet)
 - [ ] Firebase Storage for vault file uploads (`fileUrl`)
 - [ ] Tighten `notifications` rules to owner-scoped (`userId == auth.uid`)
-- [ ] Telehealth: still simulated video — needs real signaling later; e-Rx + PharmaCare portal handoff is wired via Firestore
+- [ ] Telehealth/Call: still simulated video — needs real signaling later; e-Rx + PharmaCare portal handoff is wired via Firestore
 
 ## Known caveats
 
