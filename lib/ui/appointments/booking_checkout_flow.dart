@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/notification/notification_cubit.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/map_launcher.dart';
 import '../../data/models/appointment.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../localization/app_localizations.dart';
@@ -23,13 +24,13 @@ class _BookingResult {
     required this.appointment,
     required this.paymentMethod,
     required this.slot,
-    required this.doctorName,
+    required this.doctor,
   });
 
   final Appointment appointment;
   final String paymentMethod;
   final DateTime slot;
-  final String doctorName;
+  final Doctor doctor;
 }
 
 Future<void> showBookingCheckoutFlow(
@@ -53,11 +54,67 @@ Future<void> showBookingCheckoutFlow(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text(l.t('bookingConfirmed')),
-      content: Text(
-        '${l.t('consultationToken')}: ${result.appointment.token}\n'
-        '${result.doctorName}\n'
-        '${DateFormat('EEE d MMM · hh:mm a').format(result.slot)}\n'
-        '${result.paymentMethod}',
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${l.t('consultationToken')}: ${result.appointment.token}\n'
+            '${result.doctor.name}\n'
+            '${DateFormat('EEE d MMM · hh:mm a').format(result.slot)}\n'
+            '${result.paymentMethod}',
+          ),
+          const SizedBox(height: 14),
+          Text(
+            l.t('clinicPlace'),
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              color: AppColors.trustBlueDark,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            result.doctor.placeLabel,
+            style: const TextStyle(color: AppColors.slateMuted, height: 1.35),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            l.t('openClinicInMaps'),
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              color: AppColors.trustBlueDark,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => MapLauncher.openGoogleMaps(
+                    address: result.doctor.placeLabel,
+                    latitude: result.doctor.latitude,
+                    longitude: result.doctor.longitude,
+                  ),
+                  icon: const Icon(Icons.map_outlined, size: 18),
+                  label: Text(l.t('googleMaps')),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => MapLauncher.openAppleMaps(
+                    address: result.doctor.placeLabel,
+                    latitude: result.doctor.latitude,
+                    longitude: result.doctor.longitude,
+                  ),
+                  icon: const Icon(Icons.map, size: 18),
+                  label: Text(l.t('appleMaps')),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       actions: [
         FilledButton(
@@ -216,7 +273,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
           appointment: appt,
           paymentMethod: paymentMethod,
           slot: _slotDateTime,
-          doctorName: widget.doctor.name,
+          doctor: widget.doctor,
         ),
       );
     } catch (e) {

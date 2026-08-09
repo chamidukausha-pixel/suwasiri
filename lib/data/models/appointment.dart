@@ -13,6 +13,9 @@ class Doctor extends Equatable {
     this.bio =
         'Experienced consultant providing patient-centred care at accredited Sri Lankan hospitals.',
     this.nextAvailable = 'Mon–Fri · 09:00–13:00',
+    this.address = '',
+    this.latitude,
+    this.longitude,
   });
 
   final String id;
@@ -25,6 +28,18 @@ class Doctor extends Equatable {
   final int feeLkr;
   final String bio;
   final String nextAvailable;
+  final String address;
+  final double? latitude;
+  final double? longitude;
+
+  String get placeLabel {
+    final parts = [
+      hospital,
+      if (address.isNotEmpty) address,
+      region,
+    ];
+    return parts.join(', ');
+  }
 
   @override
   List<Object?> get props => [
@@ -38,6 +53,9 @@ class Doctor extends Equatable {
         feeLkr,
         bio,
         nextAvailable,
+        address,
+        latitude,
+        longitude,
       ];
 }
 

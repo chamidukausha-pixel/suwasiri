@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/map_launcher.dart';
+import '../../data/catalogs/doctor_catalog.dart';
 import '../../data/models/appointment.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../localization/app_localizations.dart';
@@ -27,12 +29,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   String _category = 'All';
 
   static const _regions = ['All', 'Colombo', 'Gampaha', 'Kandy'];
-  static const _categories = [
-    'All',
-    'Cardiology',
-    'Pediatrics',
-    'General',
-  ];
+  static const _categories = DoctorCatalog.categories;
 
   @override
   void initState() {
@@ -58,10 +55,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   List<Doctor> get _filtered {
     return _doctors.where((d) {
       final regionOk = _region == 'All' || d.region == _region;
-      final catOk = _category == 'All' ||
-          (_category == 'General'
-              ? d.specialty.toLowerCase().contains('general')
-              : d.specialty == _category);
+      final catOk = _category == 'All' || d.specialty == _category;
       return regionOk && catOk;
     }).toList();
   }
@@ -316,11 +310,7 @@ class _SearchOptionsCard extends StatelessWidget {
             runSpacing: 8,
             children: categories.map((c) {
               final selected = category == c;
-              final label = switch (c) {
-                'All' => l.t('allCategories'),
-                'General' => l.t('generalCategory'),
-                _ => c,
-              };
+              final label = c == 'All' ? l.t('allCategories') : c;
               return MinTap(
                 onTap: () => onCategoryChanged(c),
                 child: AnimatedContainer(
@@ -699,38 +689,48 @@ class _DoctorResultCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.location_on_outlined,
-                  size: 15, color: AppColors.slateMuted),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  '${doctor.hospital}, ${doctor.region}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.slateMuted,
-                    fontSize: 12,
+          InkWell(
+            onTap: () => MapLauncher.showMapChoice(context, doctor: doctor),
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  const Icon(Icons.location_on_outlined,
+                      size: 15, color: AppColors.trustBlue),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      doctor.placeLabel,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.trustBlue,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                        decoration: TextDecoration.underline,
+                        decorationColor: AppColors.trustBlueSoft,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Icon(Icons.access_time,
-                  size: 15, color: AppColors.slateMuted),
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  doctor.nextAvailable,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.slateMuted,
-                    fontSize: 12,
+                  const SizedBox(width: 8),
+                  const Icon(Icons.access_time,
+                      size: 15, color: AppColors.slateMuted),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      doctor.nextAvailable,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.slateMuted,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 14),
           const Divider(height: 1, color: AppColors.border),

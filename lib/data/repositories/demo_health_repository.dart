@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import '../catalogs/doctor_catalog.dart';
 import '../models/app_notification.dart';
 import '../models/appointment.dart';
 import '../models/sos_location.dart';
@@ -72,73 +73,7 @@ class DemoHealthRepository implements HealthRepository {
     ),
   ];
 
-  final _doctors = const [
-    Doctor(
-      id: 'd1',
-      name: 'Dr. Aruni Perera',
-      specialty: 'Cardiology',
-      hospital: 'Durdans Hospital',
-      rating: 4.9,
-      region: 'Colombo',
-      yearsExperience: 12,
-      feeLkr: 2500,
-      bio:
-          'Board-certified cardiologist specialising in preventive heart care and echocardiography.',
-      nextAvailable: 'Mon–Thu · 09:30–12:00',
-    ),
-    Doctor(
-      id: 'd2',
-      name: 'Dr. Sandeep Bandara',
-      specialty: 'General Practice',
-      hospital: 'Asiri Central',
-      rating: 4.7,
-      region: 'Colombo',
-      yearsExperience: 9,
-      feeLkr: 1800,
-      bio:
-          'Family physician focused on chronic disease management and same-day consultations.',
-      nextAvailable: 'Tue–Sat · 10:00–14:00',
-    ),
-    Doctor(
-      id: 'd3',
-      name: 'Dr. Nimali Silva',
-      specialty: 'Pediatrics',
-      hospital: 'Lady Ridgeway',
-      rating: 4.9,
-      region: 'Colombo',
-      yearsExperience: 15,
-      feeLkr: 2200,
-      bio:
-          'Paediatric consultant with expertise in childhood immunisation and developmental care.',
-      nextAvailable: 'Wed–Fri · 08:30–11:30',
-    ),
-    Doctor(
-      id: 'd4',
-      name: 'Dr. Kavinda Jayawardena',
-      specialty: 'Endocrinology',
-      hospital: 'Nawaloka',
-      rating: 4.8,
-      region: 'Colombo',
-      yearsExperience: 11,
-      feeLkr: 2800,
-      bio:
-          'Endocrinologist supporting diabetes, thyroid, and metabolic health pathways.',
-      nextAvailable: 'Mon–Wed · 14:00–17:00',
-    ),
-    Doctor(
-      id: 'd5',
-      name: 'Dr. Farah Mohamed',
-      specialty: 'Cardiology',
-      hospital: 'Lanka Hospitals',
-      rating: 4.6,
-      region: 'Gampaha',
-      yearsExperience: 8,
-      feeLkr: 2400,
-      bio:
-          'Interventional cardiology interest with patient education–first clinic approach.',
-      nextAvailable: 'Thu–Sat · 09:00–12:30',
-    ),
-  ];
+  final _doctors = DoctorCatalog.doctors;
 
   void _seedIfNeeded() {
     if (_prefs.getBool(_kSeeded) == true) return;
@@ -577,7 +512,7 @@ class DemoHealthRepository implements HealthRepository {
           patientId: patientId,
           doctorId: 'd1',
           doctorName: 'Dr. Perera',
-          specialty: 'Cardiology',
+          specialty: 'Cardiologist',
           timeSlot: DateTime.now().add(const Duration(days: 4, hours: 2)),
           status: AppointmentStatus.upcoming,
           token: 'TKN-1042',
