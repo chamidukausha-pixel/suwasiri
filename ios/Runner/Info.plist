@@ -73,7 +73,7 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>Unlock your Health Vault with Face ID.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Suwasiri needs camera access to take your profile selfie.</string>
+	<string>Suwasiri needs camera access for video consultations and profile photos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Suwasiri needs photo library access to set your profile picture and upload bank slips.</string>
 	<key>NSMicrophoneUsageDescription</key>

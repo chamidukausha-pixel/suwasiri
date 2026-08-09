@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
@@ -8,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/notification/notification_cubit.dart';
 import '../../core/theme/app_colors.dart';
+import '../../data/catalogs/sample_prescriptions.dart';
 import '../../data/models/user_profile.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/repositories/health_repository.dart';
@@ -41,15 +43,19 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
 
   bool _showAllTips = false;
   bool _muted = false;
-  bool _camOff = false;
+  bool _camOff = true;
   bool _showAiOverlay = true;
   bool _rxUpdating = true;
   bool _sendingPharmacare = false;
+  bool _showSampleRx = true;
   String? _sessionId;
   List<Prescription> _sessionRx = [];
   Duration _remaining = const Duration(minutes: 8, seconds: 18);
   Timer? _callTimer;
   Timer? _rxTimer;
+  CameraController? _camera;
+  bool _cameraReady = false;
+  bool _cameraBusy = false;
 
   @override
   void initState() {
@@ -63,7 +69,99 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     _aiCtrl.dispose();
     _callTimer?.cancel();
     _rxTimer?.cancel();
+    _disposeCamera();
     super.dispose();
+  }
+
+  Future<void> _disposeCamera() async {
+    final cam = _camera;
+    _camera = null;
+    _cameraReady = false;
+    if (cam != null) {
+      try {
+        await cam.dispose();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _initCamera() async {
+    if (_cameraBusy) return;
+    _cameraBusy = true;
+    try {
+      await _disposeCamera();
+      final cameras = await availableCameras();
+      if (!mounted || cameras.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppLocalizations.of(context).t('cameraUnavailable')),
+            ),
+          );
+        }
+        return;
+      }
+      final front = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first,
+      );
+      final controller = CameraController(
+        front,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
+      );
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() {
+        _camera = controller;
+        _cameraReady = true;
+        _camOff = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _cameraReady = false;
+          _camOff = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context).t('cameraPermissionDenied')),
+          ),
+        );
+      }
+    } finally {
+      _cameraBusy = false;
+    }
+  }
+
+  Future<void> _toggleCamera() async {
+    if (_cameraBusy) return;
+    if (_camera == null || !_cameraReady) {
+      await _initCamera();
+      return;
+    }
+    try {
+      if (_camOff) {
+        await _camera!.resumePreview();
+        if (!mounted) return;
+        setState(() => _camOff = false);
+      } else {
+        await _camera!.pausePreview();
+        if (!mounted) return;
+        setState(() => _camOff = true);
+      }
+    } catch (_) {
+      // Re-init if pause/resume fails on some devices.
+      if (_camOff) {
+        await _initCamera();
+      } else {
+        await _disposeCamera();
+        if (mounted) setState(() => _camOff = true);
+      }
+    }
   }
 
   /// Always present the live Telehealth layout (matches product mockups).
@@ -110,11 +208,15 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
       _remaining = const Duration(minutes: 8, seconds: 18);
       _showAiOverlay = true;
       _muted = false;
-      _camOff = false;
+      _camOff = true;
+      _cameraReady = false;
     });
 
     await context.read<HealthRepository>().syncGpCare(user.id);
     if (!mounted) return;
+
+    // Start patient camera for the live consult (user can turn off anytime).
+    unawaited(_initCamera());
 
     _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
@@ -147,6 +249,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   void _endCall() {
     _callTimer?.cancel();
     _rxTimer?.cancel();
+    unawaited(_disposeCamera());
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(AppLocalizations.of(context).t('callEndedRestart'))),
     );
@@ -245,10 +348,12 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
           _VideoStage(
             muted: _muted,
             camOff: _camOff,
+            camera: _camera,
+            cameraReady: _cameraReady,
             showAiOverlay: _showAiOverlay,
             doctorName: _doctorName,
             onMute: () => setState(() => _muted = !_muted),
-            onCam: () => setState(() => _camOff = !_camOff),
+            onCam: _toggleCamera,
             onAi: () => setState(() => _showAiOverlay = !_showAiOverlay),
             onShare: () {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -274,6 +379,12 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
             onSendPharmacare: canSendPharmacare ? _sendToPharmacare : null,
           ),
           const SizedBox(height: 14),
+          _SamplePrescriptionSection(
+            expanded: _showSampleRx,
+            patient: context.watch<AuthCubit>().state.user,
+            onToggle: () => setState(() => _showSampleRx = !_showSampleRx),
+          ),
+          const SizedBox(height: 14),
           _QuickNotesCard(
             notes: _notes,
             showAll: _showAllTips,
@@ -297,6 +408,8 @@ class _VideoStage extends StatelessWidget {
   const _VideoStage({
     required this.muted,
     required this.camOff,
+    required this.camera,
+    required this.cameraReady,
     required this.showAiOverlay,
     required this.doctorName,
     required this.onMute,
@@ -308,6 +421,8 @@ class _VideoStage extends StatelessWidget {
 
   final bool muted;
   final bool camOff;
+  final CameraController? camera;
+  final bool cameraReady;
   final bool showAiOverlay;
   final String doctorName;
   final VoidCallback onMute;
@@ -418,28 +533,67 @@ class _VideoStage extends StatelessWidget {
             top: 14,
             right: 14,
             child: Container(
-              width: 88,
-              height: 118,
+              width: 96,
+              height: 128,
               decoration: BoxDecoration(
                 color: const Color(0xFF1A2332),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: Colors.white24),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  Icon(
-                    camOff ? Icons.videocam_off : Icons.person,
-                    color: Colors.white70,
-                    size: 30,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    l.t('youFeed'),
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                  if (!camOff &&
+                      cameraReady &&
+                      camera != null &&
+                      camera!.value.isInitialized)
+                    FittedBox(
+                      fit: BoxFit.cover,
+                      clipBehavior: Clip.hardEdge,
+                      child: SizedBox(
+                        width: camera!.value.previewSize?.height ?? 96,
+                        height: camera!.value.previewSize?.width ?? 128,
+                        child: CameraPreview(camera!),
+                      ),
+                    )
+                  else
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          camOff ? Icons.videocam_off : Icons.person,
+                          color: Colors.white70,
+                          size: 30,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          camOff ? l.t('cameraOff') : l.t('youFeed'),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      color: Colors.black54,
+                      child: Text(
+                        l.t('youFeed'),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -1432,6 +1586,88 @@ class _TinyCheck extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SamplePrescriptionSection extends StatelessWidget {
+  const _SamplePrescriptionSection({
+    required this.expanded,
+    required this.onToggle,
+    this.patient,
+  });
+
+  final bool expanded;
+  final VoidCallback onToggle;
+  final UserProfile? patient;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final scripts = SamplePrescriptions.groupedScripts(
+      patientId: patient?.id ?? 'sample',
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          MinTap(
+            enforceMinSize: false,
+            onTap: onToggle,
+            child: Row(
+              children: [
+                const Icon(Icons.menu_book_outlined, color: AppColors.trustBlue),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    l.t('sampleRxTitle'),
+                    style: const TextStyle(
+                      color: AppColors.trustBlueDark,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                Icon(
+                  expanded ? Icons.expand_less : Icons.expand_more,
+                  color: AppColors.slateMuted,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            l.t('sampleRxHint'),
+            style: const TextStyle(
+              color: AppColors.slateMuted,
+              fontSize: 12,
+              height: 1.35,
+            ),
+          ),
+          if (expanded) ...[
+            const SizedBox(height: 12),
+            ...scripts.map((group) {
+              final first = group.first;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _IssuedPrescriptionDocument(
+                  medicines: group,
+                  patient: patient,
+                  doctorName: first.doctor,
+                  clinicName: first.clinicName,
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
     );
   }
 }

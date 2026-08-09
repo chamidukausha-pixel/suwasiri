@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../catalogs/doctor_catalog.dart';
+import '../catalogs/sample_prescriptions.dart';
 import '../models/app_notification.dart';
 import '../models/appointment.dart';
 import '../models/sos_location.dart';
@@ -161,29 +162,8 @@ class FirebaseHealthRepository implements HealthRepository {
       ..sort((a, b) => (b.issuedAt ?? DateTime(0))
           .compareTo(a.issuedAt ?? DateTime(0)));
     if (list.isNotEmpty) return list;
-    // Seeded fallback until a telehealth GP issues live Rx.
-    return [
-      Prescription(
-        id: 'p1',
-        medicine: 'Atorvastatin 20mg',
-        doctor: 'Dr. Aruni Perera',
-        code: 'EP-5290',
-        active: true,
-        patientId: patientId,
-        schedule: 'Cardiovascular (nightly)',
-        doseBadge: '1x1',
-      ),
-      Prescription(
-        id: 'p2',
-        medicine: 'Metformin 500mg',
-        doctor: 'Dr. Kavinda Jayawardena',
-        code: 'EP-5312',
-        active: true,
-        patientId: patientId,
-        schedule: 'Diabetes (BD with meals)',
-        doseBadge: '1x2',
-      ),
-    ];
+    // Sample reference e-Rx until the patient has live issued scripts.
+    return SamplePrescriptions.referenceSamples(patientId: patientId);
   }
 
   @override

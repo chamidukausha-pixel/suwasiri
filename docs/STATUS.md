@@ -38,6 +38,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Telehealth tab rename (Care → Telehealth); e-Rx shows issued date + clinic; more quick health tips
 - [x] Telehealth page always shows full mockup layout (video, live consult, e-Rx, notes, AI — nothing hidden)
 - [x] Call tab rename (Telehealth → Call); issued e-Rx shown as dual-copy formal prescription form under E-Prescription
+- [x] Call: real device camera on/off for patient PiP; sample reference e-prescription forms on Call screen
 
 ## In progress / next
 
@@ -49,7 +50,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [ ] FCM push (`firebase_messaging` is in pubspec, not wired in UI yet)
 - [ ] Firebase Storage for vault file uploads (`fileUrl`)
 - [ ] Tighten `notifications` rules to owner-scoped (`userId == auth.uid`)
-- [ ] Telehealth/Call: still simulated video — needs real signaling later; e-Rx + PharmaCare portal handoff is wired via Firestore
+- [ ] Telehealth/Call: doctor video still simulated — needs real signaling later; patient camera on/off + e-Rx + PharmaCare handoff are wired
 
 ## Known caveats
 

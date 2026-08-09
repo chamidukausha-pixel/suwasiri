@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../catalogs/doctor_catalog.dart';
+import '../catalogs/sample_prescriptions.dart';
 import '../models/app_notification.dart';
 import '../models/appointment.dart';
 import '../models/sos_location.dart';
@@ -218,28 +219,7 @@ class DemoHealthRepository implements HealthRepository {
   Future<List<Prescription>> getPrescriptions(String patientId) async {
     final mine = _rxMemory.where((p) => p.patientId == patientId && p.active);
     if (mine.isNotEmpty) return mine.toList();
-    return [
-      Prescription(
-        id: 'p1',
-        medicine: 'Atorvastatin 20mg',
-        doctor: 'Dr. Aruni Perera',
-        code: 'EP-5290',
-        active: true,
-        patientId: patientId,
-        schedule: 'Cardiovascular (nightly)',
-        doseBadge: '1x1',
-      ),
-      Prescription(
-        id: 'p2',
-        medicine: 'Metformin 500mg',
-        doctor: 'Dr. Kavinda Jayawardena',
-        code: 'EP-5312',
-        active: true,
-        patientId: patientId,
-        schedule: 'Diabetes (BD with meals)',
-        doseBadge: '1x2',
-      ),
-    ];
+    return SamplePrescriptions.referenceSamples(patientId: patientId);
   }
 
   @override

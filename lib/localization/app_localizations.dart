@@ -391,6 +391,32 @@ class AppLocalizations {
       'si': 'ඔබ',
       'ta': 'நீங்கள்',
     },
+    'cameraOff': {
+      'en': 'Camera off',
+      'si': 'කැමරාව ක්‍රියා විරහිතයි',
+      'ta': 'கேமரா அணைக்கப்பட்டது',
+    },
+    'cameraUnavailable': {
+      'en': 'No camera found on this device.',
+      'si': 'මෙම උපාංගයේ කැමරාවක් හමු නොවීය.',
+      'ta': 'இந்த சாதனத்தில் கேமரா இல்லை.',
+    },
+    'cameraPermissionDenied': {
+      'en': 'Camera permission is required for video consult. Enable it in settings.',
+      'si': 'වීඩියෝ උපදේශනයට කැමරා අවසරය අවශ්‍යයි. සැකසුම්වලින් සක්‍රිය කරන්න.',
+      'ta': 'வீடியோ ஆலோசனைக்கு கேமரா அனுமதி தேவை. அமைப்புகளில் இயக்கவும்.',
+    },
+    'sampleRxTitle': {
+      'en': 'Sample e-prescriptions (reference)',
+      'si': 'නියැදි ඊ-වට්ටෝරු (යොමුව)',
+      'ta': 'மாதிரி மின் மருந்துச்சீட்டுகள் (குறிப்பு)',
+    },
+    'sampleRxHint': {
+      'en': 'Example medical scripts you can refer to — not your live session Rx.',
+      'si': 'යොමුවට භාවිතා කළ හැකි උදාහරණ වෛද්‍ය වට්ටෝරු — ඔබේ සජීවී සැසියේ නොවේ.',
+      'ta': 'பார்க்கக்கூடிய எடுத்துக்காட்டு மருத்துவ சீட்டுகள் — உங்கள் நேரடி அமர்வு அல்ல.',
+    },
+
     'aiTranslateTitle': {
       'en': 'REAL-TIME AI TRANSLATE',
       'si': 'තත්‍ය කාලීන AI පරිවර්තනය',
