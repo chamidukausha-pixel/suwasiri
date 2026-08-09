@@ -205,6 +205,7 @@ class FirebaseHealthRepository implements HealthRepository {
         doseBadge: '1x3',
         sessionId: sessionId,
         issuedAt: now,
+        clinicName: 'Lanka GP Care · Durdans Teleclinic',
       ),
       Prescription(
         id: _uuid.v4(),
@@ -217,6 +218,7 @@ class FirebaseHealthRepository implements HealthRepository {
         doseBadge: 'PRN',
         sessionId: sessionId,
         issuedAt: now,
+        clinicName: 'Lanka GP Care · Durdans Teleclinic',
       ),
     ];
     for (final rx in batch) {

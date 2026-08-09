@@ -304,36 +304,26 @@ class _SearchOptionsCard extends StatelessWidget {
               fontSize: 14,
             ),
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: categories.map((c) {
-              final selected = category == c;
-              final label = c == 'All' ? l.t('allCategories') : c;
-              return MinTap(
-                onTap: () => onCategoryChanged(c),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 160),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? AppColors.trustBlue
-                        : const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: selected ? Colors.white : AppColors.trustBlueDark,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            // ignore: deprecated_member_use
+            value: category,
+            isExpanded: true,
+            decoration: const InputDecoration(),
+            items: categories
+                .map(
+                  (c) => DropdownMenuItem(
+                    value: c,
+                    child: Text(
+                      c == 'All' ? l.t('allCategories') : c,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                ),
-              );
-            }).toList(),
+                )
+                .toList(),
+            onChanged: (v) {
+              if (v != null) onCategoryChanged(v);
+            },
           ),
         ],
       ),

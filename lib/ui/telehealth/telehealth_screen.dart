@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
@@ -29,7 +30,14 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     'Rest for 2 days. Avoid cold beverages and direct cold drafts.',
     'Monitor body temperature every 4 hours. Keep a log.',
     'Take Paracetamol only if temperature exceeds 38°C / 100°F.',
+    'Drink warm fluids regularly — aim for 2–3 litres of water daily.',
+    'Wash hands before meals and after returning home.',
+    'Sleep 7–8 hours; elevate your head if coughing at night.',
+    'Avoid self-medicating antibiotics without clinician advice.',
+    'If breathing worsens or fever lasts >3 days, seek urgent care.',
   ];
+  bool _showAllTips = false;
+  bool _rxExpanded = true;
 
   bool _inCall = false;
   bool _muted = false;
@@ -246,12 +254,14 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
               timerLabel: _timerLabel,
             ),
           ],
-          if (_inCall && (_rxUpdating || _sessionRx.isNotEmpty)) ...[
+          if (_inCall) ...[
             const SizedBox(height: 14),
             _EPrescriptionCard(
               medicines: _sessionRx,
               updating: _rxUpdating,
               sending: _sendingPharmacare,
+              expanded: _rxExpanded,
+              onToggle: () => setState(() => _rxExpanded = !_rxExpanded),
               onSendPharmacare: _sessionRx.isNotEmpty &&
                       !_rxUpdating &&
                       !_sessionRx.every((p) => p.sentToPharmacare)
@@ -260,13 +270,14 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
               sent: _sessionRx.isNotEmpty &&
                   _sessionRx.every((p) => p.sentToPharmacare),
             ),
-          ],
-          if (_inCall) ...[
             const SizedBox(height: 14),
             _QuickNotesCard(
               notes: _notes,
+              showAll: _showAllTips,
               controller: _noteCtrl,
               onAdd: _addNote,
+              onToggleViewAll: () =>
+                  setState(() => _showAllTips = !_showAllTips),
             ),
             const SizedBox(height: 14),
             _AiCopilotCard(
@@ -693,6 +704,8 @@ class _EPrescriptionCard extends StatelessWidget {
     required this.updating,
     required this.sending,
     required this.sent,
+    required this.expanded,
+    required this.onToggle,
     this.onSendPharmacare,
   });
 
@@ -700,202 +713,265 @@ class _EPrescriptionCard extends StatelessWidget {
   final bool updating;
   final bool sending;
   final bool sent;
+  final bool expanded;
+  final VoidCallback onToggle;
   final VoidCallback? onSendPharmacare;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final first = medicines.isNotEmpty ? medicines.first : null;
+    final issuedLabel = first?.issuedAt != null
+        ? DateFormat('d MMM yyyy · hh:mm a').format(first!.issuedAt!)
+        : l.t('awaitingIssue');
+    final clinic = first?.clinicName ?? 'Lanka GP Care Virtual Clinic';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              width: 5,
-              decoration: const BoxDecoration(
-                color: AppColors.trustBlue,
-                borderRadius: BorderRadius.horizontal(
-                  left: Radius.circular(20),
-                ),
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 16, 16, 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.description_outlined,
-                          color: AppColors.trustBlue,
-                          size: 22,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            l.t('ePrescription'),
-                            style: const TextStyle(
-                              color: AppColors.trustBlueDark,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                      ],
+        onTap: onToggle,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  width: 5,
+                  decoration: const BoxDecoration(
+                    color: AppColors.trustBlueDark,
+                    borderRadius: BorderRadius.horizontal(
+                      left: Radius.circular(20),
                     ),
-                    const SizedBox(height: 12),
-                    if (medicines.isEmpty && updating)
-                      Text(
-                        l.t('doctorUpdatingRx'),
-                        style: const TextStyle(
-                          color: AppColors.slateMuted,
-                          fontStyle: FontStyle.italic,
-                          fontSize: 13,
-                        ),
-                      )
-                    else ...[
-                      ...medicines.map(
-                        (m) => Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppColors.border),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        m.medicine,
-                                        style: const TextStyle(
-                                          color: AppColors.trustBlueDark,
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      if (m.schedule.isNotEmpty) ...[
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          m.schedule,
-                                          style: const TextStyle(
-                                            color: AppColors.slateMuted,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFE2E8F0),
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Text(
-                                    m.doseBadge.isEmpty ? m.code : m.doseBadge,
-                                    style: const TextStyle(
-                                      color: AppColors.trustBlueDark,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (updating)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4, bottom: 8),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.sync,
-                                size: 14,
-                                color: AppColors.slateMuted,
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  l.t('doctorUpdatingRx'),
-                                  style: const TextStyle(
-                                    color: AppColors.slateMuted,
-                                    fontStyle: FontStyle.italic,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (onSendPharmacare != null) ...[
-                        const SizedBox(height: 4),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: sending ? null : onSendPharmacare,
-                            icon: sending
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(Icons.local_pharmacy_outlined),
-                            label: Text(l.t('sendPharmacare')),
-                          ),
-                        ),
-                      ] else if (sent) ...[
-                        const SizedBox(height: 4),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 16, 16, 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Row(
                           children: [
                             const Icon(
-                              Icons.check_circle,
-                              color: AppColors.emerald,
-                              size: 18,
+                              Icons.description_outlined,
+                              color: AppColors.trustBlue,
+                              size: 22,
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                l.t('pharmacareSent'),
+                                l.t('ePrescription'),
                                 style: const TextStyle(
-                                  color: AppColors.emerald,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
+                                  color: AppColors.trustBlueDark,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 16,
                                 ),
                               ),
                             ),
+                            Icon(
+                              expanded
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                              color: AppColors.trustBlue,
+                            ),
                           ],
                         ),
+                        const SizedBox(height: 10),
+                        Text(
+                          '${l.t('issuedDate')}: $issuedLabel',
+                          style: const TextStyle(
+                            color: AppColors.slateMuted,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${l.t('medicalClinic')}: $clinic',
+                          style: const TextStyle(
+                            color: AppColors.trustBlueDark,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (expanded) ...[
+                          const SizedBox(height: 12),
+                          if (medicines.isEmpty && updating)
+                            Text(
+                              l.t('doctorUpdatingRx'),
+                              style: const TextStyle(
+                                color: AppColors.slateMuted,
+                                fontStyle: FontStyle.italic,
+                                fontSize: 13,
+                              ),
+                            )
+                          else if (medicines.isEmpty)
+                            Text(
+                              l.t('rxWaitingGpCare'),
+                              style: const TextStyle(
+                                color: AppColors.slateMuted,
+                                fontSize: 13,
+                              ),
+                            )
+                          else ...[
+                            ...medicines.map(
+                              (m) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              m.medicine,
+                                              style: const TextStyle(
+                                                color: AppColors.trustBlueDark,
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            if (m.schedule.isNotEmpty) ...[
+                                              const SizedBox(height: 3),
+                                              Text(
+                                                m.schedule,
+                                                style: const TextStyle(
+                                                  color: AppColors.slateMuted,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFE2E8F0),
+                                          borderRadius:
+                                              BorderRadius.circular(16),
+                                        ),
+                                        child: Text(
+                                          m.doseBadge.isEmpty
+                                              ? m.code
+                                              : m.doseBadge,
+                                          style: const TextStyle(
+                                            color: AppColors.trustBlueDark,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (updating)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.only(top: 4, bottom: 8),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: const BoxDecoration(
+                                        color: AppColors.trustBlueLight,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        l.t('doctorUpdatingRx'),
+                                        style: const TextStyle(
+                                          color: AppColors.slateMuted,
+                                          fontStyle: FontStyle.italic,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            Text(
+                              l.t('gpCarePortalSync'),
+                              style: const TextStyle(
+                                color: AppColors.slateMuted,
+                                fontSize: 11,
+                              ),
+                            ),
+                            if (onSendPharmacare != null) ...[
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.icon(
+                                  onPressed:
+                                      sending ? null : onSendPharmacare,
+                                  icon: sending
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.local_pharmacy_outlined),
+                                  label: Text(l.t('sendPharmacare')),
+                                ),
+                              ),
+                            ] else if (sent) ...[
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.check_circle,
+                                    color: AppColors.emerald,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      l.t('pharmacareSent'),
+                                      style: const TextStyle(
+                                        color: AppColors.emerald,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ],
                       ],
-                    ],
-                  ],
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -905,17 +981,22 @@ class _EPrescriptionCard extends StatelessWidget {
 class _QuickNotesCard extends StatelessWidget {
   const _QuickNotesCard({
     required this.notes,
+    required this.showAll,
     required this.controller,
     required this.onAdd,
+    required this.onToggleViewAll,
   });
 
   final List<String> notes;
+  final bool showAll;
   final TextEditingController controller;
   final VoidCallback onAdd;
+  final VoidCallback onToggleViewAll;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final visible = showAll ? notes : notes.take(3).toList();
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -941,51 +1022,56 @@ class _QuickNotesCard extends StatelessWidget {
                   ),
                 ),
               ),
-              Text(
-                l.t('viewAll'),
-                style: const TextStyle(
-                  color: AppColors.trustBlue,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
+              MinTap(
+                enforceMinSize: false,
+                onTap: onToggleViewAll,
+                child: Text(
+                  showAll ? l.t('showLess') : l.t('viewAll'),
+                  style: const TextStyle(
+                    color: AppColors.trustBlue,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          ...notes.take(3).map(
-                (n) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
+          ...visible.map(
+            (n) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.check_circle,
+                      color: AppColors.emerald,
+                      size: 18,
                     ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(
-                          Icons.check_circle,
-                          color: AppColors.emerald,
-                          size: 18,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        n,
+                        style: const TextStyle(
+                          color: AppColors.trustBlueDark,
+                          fontSize: 13,
+                          height: 1.35,
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            n,
-                            style: const TextStyle(
-                              color: AppColors.trustBlueDark,
-                              fontSize: 13,
-                              height: 1.35,
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
+            ),
+          ),
           const SizedBox(height: 4),
           Row(
             children: [
@@ -994,9 +1080,7 @@ class _QuickNotesCard extends StatelessWidget {
                   controller: controller,
                   decoration: InputDecoration(
                     hintText: l.t('privateNoteHint'),
-                    isDense: true,
                   ),
-                  onSubmitted: (_) => onAdd(),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1004,7 +1088,7 @@ class _QuickNotesCard extends StatelessWidget {
                 onPressed: onAdd,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size(0, 48),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
                 ),
                 child: Text(l.t('add')),
               ),

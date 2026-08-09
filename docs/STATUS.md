@@ -34,6 +34,8 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Book Session → Confirm Appointment (more slots) → Secure Checkout (card / manual bank slip + document/image upload)
 - [x] Suwasariya 1990 SOS overlay (dark rescue UI, GPS lock, share-live-GPS consent → Firestore `sos_sessions`)
 - [x] Doctors: expanded specialty categories + clinic address with Google/Apple Maps choice after booking
+- [x] Doctors: ≥3 dummy clinicians per specialty + specialty dropdown; Book Session keeps full checkout
+- [x] Telehealth tab rename (Care → Telehealth); e-Rx shows issued date + clinic; more quick health tips
 
 ## In progress / next
 

@@ -29,7 +29,7 @@ class AppLocalizations {
     },
     'home': {'en': 'Home', 'si': 'මුල් පිටුව', 'ta': 'முகப்பு'},
     'appointments': {'en': 'Doctors', 'si': 'වෛද්‍යවරු', 'ta': 'மருத்துவர்கள்'},
-    'telehealth': {'en': 'Care', 'si': 'සත්කාර', 'ta': 'பராமரிப்பு'},
+    'telehealth': {'en': 'Telehealth', 'si': 'දුරස්ථ සත්කාර', 'ta': 'தொலைசுகாதாரம்'},
     'vault': {'en': 'Vault', 'si': 'භාණ්ඩාගාරය', 'ta': 'பெட்டகம்'},
     'vaccines': {'en': 'Vaccines', 'si': 'එන්නත්', 'ta': 'தடுப்பூசி'},
     'profile': {'en': 'Profile', 'si': 'පැතිකඩ', 'ta': 'சுயவிவரம்'},
@@ -255,8 +255,8 @@ class AppLocalizations {
     },
     'telehealthTitle': {
       'en': 'Telehealth',
-      'si': 'දුරස්ථ සෞඛ්‍ය',
-      'ta': 'தொலை சுகாதாரம்',
+      'si': 'දුරස්ථ සත්කාර',
+      'ta': 'தொலைசுகாதாரம்',
     },
     'telehealthSubtitle': {
       'en': 'Secure encrypted video consult with registered practitioners.',
@@ -350,6 +350,36 @@ class AppLocalizations {
       'en': 'View All',
       'si': 'සියල්ල බලන්න',
       'ta': 'அனைத்தும்',
+    },
+    'showLess': {
+      'en': 'Show less',
+      'si': 'අඩුවෙන් පෙන්වන්න',
+      'ta': 'குறைவாகக் காட்டு',
+    },
+    'issuedDate': {
+      'en': 'Issued date',
+      'si': 'නිකුත් කළ දිනය',
+      'ta': 'வழங்கிய தேதி',
+    },
+    'medicalClinic': {
+      'en': 'Medical clinic',
+      'si': 'වෛද්‍ය සායනය',
+      'ta': 'மருத்துவ கிளினிக்',
+    },
+    'awaitingIssue': {
+      'en': 'Awaiting Lanka GP Care issue',
+      'si': 'Lanka GP Care නිකුත් කිරීම බලාපොරොත්තුවෙන්',
+      'ta': 'Lanka GP Care வழங்கல் காத்திருக்கிறது',
+    },
+    'rxWaitingGpCare': {
+      'en': 'Doctor will issue medicines via Lanka GP Care during this call.',
+      'si': 'මෙම ඇමතුමේදී වෛද්‍යවරයා Lanka GP Care හරහා බෙහෙත් නිකුත් කරයි.',
+      'ta': 'இந்த அழைப்பின்போது மருத்துவர் Lanka GP Care வழியாக மருந்து வழங்குவார்.',
+    },
+    'gpCarePortalSync': {
+      'en': 'Synced with Sri Lanka GP Care web portal for e-prescription records.',
+      'si': 'e-බෙහෙත් වාර්තා සඳහා ශ්‍රී ලංකා GP Care වෙබ් ද්වාරය සමඟ සමමුහුර්තයි.',
+      'ta': 'மின் மருந்து பதிவுகளுக்காக இலங்கை GP Care இணைய போர்ட்டலுடன் ஒத்திசைக்கப்பட்டது.',
     },
     'privateNoteHint': {
       'en': 'Add private note for yourself…',
