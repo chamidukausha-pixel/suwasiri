@@ -76,4 +76,13 @@ abstract final class SamplePrescriptions {
     }
     return map.values.toList();
   }
+
+  /// Clinic name → medicines (for tappable clinic rows under E-Prescription).
+  static Map<String, List<Prescription>> byClinic({String patientId = 'sample'}) {
+    final map = <String, List<Prescription>>{};
+    for (final rx in referenceSamples(patientId: patientId)) {
+      map.putIfAbsent(rx.clinicName, () => []).add(rx);
+    }
+    return map;
+  }
 }

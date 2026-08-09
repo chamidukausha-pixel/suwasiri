@@ -231,9 +231,9 @@ class FirebaseHealthRepository implements HealthRepository {
     await pushNotification(
       AppNotification(
         id: _uuid.v4(),
-        title: 'Sent to PharmaCare',
+        title: 'Synced to MediLanka',
         body:
-            'E-prescription forwarded to PharmaCare pharmacist portal for dispensing.',
+            'E-prescription forwarded to MediLanka pharmacy web portal for Sri Lankan dispensing.',
         timestamp: DateTime.now(),
         type: NotificationPayloadType.sync,
       ),

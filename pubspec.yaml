@@ -36,6 +36,9 @@ dependencies:
   # AGP 9+: does not apply KGP (Built-in Kotlin ready).
   package_info_plus: ^10.2.1
   camera: ^0.12.0+2
+  pdf: ^3.12.0
+  path_provider: ^2.1.6
+  printing: ^5.14.3
 
 dev_dependencies:
   flutter_test:

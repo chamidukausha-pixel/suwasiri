@@ -412,9 +412,74 @@ class AppLocalizations {
       'ta': 'மாதிரி மின் மருந்துச்சீட்டுகள் (குறிப்பு)',
     },
     'sampleRxHint': {
-      'en': 'Example medical scripts you can refer to — not your live session Rx.',
-      'si': 'යොමුවට භාවිතා කළ හැකි උදාහරණ වෛද්‍ය වට්ටෝරු — ඔබේ සජීවී සැසියේ නොවේ.',
-      'ta': 'பார்க்கக்கூடிய எடுத்துக்காட்டு மருத்துவ சீட்டுகள் — உங்கள் நேரடி அமர்வு அல்ல.',
+      'en': 'Tap a clinic name to open the issued script — email, MediLanka sync, or PDF.',
+      'si': 'නිකුත් කළ වට්ටෝරුව විවෘත කිරීමට සායන නම තට්ටු කරන්න — ඊමේල්, MediLanka, හෝ PDF.',
+      'ta': 'வழங்கப்பட்ட சீட்டை திறக்க கிளினிக் பெயரைத் தட்டவும் — மின்னஞ்சல், MediLanka அல்லது PDF.',
+    },
+    'tapClinicForRx': {
+      'en': 'Tap the clinic name above to view the full doctor-issued prescription.',
+      'si': 'සම්පූර්ණ වෛද්‍ය වට්ටෝරුව බැලීමට ඉහත සායන නම තට්ටු කරන්න.',
+      'ta': 'முழு மருத்துவர் மருந்துச்சீட்டைக் காண மேலே உள்ள கிளினிக் பெயரைத் தட்டவும்.',
+    },
+    'issuedPrescription': {
+      'en': 'Issued prescription',
+      'si': 'නිකුත් කළ වට්ටෝරුව',
+      'ta': 'வழங்கப்பட்ட மருந்துச்சீட்டு',
+    },
+    'rxActionsHint': {
+      'en': 'Send by email, sync to MediLanka (Sri Lankan pharmacy portal), or download PDF.',
+      'si': 'ඊමේල් කරන්න, MediLanka (ශ්‍රී ලංකා ඖෂධාගාර ද්වාරය) සමමුහුර්ත කරන්න, හෝ PDF බාගත කරන්න.',
+      'ta': 'மின்னஞ்சல் அனுப்பவும், MediLanka (இலங்கை மருந்தகம்) ஒத்திசைக்கவும் அல்லது PDF பதிவிறக்கவும்.',
+    },
+    'rxSendEmail': {
+      'en': 'Send prescription by email',
+      'si': 'වට්ටෝරුව ඊමේල් කරන්න',
+      'ta': 'மருந்துச்சீட்டை மின்னஞ்சல் அனுப்பு',
+    },
+    'rxSyncMediLanka': {
+      'en': 'Sync to MediLanka web portal',
+      'si': 'MediLanka වෙබ් ද්වාරයට සමමුහුර්ත කරන්න',
+      'ta': 'MediLanka வலை போர்ட்டலுடன் ஒத்திசை',
+    },
+    'mediLankaSynced': {
+      'en': 'Synced to MediLanka pharmacy portal',
+      'si': 'MediLanka ඖෂධාගාර ද්වාරයට සමමුහුර්තයි',
+      'ta': 'MediLanka மருந்தக போர்ட்டலுடன் ஒத்திசைக்கப்பட்டது',
+    },
+    'mediLankaFailed': {
+      'en': 'MediLanka sync failed. Try again.',
+      'si': 'MediLanka සමමුහුර්තය අසාර්ථකයි. නැවත උත්සාහ කරන්න.',
+      'ta': 'MediLanka ஒத்திசைவு தோல்வி. மீண்டும் முயலவும்.',
+    },
+    'rxDownloadPdf': {
+      'en': 'Download as PDF',
+      'si': 'PDF ලෙස බාගත කරන්න',
+      'ta': 'PDF ஆக பதிவிறக்கு',
+    },
+    'rxEmailOpened': {
+      'en': 'Email app opened with your prescription summary.',
+      'si': 'ඔබේ වට්ටෝරු සාරාංශය සමඟ ඊමේල් යෙදුම විවෘත විය.',
+      'ta': 'உங்கள் மருந்துச்சீட்டு சுருக்கத்துடன் மின்னஞ்சல் திறக்கப்பட்டது.',
+    },
+    'rxEmailFailed': {
+      'en': 'Could not open email app.',
+      'si': 'ඊමේල් යෙදුම විවෘත කළ නොහැක.',
+      'ta': 'மின்னஞ்சல் பயன்பாட்டைத் திறக்க முடியவில்லை.',
+    },
+    'rxEmailMissing': {
+      'en': 'No email on your profile. Add one in Profile settings.',
+      'si': 'ඔබේ පැතිකඩේ ඊමේල් නැත. පැතිකඩ සැකසුම්වල එකතු කරන්න.',
+      'ta': 'சுயவிவரத்தில் மின்னஞ்சல் இல்லை. சுயவிவர அமைப்புகளில் சேர்க்கவும்.',
+    },
+    'rxPdfReady': {
+      'en': 'Prescription PDF ready to save or share.',
+      'si': 'වට්ටෝරු PDF සුරැකීමට හෝ බෙදාගැනීමට සූදානම්.',
+      'ta': 'மருந்துச்சீட்டு PDF சேமிக்க/பகிர தயார்.',
+    },
+    'rxPdfFailed': {
+      'en': 'Could not create PDF.',
+      'si': 'PDF සෑදිය නොහැක.',
+      'ta': 'PDF உருவாக்க முடியவில்லை.',
     },
 
     'aiTranslateTitle': {
