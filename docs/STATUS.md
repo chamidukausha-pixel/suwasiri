@@ -40,6 +40,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Call tab rename (Telehealth → Call); issued e-Rx shown as dual-copy formal prescription form under E-Prescription
 - [x] Call: real device camera on/off for patient PiP; sample reference e-prescription forms on Call screen
 - [x] Call: camera auto-on at consult start; E-Rx clinic tap → email / MediLanka sync / PDF download + sample clinics
+- [x] Call e-Rx = live session only (clears after MediLanka); Vault Patient Health & Treatment History + Issued Medical History
 
 ## In progress / next
 

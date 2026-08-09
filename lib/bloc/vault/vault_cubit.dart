@@ -1,15 +1,20 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../data/catalogs/patient_health_samples.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/repositories/health_repository.dart';
 
-enum VaultFilter { labs, medicines }
+enum HealthHistoryTab { medicines, labs, vaccines }
+
+enum VaultFilter { labs, medicines, history }
 
 class VaultState extends Equatable {
   const VaultState({
     this.reports = const [],
     this.prescriptions = const [],
+    this.treatmentNotes = const [],
+    this.vaccineHistory = const [],
     this.unlocked = false,
     this.loading = false,
     this.syncingLankaLab = false,
@@ -18,11 +23,14 @@ class VaultState extends Equatable {
     this.gpCareSynced = false,
     this.aiReply,
     this.selectedReport,
-    this.filter = VaultFilter.labs,
+    this.filter = VaultFilter.history,
+    this.healthTab = HealthHistoryTab.medicines,
   });
 
   final List<VaultReport> reports;
   final List<Prescription> prescriptions;
+  final List<TreatmentNote> treatmentNotes;
+  final List<VaccineHistoryEntry> vaccineHistory;
   final bool unlocked;
   final bool loading;
   final bool syncingLankaLab;
@@ -32,10 +40,22 @@ class VaultState extends Equatable {
   final String? aiReply;
   final VaultReport? selectedReport;
   final VaultFilter filter;
+  final HealthHistoryTab healthTab;
+
+  List<Prescription> get pendingMedicines =>
+      prescriptions.where((p) => !p.sentToPharmacare).toList();
+
+  List<Prescription> get historyMedicines =>
+      prescriptions.where((p) => p.sentToPharmacare).toList();
+
+  List<VaultReport> get labReports =>
+      reports.where((r) => r.kind != VaultRecordKind.vaccine).toList();
 
   VaultState copyWith({
     List<VaultReport>? reports,
     List<Prescription>? prescriptions,
+    List<TreatmentNote>? treatmentNotes,
+    List<VaccineHistoryEntry>? vaccineHistory,
     bool? unlocked,
     bool? loading,
     bool? syncingLankaLab,
@@ -45,12 +65,15 @@ class VaultState extends Equatable {
     String? aiReply,
     VaultReport? selectedReport,
     VaultFilter? filter,
+    HealthHistoryTab? healthTab,
     bool clearAi = false,
     bool clearSelected = false,
   }) {
     return VaultState(
       reports: reports ?? this.reports,
       prescriptions: prescriptions ?? this.prescriptions,
+      treatmentNotes: treatmentNotes ?? this.treatmentNotes,
+      vaccineHistory: vaccineHistory ?? this.vaccineHistory,
       unlocked: unlocked ?? this.unlocked,
       loading: loading ?? this.loading,
       syncingLankaLab: syncingLankaLab ?? this.syncingLankaLab,
@@ -61,6 +84,7 @@ class VaultState extends Equatable {
       selectedReport:
           clearSelected ? null : (selectedReport ?? this.selectedReport),
       filter: filter ?? this.filter,
+      healthTab: healthTab ?? this.healthTab,
     );
   }
 
@@ -68,6 +92,8 @@ class VaultState extends Equatable {
   List<Object?> get props => [
         reports,
         prescriptions,
+        treatmentNotes,
+        vaccineHistory,
         unlocked,
         loading,
         syncingLankaLab,
@@ -77,6 +103,7 @@ class VaultState extends Equatable {
         aiReply,
         selectedReport,
         filter,
+        healthTab,
       ];
 }
 
@@ -99,6 +126,10 @@ class VaultCubit extends Cubit<VaultState> {
     emit(state.copyWith(
       reports: reports,
       prescriptions: rx,
+      treatmentNotes:
+          PatientHealthSamples.treatmentNotes(patientId: patientId),
+      vaccineHistory:
+          PatientHealthSamples.vaccineHistory(patientId: patientId),
       loading: false,
     ));
   }
@@ -130,8 +161,25 @@ class VaultCubit extends Cubit<VaultState> {
     ));
   }
 
+  Future<void> sendMedicinesToMediLanka({
+    required String patientId,
+    required List<Prescription> medicines,
+  }) async {
+    await _health.markPrescriptionsSentToPharmacy(
+      patientId: patientId,
+      medicines: medicines,
+    );
+    final rx = await _health.getPrescriptions(patientId);
+    // If Firestore now has only the sent ones, merge history samples carefully.
+    emit(state.copyWith(prescriptions: rx));
+  }
+
   void setFilter(VaultFilter filter) {
     emit(state.copyWith(filter: filter));
+  }
+
+  void setHealthTab(HealthHistoryTab tab) {
+    emit(state.copyWith(healthTab: tab));
   }
 
   void selectReport(VaultReport report) {
@@ -141,13 +189,13 @@ class VaultCubit extends Cubit<VaultState> {
   Future<void> askAi(String question) async {
     VaultReport? report = state.selectedReport;
     if (report == null) {
-      for (final r in state.reports) {
+      for (final r in state.labReports) {
         if (r.readyForAi) {
           report = r;
           break;
         }
       }
-      report ??= state.reports.isEmpty ? null : state.reports.first;
+      report ??= state.labReports.isEmpty ? null : state.labReports.first;
     }
     if (report == null) return;
     emit(state.copyWith(loading: true, selectedReport: report));

@@ -11,6 +11,7 @@ import '../../data/models/vault_report.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/suwasiri_brand_header.dart';
+import 'patient_health_section.dart';
 
 class VaultScreen extends StatefulWidget {
   const VaultScreen({super.key});
@@ -170,10 +171,8 @@ class _VaultScreenState extends State<VaultScreen> {
         }
 
         final user = context.watch<AuthCubit>().state.user!;
-        final labCount = state.reports
-            .where((r) => r.kind != VaultRecordKind.vaccine)
-            .length;
-        final rxCount = state.prescriptions.length;
+        final labCount = state.labReports.length;
+        final historyCount = state.historyMedicines.length;
 
         return SafeArea(
           bottom: false,
@@ -216,6 +215,14 @@ class _VaultScreenState extends State<VaultScreen> {
                 ],
               ),
               const SizedBox(height: 16),
+              PatientHealthHistorySection(
+                state: state,
+                onOpenLab: (r) async {
+                  context.read<VaultCubit>().selectReport(r);
+                  await showLabReportDetailSheet(context: context, report: r);
+                },
+              ),
+              const SizedBox(height: 12),
               _AiLabAssistantCard(
                 onTry: () => _showAiSheet(state),
               ),
@@ -224,17 +231,18 @@ class _VaultScreenState extends State<VaultScreen> {
                 children: [
                   Expanded(
                     child: _SummaryTile(
-                      icon: Icons.medication_outlined,
+                      icon: Icons.history_edu_outlined,
                       iconBg: const Color(0xFFF1F5F9),
                       iconColor: AppColors.slateMuted,
-                      title: l.t('issuedMedicines'),
+                      title: l.t('issuedMedicalHistory'),
                       subtitle: l
                           .t('recordsCount')
-                          .replaceAll('{count}', '$rxCount'),
-                      selected: state.filter == VaultFilter.medicines,
+                          .replaceAll('{count}', '$historyCount'),
+                      selected: state.filter == VaultFilter.history ||
+                          state.filter == VaultFilter.medicines,
                       onTap: () => context
                           .read<VaultCubit>()
-                          .setFilter(VaultFilter.medicines),
+                          .setFilter(VaultFilter.history),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -278,7 +286,8 @@ class _VaultScreenState extends State<VaultScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              _GpCareSyncedBar(active: state.gpCareSynced || rxCount > 0),
+              _GpCareSyncedBar(
+                  active: state.gpCareSynced || state.prescriptions.isNotEmpty),
               const SizedBox(height: 14),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -316,7 +325,8 @@ class _VaultScreenState extends State<VaultScreen> {
                       iconColor: AppColors.emerald,
                       title: l.t('lankaGpCare'),
                       subtitle: l.t('practitionerPrescriptions'),
-                      synced: state.gpCareSynced || rxCount > 0,
+                      synced:
+                          state.gpCareSynced || state.prescriptions.isNotEmpty,
                       body: l.t('lankaGpBody'),
                       buttonLabel: l.t('syncLankaGp'),
                       buttonColor: AppColors.vaultGreen,
@@ -337,16 +347,29 @@ class _VaultScreenState extends State<VaultScreen> {
                 const LinearProgressIndicator(),
               ],
               const SizedBox(height: 18),
-              if (state.filter == VaultFilter.medicines)
-                ..._buildMedicines(context, state)
-              else
+              if (state.filter == VaultFilter.labs)
                 _VaultTimeline(
-                  reports: state.reports,
-                  onSelect: (r) {
+                  reports: state.labReports,
+                  onSelect: (r) async {
                     context.read<VaultCubit>().selectReport(r);
-                    if (r.readyForAi) _showAiSheet(context.read<VaultCubit>().state);
+                    await showLabReportDetailSheet(context: context, report: r);
+                    if (r.readyForAi && context.mounted) {
+                      _showAiSheet(context.read<VaultCubit>().state);
+                    }
                   },
+                )
+              else ...[
+                Text(
+                  l.t('issuedMedicalHistory'),
+                  style: const TextStyle(
+                    color: AppColors.trustBlueDark,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
                 ),
+                const SizedBox(height: 8),
+                ..._buildMedicines(context, state),
+              ],
             ],
           ),
         );
@@ -356,11 +379,12 @@ class _VaultScreenState extends State<VaultScreen> {
 
   List<Widget> _buildMedicines(BuildContext context, VaultState state) {
     final l = AppLocalizations.of(context);
-    if (state.prescriptions.isEmpty) {
+    final history = state.historyMedicines;
+    if (history.isEmpty) {
       return [EmptyHint(l.t('noMedicines'))];
     }
     return [
-      for (final p in state.prescriptions)
+      for (final p in history)
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: SoftCard(

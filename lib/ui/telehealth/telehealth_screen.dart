@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -9,8 +9,6 @@ import 'package:uuid/uuid.dart';
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/notification/notification_cubit.dart';
 import '../../core/theme/app_colors.dart';
-import '../../data/catalogs/sample_prescriptions.dart';
-import '../../data/models/app_notification.dart';
 import '../../data/models/user_profile.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/repositories/health_repository.dart';
@@ -28,17 +26,17 @@ class TelehealthScreen extends StatefulWidget {
 
 class _TelehealthScreenState extends State<TelehealthScreen> {
   static const _doctorName = 'Dr. Aruni Perera';
-  static const _clinicName = 'Lanka GP Care Â· Durdans Teleclinic';
+  static const _clinicName = 'Lanka GP Care · Durdans Teleclinic';
 
   final _noteCtrl = TextEditingController();
   final _aiCtrl = TextEditingController();
   final _notes = <String>[
     'Rest for 2 days. Avoid cold beverages and direct cold drafts.',
     'Monitor body temperature every 4 hours. Keep a log.',
-    'Take Paracetamol only if temperature exceeds 38Â°C / 100Â°F.',
-    'Drink warm fluids regularly â€” aim for 2â€“3 litres of water daily.',
+    'Take Paracetamol only if temperature exceeds 38°C / 100°F.',
+    'Drink warm fluids regularly — aim for 2–3 litres of water daily.',
     'Wash hands before meals and after returning home.',
-    'Sleep 7â€“8 hours; elevate your head if coughing at night.',
+    'Sleep 7–8 hours; elevate your head if coughing at night.',
     'Avoid self-medicating antibiotics without clinician advice.',
     'If breathing worsens or fever lasts >3 days, seek urgent care.',
   ];
@@ -265,34 +263,30 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     final health = context.read<HealthRepository>();
     final notifications = context.read<NotificationCubit>();
     final sid = sessionId ?? medicines.first.sessionId ?? _sessionId;
-    if (sid == null) {
-      await health.pushNotification(
-        AppNotification(
-          id: const Uuid().v4(),
-          title: 'Synced to MediLanka',
-          body:
-              'Sample e-prescription synced to MediLanka pharmacy web portal.',
-          timestamp: DateTime.now(),
-          type: NotificationPayloadType.sync,
-        ),
+
+    if (sid != null) {
+      await health.sendPrescriptionsToPharmacare(
+        patientId: user.id,
+        sessionId: sid,
       );
-      if (!mounted) return;
-      await notifications.load();
-      return;
+    } else {
+      await health.markPrescriptionsSentToPharmacy(
+        patientId: user.id,
+        medicines: medicines,
+      );
     }
-    await health.sendPrescriptionsToPharmacare(
-      patientId: user.id,
-      sessionId: sid,
-    );
     if (!mounted) return;
     await notifications.load();
     if (!mounted) return;
+    // After pharmacy send, remove from Call E-Prescription (moves to Vault history).
     setState(() {
-      if (_sessionId == sid) {
-        _sessionRx =
-            _sessionRx.map((p) => p.copyWith(sentToPharmacare: true)).toList();
-      }
+      _sessionRx = [];
+      _rxUpdating = false;
     });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppLocalizations.of(context).t('rxMovedToHistory'))),
+    );
   }
 
   Future<void> _openClinicPrescription({
@@ -351,8 +345,6 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     final l = AppLocalizations.of(context);
     final patientLabel = _patientLabel(context);
     final patient = context.watch<AuthCubit>().state.user;
-    final sent = _sessionRx.isNotEmpty &&
-        _sessionRx.every((p) => p.sentToPharmacare);
 
     return SafeArea(
       bottom: false,
@@ -405,7 +397,6 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
           _EPrescriptionCard(
             medicines: _sessionRx,
             updating: _rxUpdating,
-            mediLankaSynced: sent,
             patient: patient,
             doctorName: _doctorName,
             clinicName: _clinicName,
@@ -910,7 +901,6 @@ class _EPrescriptionCard extends StatelessWidget {
   const _EPrescriptionCard({
     required this.medicines,
     required this.updating,
-    required this.mediLankaSynced,
     required this.doctorName,
     required this.clinicName,
     required this.onOpenClinic,
@@ -919,7 +909,6 @@ class _EPrescriptionCard extends StatelessWidget {
 
   final List<Prescription> medicines;
   final bool updating;
-  final bool mediLankaSynced;
   final UserProfile? patient;
   final String doctorName;
   final String clinicName;
@@ -932,12 +921,13 @@ class _EPrescriptionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final first = medicines.isNotEmpty ? medicines.first : null;
+    final pending = medicines.where((m) => !m.sentToPharmacare).toList();
+    final first = pending.isNotEmpty ? pending.first : null;
     final issuedLabel = first?.issuedAt != null
-        ? DateFormat('d MMM yyyy Â· hh:mm a').format(first!.issuedAt!)
-        : 'â€”';
+        ? DateFormat('d MMM yyyy · hh:mm a').format(first!.issuedAt!)
+        : '—';
     final clinic = first?.clinicName ?? clinicName;
-    final samples = SamplePrescriptions.byClinic(patientId: patient?.id ?? 'sample');
+    final empty = pending.isEmpty && !updating;
 
     return Container(
       decoration: BoxDecoration(
@@ -991,90 +981,86 @@ class _EPrescriptionCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     Text(
-                      '${l.t('issuedDate')}: $issuedLabel',
+                      l.t('liveSessionRxOnly'),
                       style: const TextStyle(
                         color: AppColors.slateMuted,
                         fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        height: 1.35,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${l.t('medicalClinic')}:',
-                      style: const TextStyle(
-                        color: AppColors.slateMuted,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    if (updating)
+                    if (empty) ...[
+                      const SizedBox(height: 14),
                       Text(
-                        clinic,
+                        l.t('noPendingCallRx'),
                         style: const TextStyle(
-                          color: AppColors.trustBlueDark,
+                          color: AppColors.slateMuted,
                           fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                          fontStyle: FontStyle.italic,
                         ),
-                      )
-                    else
-                      MinTap(
-                        enforceMinSize: false,
-                        onTap: () => onOpenClinic(
-                          medicines,
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        '${l.t('issuedDate')}: $issuedLabel',
+                        style: const TextStyle(
+                          color: AppColors.slateMuted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${l.t('medicalClinic')}:',
+                        style: const TextStyle(
+                          color: AppColors.slateMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      if (updating)
+                        Text(
                           clinic,
-                          first?.doctor ?? doctorName,
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                clinic,
-                                style: const TextStyle(
-                                  color: AppColors.trustBlue,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                  decoration: TextDecoration.underline,
-                                  decorationColor: AppColors.trustBlue,
+                          style: const TextStyle(
+                            color: AppColors.trustBlueDark,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        )
+                      else
+                        MinTap(
+                          enforceMinSize: false,
+                          onTap: () => onOpenClinic(
+                            pending,
+                            clinic,
+                            first?.doctor ?? doctorName,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  clinic,
+                                  style: const TextStyle(
+                                    color: AppColors.trustBlue,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    decoration: TextDecoration.underline,
+                                    decorationColor: AppColors.trustBlue,
+                                  ),
                                 ),
                               ),
-                            ),
-                            const Icon(
-                              Icons.open_in_new,
-                              size: 16,
-                              color: AppColors.trustBlue,
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (mediLankaSynced) ...[
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.check_circle,
-                            color: AppColors.emerald,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              l.t('mediLankaSynced'),
-                              style: const TextStyle(
-                                color: AppColors.emerald,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
+                              const Icon(
+                                Icons.open_in_new,
+                                size: 16,
+                                color: AppColors.trustBlue,
                               ),
-                            ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    if (updating) ...[
-                      ...medicines.map(
+                        ),
+                      const SizedBox(height: 12),
+                      ...pending.map(
                         (m) => Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Container(
@@ -1136,137 +1122,40 @@ class _EPrescriptionCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: AppColors.trustBlueLight,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              l.t('doctorUpdatingRx'),
-                              style: const TextStyle(
-                                color: AppColors.slateMuted,
-                                fontStyle: FontStyle.italic,
-                                fontSize: 12,
+                      if (updating)
+                        Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: AppColors.trustBlueLight,
+                                shape: BoxShape.circle,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ] else ...[
-                      Text(
-                        l.t('tapClinicForRx'),
-                        style: const TextStyle(
-                          color: AppColors.slateMuted,
-                          fontSize: 12,
-                          height: 1.35,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ...medicines.take(2).map(
-                            (m) => Padding(
-                              padding: const EdgeInsets.only(bottom: 6),
+                            const SizedBox(width: 8),
+                            Expanded(
                               child: Text(
-                                'â€¢ ${m.medicine}',
+                                l.t('doctorUpdatingRx'),
                                 style: const TextStyle(
-                                  color: AppColors.trustBlueDark,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.slateMuted,
+                                  fontStyle: FontStyle.italic,
+                                  fontSize: 12,
                                 ),
                               ),
                             ),
-                          ),
-                    ],
-                    const SizedBox(height: 14),
-                    Text(
-                      l.t('sampleRxTitle'),
-                      style: const TextStyle(
-                        color: AppColors.trustBlueDark,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      l.t('sampleRxHint'),
-                      style: const TextStyle(
-                        color: AppColors.slateMuted,
-                        fontSize: 11,
-                        height: 1.3,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ...samples.entries.map((entry) {
-                      final sampleIssued = entry.value.first.issuedAt;
-                      final sampleDate = sampleIssued != null
-                          ? DateFormat('d MMM yyyy').format(sampleIssued)
-                          : 'â€”';
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: MinTap(
-                          enforceMinSize: false,
-                          onTap: () => onOpenClinic(
-                            entry.value,
-                            entry.key,
-                            entry.value.first.doctor,
-                          ),
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppColors.border),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${l.t('issuedDate')}: $sampleDate',
-                                  style: const TextStyle(
-                                    color: AppColors.slateMuted,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  entry.key,
-                                  style: const TextStyle(
-                                    color: AppColors.trustBlue,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w800,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  entry.value.first.doctor,
-                                  style: const TextStyle(
-                                    color: AppColors.trustBlueDark,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                Text(
-                                  '${entry.value.length} ${l.t('rxItemsPrinted')}',
-                                  style: const TextStyle(
-                                    color: AppColors.slateMuted,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
+                          ],
+                        )
+                      else
+                        Text(
+                          l.t('tapClinicForRx'),
+                          style: const TextStyle(
+                            color: AppColors.slateMuted,
+                            fontSize: 12,
+                            height: 1.35,
                           ),
                         ),
-                      );
-                    }),
+                    ],
                   ],
                 ),
               ),

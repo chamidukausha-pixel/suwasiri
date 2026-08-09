@@ -652,10 +652,99 @@ class AppLocalizations {
       'si': 'නිකුත් කළ බෙහෙත්',
       'ta': 'வழங்கப்பட்ட மருந்துகள்',
     },
+    'issuedMedicalHistory': {
+      'en': 'Issued Medical History',
+      'si': 'නිකුත් කළ වෛද්‍ය ඉතිහාසය',
+      'ta': 'வழங்கப்பட்ட மருத்துவ வரலாறு',
+    },
+    'patientHealthTreatmentHistory': {
+      'en': 'Patient Health & Treatment History',
+      'si': 'රෝගී සෞඛ්‍ය හා ප්‍රතිකාර ඉතිහාසය',
+      'ta': 'நோயாளி சுகாதார & சிகிச்சை வரலாறு',
+    },
+    'patientHealthHint': {
+      'en':
+          'Active medicines from in-person or video visits, lab reports, and vaccine records. Sending an e-Rx to MediLanka moves it to Issued Medical History.',
+      'si':
+          'සායන හෝ වීඩියෝ සංචාරවලින් සක්‍රීය බෙහෙත්, රසායනාගාර වාර්තා සහ එන්නත්. MediLanka වෙත යැවූ පසු Issued Medical History වෙත යයි.',
+      'ta':
+          'நேரில்/வீடியோ மருந்துகள், ஆய்வக அறிக்கைகள், தடுப்பூசிகள். MediLanka அனுப்பிய பின் Issued Medical Historyக்கு செல்லும்.',
+    },
+    'vaccineHistory': {
+      'en': 'Vaccine History',
+      'si': 'එන්නත් ඉතිහාසය',
+      'ta': 'தடுப்பூசி வரலாறு',
+    },
+    'treatmentNotes': {
+      'en': 'Doctor notes & treatments',
+      'si': 'වෛද්‍ය සටහන් හා ප්‍රතිකාර',
+      'ta': 'மருத்துவர் குறிப்புகள் & சிகிச்சைகள்',
+    },
+    'liveSessionRxOnly': {
+      'en': 'Only e-prescriptions issued during this video consultation.',
+      'si': 'මෙම වීඩියෝ උපදේශනයේදී නිකුත් කළ ඊ-වට්ටෝරු පමණි.',
+      'ta': 'இந்த வீடியோ ஆலோசனையில் வழங்கப்பட்ட மின் மருந்துச்சீட்டுகள் மட்டும்.',
+    },
+    'noPendingCallRx': {
+      'en':
+          'No pending e-prescription for this call. Sent scripts appear under Vault → Issued Medical History.',
+      'si':
+          'මෙම ඇමතුමට අපේක්ෂිත ඊ-වට්ටෝරුවක් නැත. යවන ලද ඒවා Vault → Issued Medical History යටතේය.',
+      'ta':
+          'இந்த அழைப்பிற்கு நிலுவை மின் மருந்துச்சீட்டு இல்லை. அனுப்பியவை Vault → Issued Medical History-இல்.',
+    },
+    'rxMovedToHistory': {
+      'en':
+          'Sent to MediLanka — removed from Call. Find it in Vault → Issued Medical History.',
+      'si':
+          'MediLanka වෙත යවන ලදී — Call වෙතින් ඉවත් විය. Vault → Issued Medical History බලන්න.',
+      'ta':
+          'MediLankaக்கு அனுப்பப்பட்டது — Call-இல் இருந்து நீக்கப்பட்டது. Vault → Issued Medical History பார்க்கவும்.',
+    },
+    'pendingPharmacyRx': {
+      'en': 'Pending pharmacy send',
+      'si': 'ඖෂධාගාරයට යැවීමට ඇත',
+      'ta': 'மருந்தகம் அனுப்ப நிலுவை',
+    },
+    'noPendingMedicines': {
+      'en': 'No pending medicines. In-person or call scripts appear here until sent to MediLanka.',
+      'si': 'අපේක්ෂිත බෙහෙත් නැත. MediLanka වෙත යවන තෙක් සායන/ඇමතුම් වට්ටෝරු මෙහි පෙනේ.',
+      'ta': 'நிலுவை மருந்துகள் இல்லை. MediLanka அனுப்பும் வரை இங்கே தோன்றும்.',
+    },
+    'noVaccineHistory': {
+      'en': 'No vaccine history yet.',
+      'si': 'එන්නත් ඉතිහාසයක් නැත.',
+      'ta': 'தடுப்பூசி வரலாறு இல்லை.',
+    },
+    'vaccineDetailTitle': {
+      'en': 'Vaccine record',
+      'si': 'එන්නත් වාර්තාව',
+      'ta': 'தடுப்பூசி பதிவு',
+    },
+    'labReportDetail': {
+      'en': 'Lab report',
+      'si': 'රසායනාගාර වාර්තාව',
+      'ta': 'ஆய்வக அறிக்கை',
+    },
+    'issuedByLabel': {
+      'en': 'Issued by',
+      'si': 'නිකුත් කළේ',
+      'ta': 'வழங்கியவர்',
+    },
+    'batchCode': {
+      'en': 'Batch',
+      'si': 'කණ්ඩායම් කේතය',
+      'ta': 'தொகுப்பு',
+    },
     'labReports': {
       'en': 'Lab Reports',
       'si': 'රසායනාගාර වාර්තා',
       'ta': 'ஆய்வக அறிக்கைகள்',
+    },
+    'noReports': {
+      'en': 'No lab reports yet.',
+      'si': 'රසායනාගාර වාර්තා නැත.',
+      'ta': 'ஆய்வக அறிக்கைகள் இல்லை.',
     },
     'recordsCount': {
       'en': '{count} Records',

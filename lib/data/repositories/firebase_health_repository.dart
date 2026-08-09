@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../catalogs/doctor_catalog.dart';
-import '../catalogs/sample_prescriptions.dart';
+import '../catalogs/patient_health_samples.dart';
 import '../models/app_notification.dart';
 import '../models/appointment.dart';
 import '../models/sos_location.dart';
@@ -90,65 +90,7 @@ class FirebaseHealthRepository implements HealthRepository {
         .toList()
       ..sort((a, b) => b.date.compareTo(a.date));
     if (list.isNotEmpty) return list;
-    return _sampleVault(patientId);
-  }
-
-  List<VaultReport> _sampleVault(String patientId) {
-    return [
-      VaultReport(
-        id: 'sample-hba1c',
-        patientId: patientId,
-        title: 'LankaLab: Glycated Hemoglobin (HbA1c)',
-        issuedBy: 'LankaLab',
-        date: DateTime(2026, 6, 13),
-        category: 'Blood Work',
-        facility: 'LankaLab Central',
-        fileSizeMb: 1.6,
-        kind: VaultRecordKind.upload,
-        metrics: const [
-          MetricReading(name: 'HbA1c', value: '5.9%', status: 'attention'),
-        ],
-      ),
-      VaultReport(
-        id: 'sample-fbc',
-        patientId: patientId,
-        title: 'Full Blood Count (FBC)',
-        issuedBy: 'LankaLab',
-        date: DateTime(2023, 10, 12),
-        category: 'Hematology',
-        facility: 'Lanka Hospitals PLC',
-        requestedBy: 'Dr. S. Perera',
-        kind: VaultRecordKind.lab,
-        metrics: const [
-          MetricReading(name: 'Hemoglobin', value: '13.8 g/dL', status: 'normal'),
-          MetricReading(name: 'WBC', value: '6.2 ×10⁹/L', status: 'normal'),
-        ],
-      ),
-      VaultReport(
-        id: 'sample-flu',
-        patientId: patientId,
-        title: 'Influenza Vaccine (Seasonal)',
-        issuedBy: 'MOH',
-        date: DateTime(2023, 9, 22),
-        facility: 'National Hospital of Sri Lanka',
-        kind: VaultRecordKind.vaccine,
-        batchCode: 'IN-044-L',
-      ),
-      VaultReport(
-        id: 'sample-lipid',
-        patientId: patientId,
-        title: 'Lipid Profile',
-        issuedBy: 'LankaLab',
-        date: DateTime(2023, 9, 15),
-        facility: 'Asiri Medical Hospital',
-        requestedBy: 'Dr. M. Silva',
-        kind: VaultRecordKind.lab,
-        metrics: const [
-          MetricReading(name: 'LDL', value: '118 mg/dL', status: 'attention'),
-          MetricReading(name: 'HDL', value: '52 mg/dL', status: 'normal'),
-        ],
-      ),
-    ];
+    return PatientHealthSamples.sampleLabReports(patientId: patientId);
   }
 
   @override
@@ -158,12 +100,22 @@ class FirebaseHealthRepository implements HealthRepository {
     final list = snap.docs
         .map((d) => Prescription.fromMap(d.id, d.data()))
         .where((p) => p.active)
-        .toList()
-      ..sort((a, b) => (b.issuedAt ?? DateTime(0))
-          .compareTo(a.issuedAt ?? DateTime(0)));
-    if (list.isNotEmpty) return list;
-    // Sample reference e-Rx until the patient has live issued scripts.
-    return SamplePrescriptions.referenceSamples(patientId: patientId);
+        .toList();
+    final samples =
+        PatientHealthSamples.allSamplePrescriptions(patientId: patientId);
+    if (list.isEmpty) {
+      return samples
+        ..sort((a, b) => (b.issuedAt ?? DateTime(0))
+            .compareTo(a.issuedAt ?? DateTime(0)));
+    }
+    final byId = {for (final p in list) p.id: p};
+    final merged = <Prescription>[
+      ...list,
+      for (final s in samples)
+        if (!byId.containsKey(s.id)) s,
+    ]..sort((a, b) =>
+        (b.issuedAt ?? DateTime(0)).compareTo(a.issuedAt ?? DateTime(0)));
+    return merged;
   }
 
   @override
@@ -234,6 +186,31 @@ class FirebaseHealthRepository implements HealthRepository {
         title: 'Synced to MediLanka',
         body:
             'E-prescription forwarded to MediLanka pharmacy web portal for Sri Lankan dispensing.',
+        timestamp: DateTime.now(),
+        type: NotificationPayloadType.sync,
+      ),
+    );
+  }
+
+  @override
+  Future<void> markPrescriptionsSentToPharmacy({
+    required String patientId,
+    required List<Prescription> medicines,
+  }) async {
+    for (final rx in medicines) {
+      final updated = rx.copyWith(
+        patientId: patientId,
+        sentToPharmacare: true,
+        updating: false,
+      );
+      await _prescriptions.doc(rx.id).set(updated.toMap(), SetOptions(merge: true));
+    }
+    await pushNotification(
+      AppNotification(
+        id: _uuid.v4(),
+        title: 'Synced to MediLanka',
+        body:
+            'E-prescription moved to Issued Medical History after MediLanka pharmacy sync.',
         timestamp: DateTime.now(),
         type: NotificationPayloadType.sync,
       ),

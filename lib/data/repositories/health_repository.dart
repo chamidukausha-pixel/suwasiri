@@ -17,10 +17,16 @@ abstract class HealthRepository {
     required String sessionId,
   });
 
-  /// Forward session Rx lines to the PharmaCare pharmacist portal.
+  /// Forward session Rx lines to the MediLanka / PharmaCare pharmacist portal.
   Future<void> sendPrescriptionsToPharmacare({
     required String patientId,
     required String sessionId,
+  });
+
+  /// Mark specific prescriptions as sent to MediLanka (moves to Issued Medical History).
+  Future<void> markPrescriptionsSentToPharmacy({
+    required String patientId,
+    required List<Prescription> medicines,
   });
 
   Future<List<VaccineProtocol>> getVaccineProtocols(String patientId);

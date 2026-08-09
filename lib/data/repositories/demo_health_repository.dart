@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../catalogs/doctor_catalog.dart';
-import '../catalogs/sample_prescriptions.dart';
+import '../catalogs/patient_health_samples.dart';
 import '../models/app_notification.dart';
 import '../models/appointment.dart';
 import '../models/sos_location.dart';
@@ -217,9 +217,18 @@ class DemoHealthRepository implements HealthRepository {
 
   @override
   Future<List<Prescription>> getPrescriptions(String patientId) async {
-    final mine = _rxMemory.where((p) => p.patientId == patientId && p.active);
-    if (mine.isNotEmpty) return mine.toList();
-    return SamplePrescriptions.referenceSamples(patientId: patientId);
+    final mine =
+        _rxMemory.where((p) => p.patientId == patientId && p.active).toList();
+    final samples =
+        PatientHealthSamples.allSamplePrescriptions(patientId: patientId);
+    if (mine.isEmpty) return samples;
+    final byId = {for (final p in mine) p.id: p};
+    return [
+      ...mine,
+      for (final s in samples)
+        if (!byId.containsKey(s.id)) s,
+    ]..sort((a, b) =>
+        (b.issuedAt ?? DateTime(0)).compareTo(a.issuedAt ?? DateTime(0)));
   }
 
   @override
@@ -288,6 +297,39 @@ class DemoHealthRepository implements HealthRepository {
         title: 'Synced to MediLanka',
         body:
             'E-prescription forwarded to MediLanka pharmacy web portal for Sri Lankan dispensing.',
+        timestamp: DateTime.now(),
+        type: NotificationPayloadType.sync,
+      ),
+    );
+  }
+
+  @override
+  Future<void> markPrescriptionsSentToPharmacy({
+    required String patientId,
+    required List<Prescription> medicines,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    final byId = {for (final m in medicines) m.id: m};
+    _rxMemory = [
+      for (final p in _rxMemory)
+        if (byId.containsKey(p.id))
+          p.copyWith(sentToPharmacare: true, updating: false)
+        else
+          p,
+      for (final m in medicines)
+        if (!_rxMemory.any((p) => p.id == m.id))
+          m.copyWith(
+            patientId: patientId,
+            sentToPharmacare: true,
+            updating: false,
+          ),
+    ];
+    await pushNotification(
+      AppNotification(
+        id: _uuid.v4(),
+        title: 'Synced to MediLanka',
+        body:
+            'E-prescription moved to Issued Medical History after MediLanka pharmacy sync.',
         timestamp: DateTime.now(),
         type: NotificationPayloadType.sync,
       ),
