@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/notification/notification_cubit.dart';
 import '../../core/theme/app_colors.dart';
+import '../../data/catalogs/patient_health_samples.dart';
 import '../../data/models/user_profile.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/repositories/health_repository.dart';
@@ -1156,6 +1157,97 @@ class _EPrescriptionCard extends StatelessWidget {
                           ),
                         ),
                     ],
+                    const SizedBox(height: 14),
+                    Text(
+                      l.t('sampleRxTitle'),
+                      style: const TextStyle(
+                        color: AppColors.trustBlueDark,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      l.t('sampleRxHint'),
+                      style: const TextStyle(
+                        color: AppColors.slateMuted,
+                        fontSize: 11,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...() {
+                      final samples = PatientHealthSamples.pendingMedicines(
+                        patientId: patient?.id ?? 'sample',
+                      );
+                      final byClinic = <String, List<Prescription>>{};
+                      for (final p in samples) {
+                        byClinic.putIfAbsent(p.clinicName, () => []).add(p);
+                      }
+                      return byClinic.entries.map((entry) {
+                        final sampleIssued = entry.value.first.issuedAt;
+                        final sampleDate = sampleIssued != null
+                            ? DateFormat('d MMM yyyy').format(sampleIssued)
+                            : '—';
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: MinTap(
+                            enforceMinSize: false,
+                            onTap: () => onOpenClinic(
+                              entry.value,
+                              entry.key,
+                              entry.value.first.doctor,
+                            ),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${l.t('issuedDate')}: $sampleDate',
+                                    style: const TextStyle(
+                                      color: AppColors.slateMuted,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    entry.key,
+                                    style: const TextStyle(
+                                      color: AppColors.trustBlue,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                  Text(
+                                    entry.value.first.doctor,
+                                    style: const TextStyle(
+                                      color: AppColors.trustBlueDark,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${entry.value.length} ${l.t('rxItemsPrinted')}',
+                                    style: const TextStyle(
+                                      color: AppColors.slateMuted,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      });
+                    }(),
                   ],
                 ),
               ),

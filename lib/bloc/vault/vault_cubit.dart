@@ -121,12 +121,31 @@ class VaultCubit extends Cubit<VaultState> {
 
   Future<void> load(String patientId) async {
     emit(state.copyWith(loading: true));
-    final reports = await _health.getVaultReports(patientId);
-    final rx = await _health.getPrescriptions(patientId);
+
+    List<VaultReport> reports = const [];
+    List<Prescription> rx = const [];
+    try {
+      reports = await _health.getVaultReports(patientId);
+      rx = await _health.getPrescriptions(patientId);
+    } catch (_) {
+      // Still show curated Vault samples if network/Firestore fails.
+    }
+
+    final sampleRx =
+        PatientHealthSamples.allSamplePrescriptions(patientId: patientId);
     final sampleLabs =
         PatientHealthSamples.sampleLabReports(patientId: patientId);
+
+    final rxById = {for (final p in rx) p.id: p};
+    final mergedRx = <Prescription>[
+      ...rx,
+      for (final s in sampleRx)
+        if (!rxById.containsKey(s.id)) s,
+    ]..sort((a, b) =>
+        (b.issuedAt ?? DateTime(0)).compareTo(a.issuedAt ?? DateTime(0)));
+
     final reportIds = {for (final r in reports) r.id};
-    final mergedReports = [
+    final mergedReports = <VaultReport>[
       ...reports,
       for (final s in sampleLabs)
         if (!reportIds.contains(s.id)) s,
@@ -134,11 +153,14 @@ class VaultCubit extends Cubit<VaultState> {
 
     emit(state.copyWith(
       reports: mergedReports,
-      prescriptions: rx,
+      prescriptions: mergedRx,
       treatmentNotes:
-          PatientHealthSamples.treatmentNotes(patientId: patientId),
-      vaccineHistory:
-          PatientHealthSamples.vaccineHistory(patientId: patientId),
+          List<TreatmentNote>.from(
+            PatientHealthSamples.treatmentNotes(patientId: patientId),
+          ),
+      vaccineHistory: List<VaccineHistoryEntry>.from(
+        PatientHealthSamples.vaccineHistory(patientId: patientId),
+      ),
       loading: false,
     ));
   }
@@ -150,45 +172,33 @@ class VaultCubit extends Cubit<VaultState> {
 
   Future<void> syncLankaLab(String patientId) async {
     emit(state.copyWith(syncingLankaLab: true));
-    await _health.syncLankaLab(patientId);
-    final reports = await _health.getVaultReports(patientId);
-    final sampleLabs =
-        PatientHealthSamples.sampleLabReports(patientId: patientId);
-    final reportIds = {for (final r in reports) r.id};
-    final mergedReports = [
-      ...reports,
-      for (final s in sampleLabs)
-        if (!reportIds.contains(s.id)) s,
-    ]..sort((a, b) => b.date.compareTo(a.date));
-    emit(state.copyWith(
-      reports: mergedReports,
-      syncingLankaLab: false,
-      lankaLabSynced: true,
-    ));
+    try {
+      await _health.syncLankaLab(patientId);
+    } catch (_) {}
+    await load(patientId);
+    emit(state.copyWith(syncingLankaLab: false, lankaLabSynced: true));
   }
 
   Future<void> syncGpCare(String patientId) async {
     emit(state.copyWith(syncingGpCare: true));
-    await _health.syncGpCare(patientId);
-    final rx = await _health.getPrescriptions(patientId);
-    emit(state.copyWith(
-      prescriptions: rx,
-      syncingGpCare: false,
-      gpCareSynced: true,
-    ));
+    try {
+      await _health.syncGpCare(patientId);
+    } catch (_) {}
+    await load(patientId);
+    emit(state.copyWith(syncingGpCare: false, gpCareSynced: true));
   }
 
   Future<void> sendMedicinesToMediLanka({
     required String patientId,
     required List<Prescription> medicines,
   }) async {
-    await _health.markPrescriptionsSentToPharmacy(
-      patientId: patientId,
-      medicines: medicines,
-    );
-    final rx = await _health.getPrescriptions(patientId);
-    // If Firestore now has only the sent ones, merge history samples carefully.
-    emit(state.copyWith(prescriptions: rx));
+    try {
+      await _health.markPrescriptionsSentToPharmacy(
+        patientId: patientId,
+        medicines: medicines,
+      );
+    } catch (_) {}
+    await load(patientId);
   }
 
   void setFilter(VaultFilter filter) {

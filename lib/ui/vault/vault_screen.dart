@@ -28,7 +28,9 @@ class _VaultScreenState extends State<VaultScreen> {
   Future<void> _tryUnlock() async {
     final vault = context.read<VaultCubit>();
     final auth = context.read<AuthCubit>();
-    await vault.unlock(auth.unlockVault);
+    if (!vault.state.unlocked) {
+      await vault.unlock(auth.unlockVault);
+    }
     final user = auth.state.user;
     if (user != null && vault.state.unlocked) {
       await vault.load(user.id);
@@ -468,10 +470,10 @@ class _PortalSyncCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
       decoration: BoxDecoration(
         color: tint,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: border),
       ),
       child: Column(
@@ -480,80 +482,70 @@ class _PortalSyncCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 32,
-                height: 32,
+                width: 26,
+                height: 26,
                 decoration: BoxDecoration(
                   color: iconBg,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, size: 18, color: iconColor),
+                child: Icon(icon, size: 14, color: iconColor),
               ),
               const Spacer(),
               if (synced)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    l.t('synced'),
-                    style: TextStyle(
-                      color: iconColor,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 10,
-                    ),
+                Text(
+                  l.t('synced'),
+                  style: TextStyle(
+                    color: iconColor,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 9,
                   ),
                 ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             title,
-            maxLines: 2,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: iconColor == AppColors.trustBlue
                   ? AppColors.trustBlueDark
                   : AppColors.tipTeal,
               fontWeight: FontWeight.w800,
-              fontSize: 13,
+              fontSize: 12,
             ),
           ),
           Text(
             subtitle,
-            style: const TextStyle(
-              color: AppColors.slateMuted,
-              fontSize: 11,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            body,
-            maxLines: 4,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: AppColors.slateMuted,
-              fontSize: 11,
-              height: 1.35,
+              fontSize: 10,
             ),
           ),
-          const SizedBox(height: 10),
+          Text(
+            body,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.slateMuted,
+              fontSize: 9,
+            ),
+          ),
+          const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
-            child: FilledButton.icon(
+            height: 32,
+            child: FilledButton(
               onPressed: loading ? null : onSync,
               style: FilledButton.styleFrom(
                 backgroundColor: buttonColor,
                 foregroundColor: Colors.white,
-                minimumSize: const Size(0, 40),
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              icon: loading
+              child: loading
                   ? const SizedBox(
                       width: 14,
                       height: 14,
@@ -562,17 +554,13 @@ class _PortalSyncCard extends StatelessWidget {
                         color: Colors.white,
                       ),
                     )
-                  : const Icon(Icons.sync, size: 16),
-              label: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  buttonLabel,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
+                  : Text(
+                      buttonLabel,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 10,
+                      ),
+                    ),
             ),
           ),
         ],

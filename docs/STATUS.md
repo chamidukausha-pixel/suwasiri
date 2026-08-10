@@ -43,6 +43,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Call e-Rx = live session only (clears after MediLanka); Vault Patient Health & Treatment History + Issued Medical History
 - [x] Vault: E-Prescription above AI Lab; Issued Medical History with 4 colored categories (medicines/labs/vaccines/notes)
 - [x] Vault sample data expanded (e-Rx clinics, labs, vaccines, notes); Call section left unchanged
+- [x] Vault always seeds/falls back to sample Rx+labs+vaccines+notes; compact portal cards; Call sample e-Rx restored
 
 ## In progress / next
 

@@ -47,7 +47,11 @@ class VaultEPrescriptionSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final pending = state.pendingMedicines;
+    final patientId =
+        context.watch<AuthCubit>().state.user?.id ?? 'sample';
+    final pending = state.pendingMedicines.isNotEmpty
+        ? state.pendingMedicines
+        : PatientHealthSamples.pendingMedicines(patientId: patientId);
     final byClinic = <String, List<Prescription>>{};
     for (final p in pending) {
       byClinic.putIfAbsent(p.clinicName, () => []).add(p);
@@ -210,10 +214,20 @@ class IssuedMedicalHistorySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final history = state.historyMedicines;
-    final labs = state.labReports;
-    final vaccines = state.vaccineHistory;
-    final notes = state.treatmentNotes;
+    final patientId =
+        context.watch<AuthCubit>().state.user?.id ?? 'sample';
+    final history = state.historyMedicines.isNotEmpty
+        ? state.historyMedicines
+        : PatientHealthSamples.historyMedicines(patientId: patientId);
+    final labs = state.labReports.isNotEmpty
+        ? state.labReports
+        : PatientHealthSamples.sampleLabReports(patientId: patientId);
+    final vaccines = state.vaccineHistory.isNotEmpty
+        ? state.vaccineHistory
+        : PatientHealthSamples.vaccineHistory(patientId: patientId);
+    final notes = state.treatmentNotes.isNotEmpty
+        ? state.treatmentNotes
+        : PatientHealthSamples.treatmentNotes(patientId: patientId);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
