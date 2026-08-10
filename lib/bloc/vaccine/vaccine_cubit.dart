@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../data/catalogs/vaccine_catalog.dart';
 import '../../data/models/vaccine_models.dart';
 import '../../data/repositories/health_repository.dart';
 
@@ -10,10 +11,14 @@ class VaccineState extends Equatable {
     this.clinics = const [],
     this.slots = const [],
     this.lastSync,
-    this.district,
+    this.district = 'Colombo',
     this.facilityType = FacilityType.all,
     this.query = '',
+    this.immunizationTarget =
+        'Dengue Prevention (Dose 2) (Qdenga® Tetravalent Vaccine)',
     this.selectedClinic,
+    this.selectedDate,
+    this.selectedSlot,
     this.bookingStage,
     this.loading = false,
     this.message,
@@ -26,10 +31,35 @@ class VaccineState extends Equatable {
   final String? district;
   final FacilityType facilityType;
   final String query;
+  final String immunizationTarget;
   final ClinicFacility? selectedClinic;
+  final DateTime? selectedDate;
+  final DateTime? selectedSlot;
   final String? bookingStage;
   final bool loading;
   final String? message;
+
+  /// Unique calendar days from [slots].
+  List<DateTime> get availableDates {
+    final seen = <String>{};
+    final dates = <DateTime>[];
+    for (final s in slots) {
+      final key = '${s.year}-${s.month}-${s.day}';
+      if (seen.add(key)) {
+        dates.add(DateTime(s.year, s.month, s.day));
+      }
+    }
+    return dates;
+  }
+
+  /// Slots for [selectedDate].
+  List<DateTime> get slotsForSelectedDate {
+    final d = selectedDate;
+    if (d == null) return const [];
+    return slots
+        .where((s) => s.year == d.year && s.month == d.month && s.day == d.day)
+        .toList();
+  }
 
   VaccineState copyWith({
     List<VaccineProtocol>? protocols,
@@ -39,11 +69,16 @@ class VaccineState extends Equatable {
     String? district,
     FacilityType? facilityType,
     String? query,
+    String? immunizationTarget,
     ClinicFacility? selectedClinic,
+    DateTime? selectedDate,
+    DateTime? selectedSlot,
     String? bookingStage,
     bool? loading,
     String? message,
     bool clearClinic = false,
+    bool clearDate = false,
+    bool clearSlot = false,
     bool clearMessage = false,
   }) {
     return VaccineState(
@@ -54,7 +89,11 @@ class VaccineState extends Equatable {
       district: district ?? this.district,
       facilityType: facilityType ?? this.facilityType,
       query: query ?? this.query,
-      selectedClinic: clearClinic ? null : (selectedClinic ?? this.selectedClinic),
+      immunizationTarget: immunizationTarget ?? this.immunizationTarget,
+      selectedClinic:
+          clearClinic ? null : (selectedClinic ?? this.selectedClinic),
+      selectedDate: clearDate ? null : (selectedDate ?? this.selectedDate),
+      selectedSlot: clearSlot ? null : (selectedSlot ?? this.selectedSlot),
       bookingStage: bookingStage,
       loading: loading ?? this.loading,
       message: clearMessage ? null : (message ?? this.message),
@@ -70,7 +109,10 @@ class VaccineState extends Equatable {
         district,
         facilityType,
         query,
+        immunizationTarget,
         selectedClinic,
+        selectedDate,
+        selectedSlot,
         bookingStage,
         loading,
         message,
@@ -86,10 +128,17 @@ class VaccineCubit extends Cubit<VaccineState> {
     emit(state.copyWith(loading: true));
     await _health.syncMoh();
     final protocols = await _health.getVaccineProtocols(patientId);
+    final active = protocols
+        .where((p) => p.status != VaccineStatus.completed)
+        .toList();
     final sync = await _health.lastMohSync();
-    final clinics = await _health.getClinics();
+    final clinics = await _health.getClinics(
+      district: state.district,
+      type: state.facilityType,
+      query: state.query,
+    );
     emit(state.copyWith(
-      protocols: protocols,
+      protocols: active,
       clinics: clinics,
       lastSync: sync,
       loading: false,
@@ -102,7 +151,13 @@ class VaccineCubit extends Cubit<VaccineState> {
       type: state.facilityType,
       query: state.query,
     );
-    emit(state.copyWith(clinics: clinics));
+    emit(state.copyWith(
+      clinics: clinics,
+      clearClinic: true,
+      clearDate: true,
+      clearSlot: true,
+      slots: const [],
+    ));
   }
 
   void setDistrict(String? district) {
@@ -120,18 +175,87 @@ class VaccineCubit extends Cubit<VaccineState> {
     refreshClinics();
   }
 
+  void setImmunization(String target) {
+    emit(state.copyWith(immunizationTarget: target));
+  }
+
   Future<void> selectClinic(ClinicFacility clinic) async {
     final slots = await _health.getAvailableSlots(clinic.id);
-    emit(state.copyWith(selectedClinic: clinic, slots: slots));
+    final dates = <DateTime>[];
+    final seen = <String>{};
+    for (final s in slots) {
+      final key = '${s.year}-${s.month}-${s.day}';
+      if (seen.add(key)) {
+        dates.add(DateTime(s.year, s.month, s.day));
+      }
+    }
+    final firstDate = dates.isEmpty ? null : dates.first;
+    DateTime? firstSlot;
+    if (firstDate != null) {
+      for (final s in slots) {
+        if (s.year == firstDate.year &&
+            s.month == firstDate.month &&
+            s.day == firstDate.day) {
+          firstSlot = s;
+          break;
+        }
+      }
+    }
+    emit(state.copyWith(
+      selectedClinic: clinic,
+      slots: slots,
+      selectedDate: firstDate,
+      selectedSlot: firstSlot,
+      clearDate: firstDate == null,
+      clearSlot: firstSlot == null,
+    ));
+  }
+
+  void selectDate(DateTime date) {
+    final day = DateTime(date.year, date.month, date.day);
+    DateTime? first;
+    for (final s in state.slots) {
+      if (s.year == day.year && s.month == day.month && s.day == day.day) {
+        first = s;
+        break;
+      }
+    }
+    emit(state.copyWith(
+      selectedDate: day,
+      selectedSlot: first,
+      clearSlot: first == null,
+    ));
+  }
+
+  void selectSlot(DateTime slot) {
+    emit(state.copyWith(selectedSlot: slot));
+  }
+
+  void prepareBookingSheet() {
+    final matched = VaccineCatalog.immunizationTargets.firstWhere(
+      (t) => t.contains('Dengue Prevention (Dose 2)'),
+      orElse: () => VaccineCatalog.immunizationTargets.first,
+    );
+    emit(state.copyWith(
+      immunizationTarget: matched,
+      district: state.district?.isNotEmpty == true ? state.district : 'Colombo',
+      facilityType: FacilityType.all,
+      query: '',
+      clearClinic: true,
+      clearDate: true,
+      clearSlot: true,
+      slots: const [],
+    ));
+    refreshClinics();
   }
 
   Future<void> book({
     required String patientId,
-    required DateTime slot,
     required String ceylonHealthId,
   }) async {
     final clinic = state.selectedClinic;
-    if (clinic == null) return;
+    final slot = state.selectedSlot;
+    if (clinic == null || slot == null) return;
     emit(state.copyWith(bookingStage: '1. Handshake with MOH Portal…'));
     await Future<void>.delayed(const Duration(milliseconds: 350));
     emit(state.copyWith(bookingStage: '2. Verifying Ceylon Health ID…'));
@@ -148,6 +272,8 @@ class VaccineCubit extends Cubit<VaccineState> {
       bookingStage: null,
       message: 'Booked ${booking.facilityName}',
       clearClinic: true,
+      clearDate: true,
+      clearSlot: true,
       slots: const [],
     ));
   }

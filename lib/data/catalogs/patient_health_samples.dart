@@ -307,8 +307,70 @@ abstract final class PatientHealthSamples {
     ];
   }
 
+  /// Completed vaccines only — shown under Vault → Vaccine History
+  /// (not on the Vaccines main protocols list).
   static List<VaccineHistoryEntry> vaccineHistory({required String patientId}) {
     return [
+      VaccineHistoryEntry(
+        id: 'vh-bcg',
+        patientId: patientId,
+        vaccineName: 'BCG (at birth)',
+        batchCode: 'BCG-4412',
+        issuer: 'MOH / HNR',
+        facility: 'Teaching Hospital · Labour Ward',
+        date: DateTime.now().subtract(const Duration(days: 9800)),
+        doseLabel: 'Birth dose',
+      ),
+      VaccineHistoryEntry(
+        id: 'vh-hep-b-birth',
+        patientId: patientId,
+        vaccineName: 'Hepatitis B — Birth dose',
+        batchCode: 'HB-001',
+        issuer: 'MOH / HNR',
+        facility: 'Teaching Hospital · Labour Ward',
+        date: DateTime.now().subtract(const Duration(days: 9800)),
+        doseLabel: 'Birth dose',
+      ),
+      VaccineHistoryEntry(
+        id: 'vh-opv',
+        patientId: patientId,
+        vaccineName: 'OPV / IPV (Polio)',
+        batchCode: 'OPV-882',
+        issuer: 'MOH Clinic',
+        facility: 'MOH Clinic · Local Division',
+        date: DateTime.now().subtract(const Duration(days: 9000)),
+        doseLabel: 'Primary series complete',
+      ),
+      VaccineHistoryEntry(
+        id: 'vh-penta',
+        patientId: patientId,
+        vaccineName: 'Pentavalent (DTP-HepB-Hib)',
+        batchCode: 'PV-5510',
+        issuer: 'MOH / HNR',
+        facility: 'MOH Clinic · Local Division',
+        date: DateTime.now().subtract(const Duration(days: 8500)),
+        doseLabel: 'Dose 3 of 3',
+      ),
+      VaccineHistoryEntry(
+        id: 'vh-mmr',
+        patientId: patientId,
+        vaccineName: 'MMR (Measles, Mumps, Rubella)',
+        batchCode: 'MMR-3301',
+        issuer: 'HNR · MOH',
+        facility: 'MOH Clinic · Dehiwala',
+        date: DateTime.now().subtract(const Duration(days: 2200)),
+        doseLabel: 'Dose 2 of 2',
+      ),
+      VaccineHistoryEntry(
+        id: 'vh-je',
+        patientId: patientId,
+        vaccineName: 'Japanese Encephalitis (JE) — Live',
+        batchCode: 'JE-2104',
+        issuer: 'MOH / HNR',
+        facility: 'MOH Clinic · Kaduwela',
+        date: DateTime.now().subtract(const Duration(days: 1800)),
+        doseLabel: 'Primary dose',
+      ),
       VaccineHistoryEntry(
         id: 'vh-covid-3',
         patientId: patientId,
@@ -317,17 +379,17 @@ abstract final class PatientHealthSamples {
         issuer: 'HNR · Colombo Municipal Council',
         facility: 'CMC Vaccination Centre · Town Hall',
         date: DateTime.now().subtract(const Duration(days: 120)),
-        doseLabel: 'Booster dose',
+        doseLabel: 'Booster dose — completed',
       ),
       VaccineHistoryEntry(
         id: 'vh-flu',
         patientId: patientId,
-        vaccineName: 'Influenza (Seasonal)',
+        vaccineName: 'Influenza (Seasonal) 2025',
         batchCode: 'IF-2025-441',
         issuer: 'Nawaloka Hospital',
         facility: 'Nawaloka Preventive Health Unit',
         date: DateTime.now().subtract(const Duration(days: 200)),
-        doseLabel: 'Annual dose',
+        doseLabel: 'Annual dose — completed',
       ),
       VaccineHistoryEntry(
         id: 'vh-hep-b',
@@ -350,16 +412,6 @@ abstract final class PatientHealthSamples {
         doseLabel: 'Booster',
       ),
       VaccineHistoryEntry(
-        id: 'vh-mmr',
-        patientId: patientId,
-        vaccineName: 'MMR (Measles, Mumps, Rubella)',
-        batchCode: 'MMR-3301',
-        issuer: 'HNR · MOH',
-        facility: 'MOH Clinic · Dehiwala',
-        date: DateTime.now().subtract(const Duration(days: 2200)),
-        doseLabel: 'Dose 2 of 2',
-      ),
-      VaccineHistoryEntry(
         id: 'vh-dengue',
         patientId: patientId,
         vaccineName: 'Qdenga® Dengue (Dose 1)',
@@ -367,7 +419,7 @@ abstract final class PatientHealthSamples {
         issuer: 'Asiri Medical Hospital',
         facility: 'Asiri Medical · Vaccine Desk',
         date: DateTime.now().subtract(const Duration(days: 60)),
-        doseLabel: 'Dose 1 of 2',
+        doseLabel: 'Dose 1 of 2 — completed',
       ),
     ];
   }

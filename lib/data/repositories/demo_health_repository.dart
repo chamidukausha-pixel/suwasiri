@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../catalogs/doctor_catalog.dart';
 import '../catalogs/patient_health_samples.dart';
+import '../catalogs/vaccine_catalog.dart';
 import '../models/app_notification.dart';
 import '../models/appointment.dart';
 import '../models/sos_location.dart';
@@ -29,50 +30,7 @@ class DemoHealthRepository implements HealthRepository {
 
   List<Prescription> _rxMemory = [];
 
-  final _clinics = const [
-    ClinicFacility(
-      id: 'c1',
-      name: 'NHSL — National Hospital of Sri Lanka',
-      district: 'Colombo',
-      type: FacilityType.hospital,
-      address: 'Colombo 10',
-    ),
-    ClinicFacility(
-      id: 'c2',
-      name: 'Ragama Teaching Hospital',
-      district: 'Gampaha',
-      type: FacilityType.hospital,
-      address: 'Ragama',
-    ),
-    ClinicFacility(
-      id: 'c3',
-      name: 'MOH Colombo Council',
-      district: 'Colombo',
-      type: FacilityType.mohClinic,
-      address: 'Town Hall, Colombo',
-    ),
-    ClinicFacility(
-      id: 'c4',
-      name: 'MOH Kandy',
-      district: 'Kandy',
-      type: FacilityType.mohClinic,
-      address: 'Kandy Municipal Area',
-    ),
-    ClinicFacility(
-      id: 'c5',
-      name: 'Karapitiya Teaching Hospital',
-      district: 'Galle',
-      type: FacilityType.hospital,
-      address: 'Galle',
-    ),
-    ClinicFacility(
-      id: 'c6',
-      name: 'MOH Gampaha',
-      district: 'Gampaha',
-      type: FacilityType.mohClinic,
-      address: 'Gampaha Town',
-    ),
-  ];
+  List<ClinicFacility> get _clinics => VaccineCatalog.clinics;
 
   final _doctors = DoctorCatalog.doctors;
 
@@ -387,39 +345,7 @@ class DemoHealthRepository implements HealthRepository {
 
   @override
   Future<List<VaccineProtocol>> getVaccineProtocols(String patientId) async {
-    return [
-      VaccineProtocol(
-        id: 'v1',
-        name: 'Dengue Prevention (Dose 2)',
-        doseLabel: 'Dose 2 of 3',
-        productName: 'Qdenga® Tetravalent Vaccine',
-        progress: 0.60,
-        nextDue: DateTime.now().add(const Duration(days: 12)),
-        status: VaccineStatus.pending,
-        statusDetail: 'Schedule required',
-      ),
-      VaccineProtocol(
-        id: 'v2',
-        name: 'COVID-19 Booster Dose',
-        doseLabel: 'Completed',
-        productName: 'Comirnaty Pfizer-BioNTech Booster',
-        progress: 1.0,
-        nextDue: null,
-        status: VaccineStatus.completed,
-        statusDetail: 'All doses administered',
-      ),
-      VaccineProtocol(
-        id: 'v3',
-        name: 'Influenza (Flu Shot) Annual',
-        doseLabel: 'Dose 1 of 1',
-        productName: 'Influvac Tetra 2026 Season',
-        progress: 0.0,
-        nextDue: DateTime(2026, 7, 13),
-        status: VaccineStatus.scheduled,
-        statusDetail: 'Booked at clinic',
-        booked: true,
-      ),
-    ];
+    return VaccineCatalog.activeProtocols();
   }
 
   @override
@@ -440,10 +366,17 @@ class DemoHealthRepository implements HealthRepository {
   @override
   Future<List<DateTime>> getAvailableSlots(String facilityId) async {
     final now = DateTime.now();
-    return List.generate(6, (i) {
-      final day = now.add(Duration(days: i + 1));
-      return DateTime(day.year, day.month, day.day, 9 + (i % 3) * 2);
-    });
+    final dateOffsets = [1, 4, 6];
+    const hours = [8, 9, 10, 11, 13, 14, 15];
+    const minutes = [30, 30, 30, 30, 30, 30, 30];
+    final slots = <DateTime>[];
+    for (final offset in dateOffsets) {
+      final day = now.add(Duration(days: offset));
+      for (var i = 0; i < hours.length; i++) {
+        slots.add(DateTime(day.year, day.month, day.day, hours[i], minutes[i]));
+      }
+    }
+    return slots;
   }
 
   @override

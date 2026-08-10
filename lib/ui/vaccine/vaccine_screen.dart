@@ -5,13 +5,13 @@ import 'package:intl/intl.dart';
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/notification/notification_cubit.dart';
 import '../../bloc/vaccine/vaccine_cubit.dart';
-import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/app_notification.dart';
 import '../../data/models/vaccine_models.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/suwasiri_brand_header.dart';
+import 'vaccine_booking_sheet.dart';
 
 class VaccineScreen extends StatefulWidget {
   const VaccineScreen({super.key});
@@ -44,6 +44,7 @@ class _VaccineScreenState extends State<VaccineScreen> {
 
   Future<void> _openBookingSheet() async {
     final cubit = context.read<VaccineCubit>();
+    cubit.prepareBookingSheet();
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -51,147 +52,11 @@ class _VaccineScreenState extends State<VaccineScreen> {
       builder: (ctx) {
         return DraggableScrollableSheet(
           expand: false,
-          initialChildSize: 0.75,
-          minChildSize: 0.45,
-          maxChildSize: 0.95,
+          initialChildSize: 0.92,
+          minChildSize: 0.5,
+          maxChildSize: 0.98,
           builder: (_, scrollCtrl) {
-            return BlocBuilder<VaccineCubit, VaccineState>(
-              builder: (context, state) {
-                final l = AppLocalizations.of(context);
-                return ListView(
-                  controller: scrollCtrl,
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                  children: [
-                    Text(
-                      l.t('requestBookVaccine'),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 18,
-                        color: AppColors.trustBlueDark,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      key: ValueKey('district-${state.district ?? ''}'),
-                      initialValue:
-                          (state.district == null || state.district!.isEmpty)
-                              ? ''
-                              : state.district,
-                      decoration: InputDecoration(
-                        labelText: l.t('medicalDistrict'),
-                      ),
-                      items: [
-                        DropdownMenuItem(
-                          value: '',
-                          child: Text(l.t('allDistricts')),
-                        ),
-                        ...AppConstants.mohDistricts.map(
-                          (d) => DropdownMenuItem(value: d, child: Text(d)),
-                        ),
-                      ],
-                      onChanged: (v) => cubit
-                          .setDistrict(v == null || v.isEmpty ? null : v),
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      children: FacilityType.values.map((t) {
-                        final selected = state.facilityType == t;
-                        final label = switch (t) {
-                          FacilityType.all => l.t('allCategories'),
-                          FacilityType.mohClinic => 'MOH Clinic',
-                          FacilityType.hospital => 'Hospital',
-                        };
-                        return ChoiceChip(
-                          label: Text(label),
-                          selected: selected,
-                          onSelected: (_) => cubit.setType(t),
-                          selectedColor:
-                              AppColors.trustBlue.withValues(alpha: 0.15),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      decoration: InputDecoration(
-                        hintText: l.t('searchClinic'),
-                        prefixIcon: const Icon(Icons.search),
-                      ),
-                      onChanged: cubit.setQuery,
-                    ),
-                    const SizedBox(height: 12),
-                    if (state.loading)
-                      const Center(child: CircularProgressIndicator())
-                    else
-                      ...state.clinics.map(
-                        (c) => Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: SoftCard(
-                            onTap: () => cubit.selectClinic(c),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  c.type == FacilityType.hospital
-                                      ? Icons.local_hospital
-                                      : Icons.medical_services,
-                                  color: AppColors.trustBlue,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        c.name,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      Text('${c.district} · ${c.address}'),
-                                    ],
-                                  ),
-                                ),
-                                const Icon(Icons.chevron_right),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (state.selectedClinic != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        '${l.t('book')}: ${state.selectedClinic!.name}',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      if (state.bookingStage != null)
-                        SoftCard(child: Text(state.bookingStage!)),
-                      ...state.slots.map(
-                        (slot) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            DateFormat('EEE d MMM · HH:mm').format(slot),
-                          ),
-                          trailing: FilledButton(
-                            onPressed: () {
-                              final user =
-                                  context.read<AuthCubit>().state.user!;
-                              cubit.book(
-                                patientId: user.id,
-                                slot: slot,
-                                ceylonHealthId:
-                                    user.ceylonHealthId ?? 'CH-UNKNOWN',
-                              );
-                            },
-                            child: Text(l.t('reserve')),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                );
-              },
-            );
+            return VaccineBookingSheet(scrollController: scrollCtrl);
           },
         );
       },
@@ -215,14 +80,17 @@ class _VaccineScreenState extends State<VaccineScreen> {
         }
       },
       builder: (context, state) {
+        final activeProtocols = state.protocols
+            .where((p) => p.status != VaccineStatus.completed)
+            .toList();
         VaccineProtocol? dengue;
-        for (final p in state.protocols) {
+        for (final p in activeProtocols) {
           if (p.name.toLowerCase().contains('dengue')) {
             dengue = p;
             break;
           }
         }
-        dengue ??= state.protocols.isEmpty ? null : state.protocols.first;
+        dengue ??= activeProtocols.isEmpty ? null : activeProtocols.first;
         final syncTime = state.lastSync ?? DateTime.now();
 
         return SafeArea(
@@ -278,18 +146,35 @@ class _VaccineScreenState extends State<VaccineScreen> {
                   letterSpacing: 1.0,
                 ),
               ),
-              const SizedBox(height: 12),
-              ...state.protocols.map(
-                (p) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _ProtocolCard(
-                    protocol: p,
-                    onSchedule: p.status == VaccineStatus.pending
-                        ? _openBookingSheet
-                        : null,
-                  ),
+              const SizedBox(height: 6),
+              Text(
+                'Pending & scheduled doses only — completed vaccines are in Vault → Vaccine History.',
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 12,
+                  height: 1.35,
                 ),
               ),
+              const SizedBox(height: 12),
+              if (activeProtocols.isEmpty)
+                SoftCard(
+                  child: Text(
+                    'No pending or scheduled vaccines. Check Vault for completed history.',
+                    style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                  ),
+                )
+              else
+                ...activeProtocols.map(
+                  (p) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _ProtocolCard(
+                      protocol: p,
+                      onSchedule: p.status == VaccineStatus.pending
+                          ? _openBookingSheet
+                          : null,
+                    ),
+                  ),
+                ),
               SoftCard(
                 color: const Color(0xFFF1F5F9),
                 child: Row(

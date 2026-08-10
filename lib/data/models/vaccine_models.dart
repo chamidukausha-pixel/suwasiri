@@ -39,7 +39,7 @@ class VaccineProtocol extends Equatable {
       ];
 }
 
-enum FacilityType { all, mohClinic, hospital }
+enum FacilityType { all, mohClinic, hospital, privateHospital }
 
 class ClinicFacility extends Equatable {
   const ClinicFacility({
@@ -48,6 +48,8 @@ class ClinicFacility extends Equatable {
     required this.district,
     required this.type,
     required this.address,
+    this.hours = '',
+    this.priceLkr,
   });
 
   final String id;
@@ -55,9 +57,13 @@ class ClinicFacility extends Equatable {
   final String district;
   final FacilityType type;
   final String address;
+  final String hours;
+  /// Shown for private hospitals (LKR). MOH / public hospitals are subsidized.
+  final int? priceLkr;
 
   @override
-  List<Object?> get props => [id, name, district, type, address];
+  List<Object?> get props =>
+      [id, name, district, type, address, hours, priceLkr];
 }
 
 class VaccineBooking extends Equatable {
