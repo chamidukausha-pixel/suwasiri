@@ -40,8 +40,23 @@ abstract final class MapLauncher {
     BuildContext context, {
     required Doctor doctor,
   }) {
+    return showPlaceMapChoice(
+      context,
+      title: doctor.hospital,
+      address: doctor.placeLabel,
+      latitude: doctor.latitude,
+      longitude: doctor.longitude,
+    );
+  }
+
+  static Future<void> showPlaceMapChoice(
+    BuildContext context, {
+    required String title,
+    required String address,
+    double? latitude,
+    double? longitude,
+  }) {
     final l = AppLocalizations.of(context);
-    final address = doctor.placeLabel;
 
     return showModalBottomSheet<void>(
       context: context,
@@ -63,6 +78,15 @@ abstract final class MapLauncher {
               ),
               const SizedBox(height: 6),
               Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.trustBlueDark,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
                 address,
                 style: const TextStyle(
                   color: AppColors.slateMuted,
@@ -83,8 +107,8 @@ abstract final class MapLauncher {
                   Navigator.pop(ctx);
                   await openGoogleMaps(
                     address: address,
-                    latitude: doctor.latitude,
-                    longitude: doctor.longitude,
+                    latitude: latitude,
+                    longitude: longitude,
                   );
                 },
               ),
@@ -100,8 +124,8 @@ abstract final class MapLauncher {
                   Navigator.pop(ctx);
                   await openAppleMaps(
                     address: address,
-                    latitude: doctor.latitude,
-                    longitude: doctor.longitude,
+                    latitude: latitude,
+                    longitude: longitude,
                   );
                 },
               ),

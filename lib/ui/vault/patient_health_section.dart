@@ -8,6 +8,7 @@ import '../../bloc/vault/vault_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/catalogs/patient_health_samples.dart';
 import '../../data/models/vault_report.dart';
+import '../../data/services/prescription_export_service.dart';
 import '../../localization/app_localizations.dart';
 import '../telehealth/prescription_detail_sheet.dart';
 import '../widgets/common_widgets.dart';
@@ -817,104 +818,267 @@ Future<void> showLabReportDetailSheet({
   required BuildContext context,
   required VaultReport report,
 }) {
-  final l = AppLocalizations.of(context);
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (ctx) {
-      return Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          8,
-          20,
-          20 + MediaQuery.paddingOf(ctx).bottom,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l.t('labReportDetail'),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                  color: AppColors.trustBlueDark,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                report.title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 16,
-                  color: AppColors.trustBlueDark,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '${report.facility ?? report.issuedBy} · ${DateFormat('d MMM yyyy').format(report.date)}',
-                style: const TextStyle(color: AppColors.slateMuted, fontSize: 13),
-              ),
-              if (report.requestedBy != null) ...[
-                const SizedBox(height: 4),
+    builder: (ctx) => _LabReportDetailBody(report: report),
+  );
+}
+
+class _LabReportDetailBody extends StatefulWidget {
+  const _LabReportDetailBody({required this.report});
+
+  final VaultReport report;
+
+  @override
+  State<_LabReportDetailBody> createState() => _LabReportDetailBodyState();
+}
+
+class _LabReportDetailBodyState extends State<_LabReportDetailBody> {
+  final _question = TextEditingController();
+  String _language = 'English';
+  bool _aiOpen = false;
+
+  static const _langs = [
+    'English',
+    'Sinhala',
+    'Tamil',
+    'Simple English',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    context.read<VaultCubit>().selectReport(widget.report);
+  }
+
+  @override
+  void dispose() {
+    _question.dispose();
+    super.dispose();
+  }
+
+  Future<void> _download() async {
+    final user = context.read<AuthCubit>().state.user;
+    try {
+      await PrescriptionExportService.downloadLabReportPdf(
+        report: widget.report,
+        patient: user,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lab report ready to save / share')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Download failed: $e')),
+      );
+    }
+  }
+
+  Future<void> _askAi() async {
+    await context.read<VaultCubit>().askAi(
+          _question.text.trim(),
+          language: _language,
+        );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final report = widget.report;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        8,
+        20,
+        20 + MediaQuery.paddingOf(context).bottom,
+      ),
+      child: BlocBuilder<VaultCubit, VaultState>(
+        builder: (context, state) {
+          return SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Text(
-                  '${l.t('issuedByLabel')}: ${report.requestedBy}',
+                  l.t('labReportDetail'),
                   style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
                     color: AppColors.trustBlueDark,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ],
-              const SizedBox(height: 14),
-              ...report.metrics.map(
-                (m) => Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border),
+                const SizedBox(height: 10),
+                Text(
+                  report.title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                    color: AppColors.trustBlueDark,
                   ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          m.name,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${report.facility ?? report.issuedBy} · ${DateFormat('d MMM yyyy').format(report.date)}',
+                  style: const TextStyle(
+                    color: AppColors.slateMuted,
+                    fontSize: 13,
+                  ),
+                ),
+                if (report.requestedBy != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '${l.t('issuedByLabel')}: ${report.requestedBy}',
+                    style: const TextStyle(
+                      color: AppColors.trustBlueDark,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                ...report.metrics.map(
+                  (m) => Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            m.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.trustBlueDark,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          m.value,
                           style: const TextStyle(
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w800,
                             color: AppColors.trustBlueDark,
                           ),
                         ),
-                      ),
-                      Text(
-                        m.value,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.trustBlueDark,
+                        const SizedBox(width: 8),
+                        Text(
+                          m.status,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: m.status == 'normal'
+                                ? AppColors.emerald
+                                : AppColors.warning,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        m.status,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: m.status == 'normal'
-                              ? AppColors.emerald
-                              : AppColors.warning,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-      );
-    },
-  );
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _download,
+                        icon: const Icon(Icons.download_outlined),
+                        label: const Text('Download report'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => setState(() => _aiOpen = !_aiOpen),
+                        icon: const Icon(Icons.auto_awesome),
+                        label: Text(
+                          _aiOpen ? 'Hide AI' : 'AI Lab Assistant',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_aiOpen) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    'Explain in language',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                      color: AppColors.slateMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _langs.map((lang) {
+                      final selected = _language == lang;
+                      return ChoiceChip(
+                        label: Text(lang),
+                        selected: selected,
+                        onSelected: (_) => setState(() => _language = lang),
+                        selectedColor: AppColors.trustBlue,
+                        labelStyle: TextStyle(
+                          color: selected
+                              ? Colors.white
+                              : AppColors.trustBlueDark,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                        showCheckmark: false,
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _question,
+                    decoration: InputDecoration(
+                      hintText: l.t('aiExplainHint'),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton(
+                    onPressed: state.loading ? null : _askAi,
+                    child: Text(l.t('tryExplainNow')),
+                  ),
+                  if (state.loading) ...[
+                    const SizedBox(height: 12),
+                    const LinearProgressIndicator(),
+                  ],
+                  if (state.aiReply != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.trustBlueSoft,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        state.aiReply!,
+                        style: const TextStyle(
+                          color: AppColors.trustBlueDark,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
 }

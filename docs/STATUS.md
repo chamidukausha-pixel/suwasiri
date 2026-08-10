@@ -46,6 +46,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Vault always seeds/falls back to sample Rx+labs+vaccines+notes; compact portal cards; Call sample e-Rx restored
 - [x] Vaccines: pending/scheduled protocols only; completed → Vault Vaccine History; national booking sheet (all 25 districts, EPI-from-birth immunizations, Private Hospital + LKR prices)
 - [x] Profile: removed treatment history; Unique Health ID card (name/age/blood/NIC/barcode); first-login EN/SI/TA health questionnaire (editable in Profile)
+- [x] Home: removed doctor categories + My Lab Reports; upcoming maps sync + clinic name; Doctors: all districts → clinics/hospitals → doctors + maps; removed upcoming list; Vault lab AI+download; larger vaccine book CTA; greener Health ID card
 
 ## In progress / next
 

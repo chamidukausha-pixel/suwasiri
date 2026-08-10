@@ -1,6 +1,7 @@
 import '../models/appointment.dart';
+import '../../core/constants/app_constants.dart';
 
-/// Curated specialist directory for Doctors tab filters + catalog.
+/// Curated specialist directory + registered clinics/hospitals by district.
 abstract final class DoctorCatalog {
   static const categories = <String>[
     'All',
@@ -31,56 +32,25 @@ abstract final class DoctorCatalog {
 
   static final List<Doctor> doctors = _buildDoctors();
 
-  static const _hospitals = <(String, String, String, double, double, String)>[
-    (
-      'Durdans Hospital',
-      '3 Alfred Place, Colombo 03',
-      'Colombo',
-      6.9147,
-      79.8489,
-      'Mon–Thu · 09:30–12:00',
-    ),
-    (
-      'Asiri Central Hospital',
-      '114 Norris Canal Road, Colombo 10',
-      'Colombo',
-      6.9278,
-      79.8614,
-      'Tue–Sat · 10:00–14:00',
-    ),
-    (
-      'Nawaloka Hospitals',
-      '23 Deshamanya H K Dharmadasa Mawatha, Colombo 02',
-      'Colombo',
-      6.9219,
-      79.8535,
-      'Mon–Wed · 14:00–17:00',
-    ),
-    (
-      'Lanka Hospitals',
-      '578 Elvitigala Mawatha, Colombo 05',
-      'Colombo',
-      6.8915,
-      79.8763,
-      'Thu–Sat · 09:00–12:30',
-    ),
-    (
-      'Hemas Hospitals Wattala',
-      '389 Negombo Road, Wattala',
-      'Gampaha',
-      6.9892,
-      79.8914,
-      'Mon–Sat · 09:00–13:00',
-    ),
-    (
-      'Teaching Hospital Kandy',
-      'William Gopallawa Mawatha, Kandy',
-      'Kandy',
-      7.2906,
-      80.6337,
-      'Mon–Wed · 08:00–12:00',
-    ),
-  ];
+  static final List<CatalogFacility> facilities = _buildFacilities();
+
+  static Doctor? doctorById(String id) {
+    for (final d in doctors) {
+      if (d.id == id) return d;
+    }
+    return null;
+  }
+
+  static List<CatalogFacility> facilitiesInDistrict(String? district) {
+    if (district == null || district.isEmpty || district == 'All') {
+      return List<CatalogFacility>.from(facilities);
+    }
+    return facilities.where((f) => f.region == district).toList();
+  }
+
+  static List<Doctor> doctorsAtFacility(String facilityName) {
+    return doctors.where((d) => d.hospital == facilityName).toList();
+  }
 
   static const _namePool = <String>[
     'Dr. Aruni Perera',
@@ -154,15 +124,199 @@ abstract final class DoctorCatalog {
     'Dr. Thusitha Ranatunga',
   ];
 
+  /// Flagship hospitals (also used when assigning specialists).
+  static const _flagship = <(String, String, String, double, double, String)>[
+    (
+      'Durdans Hospital',
+      '3 Alfred Place, Colombo 03',
+      'Colombo',
+      6.9147,
+      79.8489,
+      'Mon–Thu · 09:30–12:00',
+    ),
+    (
+      'Asiri Central Hospital',
+      '114 Norris Canal Road, Colombo 10',
+      'Colombo',
+      6.9278,
+      79.8614,
+      'Tue–Sat · 10:00–14:00',
+    ),
+    (
+      'Nawaloka Hospitals',
+      '23 Deshamanya H K Dharmadasa Mawatha, Colombo 02',
+      'Colombo',
+      6.9219,
+      79.8535,
+      'Mon–Wed · 14:00–17:00',
+    ),
+    (
+      'Lanka Hospitals',
+      '578 Elvitigala Mawatha, Colombo 05',
+      'Colombo',
+      6.8915,
+      79.8763,
+      'Thu–Sat · 09:00–12:30',
+    ),
+    (
+      'NHSL — National Hospital of Sri Lanka',
+      'Regent Street, Colombo 10',
+      'Colombo',
+      6.9190,
+      79.8640,
+      'Mon–Fri · 08:00–14:00',
+    ),
+    (
+      'Hemas Hospitals Wattala',
+      '389 Negombo Road, Wattala',
+      'Gampaha',
+      6.9892,
+      79.8914,
+      'Mon–Sat · 09:00–13:00',
+    ),
+    (
+      'Ragama Teaching Hospital',
+      'Hospital Road, Ragama',
+      'Gampaha',
+      7.0270,
+      79.9220,
+      'Mon–Fri · 08:30–13:00',
+    ),
+    (
+      'Teaching Hospital Kandy',
+      'William Gopallawa Mawatha, Kandy',
+      'Kandy',
+      7.2906,
+      80.6337,
+      'Mon–Wed · 08:00–12:00',
+    ),
+    (
+      'Karapitiya Teaching Hospital',
+      'Karapitiya, Galle',
+      'Galle',
+      6.0670,
+      80.2260,
+      'Mon–Fri · 08:00–13:00',
+    ),
+    (
+      'Teaching Hospital Jaffna',
+      'Hospital Road, Jaffna',
+      'Jaffna',
+      9.6680,
+      80.0140,
+      'Mon–Fri · 08:00–12:30',
+    ),
+    (
+      'Teaching Hospital Batticaloa',
+      'Hospital Road, Batticaloa',
+      'Batticaloa',
+      7.7310,
+      81.6740,
+      'Mon–Fri · 08:30–12:30',
+    ),
+    (
+      'Teaching Hospital Anuradhapura',
+      'Hospital Junction, Anuradhapura',
+      'Anuradhapura',
+      8.3110,
+      80.4030,
+      'Mon–Fri · 08:00–13:00',
+    ),
+  ];
+
+  static List<CatalogFacility> _buildFacilities() {
+    final list = <CatalogFacility>[];
+    var i = 0;
+    for (final h in _flagship) {
+      list.add(
+        CatalogFacility(
+          id: 'fac-h-$i',
+          name: h.$1,
+          address: h.$2,
+          region: h.$3,
+          latitude: h.$4,
+          longitude: h.$5,
+          hours: h.$6,
+          type: FacilityKind.hospital,
+        ),
+      );
+      i++;
+    }
+
+    // District-registered MOH clinics + general hospitals for every district.
+    const coords = <String, (double, double)>{
+      'Colombo': (6.9271, 79.8612),
+      'Gampaha': (7.0917, 79.9999),
+      'Kalutara': (6.5854, 79.9607),
+      'Kandy': (7.2906, 80.6337),
+      'Matale': (7.4675, 80.6234),
+      'Nuwara Eliya': (6.9497, 80.7891),
+      'Galle': (6.0535, 80.2210),
+      'Matara': (5.9549, 80.5550),
+      'Hambantota': (6.1240, 81.1185),
+      'Jaffna': (9.6615, 80.0255),
+      'Kilinochchi': (9.3803, 80.3770),
+      'Mannar': (8.9810, 79.9040),
+      'Vavuniya': (8.7514, 80.4971),
+      'Mullaitivu': (9.2670, 80.8140),
+      'Batticaloa': (7.7310, 81.6747),
+      'Ampara': (7.2970, 81.6820),
+      'Trincomalee': (8.5874, 81.2152),
+      'Kurunegala': (7.4863, 80.3620),
+      'Puttalam': (8.0362, 79.8283),
+      'Anuradhapura': (8.3114, 80.4037),
+      'Polonnaruwa': (7.9403, 81.0188),
+      'Badulla': (6.9934, 81.0550),
+      'Monaragala': (6.8720, 81.3500),
+      'Ratnapura': (6.6828, 80.3992),
+      'Kegalle': (7.2513, 80.3464),
+    };
+
+    for (final district in AppConstants.mohDistricts) {
+      final c = coords[district] ?? (7.0, 80.0);
+      list.add(
+        CatalogFacility(
+          id: 'fac-moh-$district',
+          name: 'MOH Clinic, $district',
+          address: 'MOH Office, $district District',
+          region: district,
+          latitude: c.$1,
+          longitude: c.$2,
+          hours: 'Mon–Fri · 08:30–12:30',
+          type: FacilityKind.clinic,
+        ),
+      );
+      list.add(
+        CatalogFacility(
+          id: 'fac-gh-$district',
+          name: 'General Hospital, $district',
+          address: 'Hospital Road, $district',
+          region: district,
+          latitude: c.$1 + 0.01,
+          longitude: c.$2 + 0.01,
+          hours: 'Daily · 08:00–16:00',
+          type: FacilityKind.hospital,
+        ),
+      );
+    }
+
+    // Deduplicate by name (flagship may overlap district GH names).
+    final seen = <String>{};
+    return list.where((f) => seen.add(f.name)).toList();
+  }
+
   static List<Doctor> _buildDoctors() {
     final specialties = categories.where((c) => c != 'All').toList();
+    final hubs = facilities
+        .where((f) => f.type == FacilityKind.hospital)
+        .toList();
     final list = <Doctor>[];
     var nameIdx = 0;
     var id = 1;
 
     for (final specialty in specialties) {
       for (var slot = 0; slot < 3; slot++) {
-        final hospital = _hospitals[(id + slot) % _hospitals.length];
+        final hospital = hubs[(id + slot) % hubs.length];
         final name = _namePool[nameIdx % _namePool.length];
         nameIdx++;
         final years = 8 + ((id * 3 + slot) % 14);
@@ -174,12 +328,12 @@ abstract final class DoctorCatalog {
             id: 'd$id',
             name: name,
             specialty: specialty,
-            hospital: hospital.$1,
-            address: hospital.$2,
-            region: hospital.$3,
-            latitude: hospital.$4,
-            longitude: hospital.$5,
-            nextAvailable: hospital.$6,
+            hospital: hospital.name,
+            address: hospital.address,
+            region: hospital.region,
+            latitude: hospital.latitude,
+            longitude: hospital.longitude,
+            nextAvailable: hospital.hours,
             rating: double.parse(rating.clamp(4.5, 4.9).toStringAsFixed(1)),
             yearsExperience: years,
             feeLkr: fee,
@@ -190,6 +344,60 @@ abstract final class DoctorCatalog {
         id++;
       }
     }
+
+    // Ensure every district hospital/clinic has at least one GP for browseability.
+    var extra = 9000;
+    for (final f in facilities) {
+      final already = list.any((d) => d.hospital == f.name);
+      if (already) continue;
+      final name = _namePool[extra % _namePool.length];
+      list.add(
+        Doctor(
+          id: 'd$extra',
+          name: name,
+          specialty: f.type == FacilityKind.clinic
+              ? 'General Practitioner'
+              : 'General Practitioner',
+          hospital: f.name,
+          address: f.address,
+          region: f.region,
+          latitude: f.latitude,
+          longitude: f.longitude,
+          nextAvailable: f.hours,
+          rating: 4.6,
+          yearsExperience: 10,
+          feeLkr: 2000,
+          bio: 'Registered clinician at ${f.name}.',
+        ),
+      );
+      extra++;
+    }
     return list;
   }
+}
+
+enum FacilityKind { clinic, hospital }
+
+class CatalogFacility {
+  const CatalogFacility({
+    required this.id,
+    required this.name,
+    required this.address,
+    required this.region,
+    required this.latitude,
+    required this.longitude,
+    required this.hours,
+    required this.type,
+  });
+
+  final String id;
+  final String name;
+  final String address;
+  final String region;
+  final double latitude;
+  final double longitude;
+  final String hours;
+  final FacilityKind type;
+
+  String get placeLabel => '$name, $address, $region';
 }

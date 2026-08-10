@@ -112,15 +112,22 @@ class _VaccineScreenState extends State<VaccineScreen> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 14),
-              Align(
-                alignment: Alignment.centerRight,
+              SizedBox(
+                width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: _openBookingSheet,
                   style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 44),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    minimumSize: const Size.fromHeight(58),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
                   ),
-                  icon: const Icon(Icons.calendar_month, size: 18),
+                  icon: const Icon(Icons.calendar_month, size: 26),
                   label: Text(l.t('requestBookVaccine')),
                 ),
               ),

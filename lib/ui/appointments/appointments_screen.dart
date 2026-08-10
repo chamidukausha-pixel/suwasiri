@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
-import '../../bloc/auth/auth_cubit.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/map_launcher.dart';
 import '../../data/catalogs/doctor_catalog.dart';
@@ -23,12 +23,12 @@ class AppointmentsScreen extends StatefulWidget {
 class _AppointmentsScreenState extends State<AppointmentsScreen> {
   final _query = TextEditingController();
   List<Doctor> _doctors = [];
-  List<Appointment> _mine = [];
   bool _loading = true;
   String _region = 'All';
   String _category = 'All';
+  CatalogFacility? _selectedFacility;
 
-  static const _regions = ['All', 'Colombo', 'Gampaha', 'Kandy'];
+  static final _regions = ['All', ...AppConstants.mohDistricts];
   static const _categories = DoctorCatalog.categories;
 
   @override
@@ -39,31 +39,61 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
 
   Future<void> _refresh() async {
     final health = context.read<HealthRepository>();
-    final user = context.read<AuthCubit>().state.user;
     setState(() => _loading = true);
     final docs = await health.getDoctors(query: _query.text);
-    final appts =
-        user == null ? <Appointment>[] : await health.getAppointments(user.id);
     if (!mounted) return;
     setState(() {
       _doctors = docs;
-      _mine = appts;
       _loading = false;
     });
   }
 
-  List<Doctor> get _filtered {
-    return _doctors.where((d) {
-      final regionOk = _region == 'All' || d.region == _region;
-      final catOk = _category == 'All' || d.specialty == _category;
-      return regionOk && catOk;
-    }).toList();
+  List<CatalogFacility> get _facilities {
+    var list = DoctorCatalog.facilitiesInDistrict(_region);
+    final q = _query.text.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      list = list
+          .where(
+            (f) =>
+                f.name.toLowerCase().contains(q) ||
+                f.address.toLowerCase().contains(q) ||
+                f.region.toLowerCase().contains(q),
+          )
+          .toList();
+    }
+    return list;
+  }
+
+  List<Doctor> get _doctorsForView {
+    Iterable<Doctor> list = _doctors;
+    if (_selectedFacility != null) {
+      list = list.where((d) => d.hospital == _selectedFacility!.name);
+    } else if (_region != 'All') {
+      list = list.where((d) => d.region == _region);
+    }
+    if (_category != 'All') {
+      list = list.where((d) => d.specialty == _category);
+    }
+    final q = _query.text.trim().toLowerCase();
+    if (q.isNotEmpty && _selectedFacility == null) {
+      list = list.where(
+        (d) =>
+            d.name.toLowerCase().contains(q) ||
+            d.specialty.toLowerCase().contains(q) ||
+            d.hospital.toLowerCase().contains(q),
+      );
+    }
+    return list.toList();
   }
 
   Future<void> _book(Doctor doctor) async {
     await showBookingCheckoutFlow(context, doctor: doctor);
     if (!mounted) return;
     await _refresh();
+  }
+
+  void _openFacility(CatalogFacility facility) {
+    setState(() => _selectedFacility = facility);
   }
 
   @override
@@ -75,7 +105,8 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final filtered = _filtered;
+    final facilities = _facilities;
+    final doctors = _doctorsForView;
 
     return SafeArea(
       bottom: false,
@@ -104,86 +135,239 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
             category: _category,
             regions: _regions,
             categories: _categories,
-            onQueryChanged: (_) => _refresh(),
-            onRegionChanged: (v) => setState(() => _region = v),
+            onQueryChanged: (_) {
+              setState(() {});
+              _refresh();
+            },
+            onRegionChanged: (v) => setState(() {
+              _region = v;
+              _selectedFacility = null;
+            }),
             onCategoryChanged: (v) => setState(() => _category = v),
           ),
-          const SizedBox(height: 16),
-          const _ClinicsMapCard(),
-          if (_mine.isNotEmpty) ...[
-            const SizedBox(height: 20),
+          const SizedBox(height: 18),
+          if (_selectedFacility != null) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => setState(() => _selectedFacility = null),
+                icon: const Icon(Icons.arrow_back, size: 18),
+                label: Text(l.t('filterByRegion')),
+              ),
+            ),
+            _FacilityDetailCard(
+              facility: _selectedFacility!,
+              onOpenMaps: () => MapLauncher.showPlaceMapChoice(
+                context,
+                title: _selectedFacility!.name,
+                address: _selectedFacility!.placeLabel,
+                latitude: _selectedFacility!.latitude,
+                longitude: _selectedFacility!.longitude,
+              ),
+            ),
+            const SizedBox(height: 16),
             Text(
-              l.t('upcoming'),
+              l.t('resultsFound').replaceAll('{count}', '${doctors.length}'),
+              style: const TextStyle(
+                color: AppColors.slateMuted,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (doctors.isEmpty)
+              EmptyHint(l.t('noDoctorsFound'))
+            else
+              ...doctors.map(
+                (d) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _DoctorResultCard(
+                    doctor: d,
+                    onBook: () => _book(d),
+                  ),
+                ),
+              ),
+          ] else ...[
+            Text(
+              'Registered clinics & hospitals (${facilities.length})',
               style: const TextStyle(
                 color: AppColors.slateMuted,
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
-                letterSpacing: 1.1,
+                letterSpacing: 0.6,
               ),
             ),
             const SizedBox(height: 10),
-            ..._mine.map(
-              (a) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: SoftCard(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              a.doctorName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.trustBlueDark,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${a.specialty} · ${DateFormat('EEE d MMM · HH:mm').format(a.timeSlot)}',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ],
-                        ),
-                      ),
-                      StatusChip(
-                        label: a.token ?? a.status.name,
-                        color: AppColors.trustBlue,
-                      ),
-                    ],
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (facilities.isEmpty)
+              const EmptyHint('No clinics or hospitals in this district.')
+            else
+              ...facilities.map(
+                (f) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _FacilityListTile(
+                    facility: f,
+                    doctorCount:
+                        DoctorCatalog.doctorsAtFacility(f.name).length,
+                    onTap: () => _openFacility(f),
+                    onMap: () => MapLauncher.showPlaceMapChoice(
+                      context,
+                      title: f.name,
+                      address: f.placeLabel,
+                      latitude: f.latitude,
+                      longitude: f.longitude,
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
-          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+}
+
+class _FacilityListTile extends StatelessWidget {
+  const _FacilityListTile({
+    required this.facility,
+    required this.doctorCount,
+    required this.onTap,
+    required this.onMap,
+  });
+
+  final CatalogFacility facility;
+  final int doctorCount;
+  final VoidCallback onTap;
+  final VoidCallback onMap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isClinic = facility.type == FacilityKind.clinic;
+    return SoftCard(
+      onTap: onTap,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: isClinic
+                  ? const Color(0xFFEEF2FF)
+                  : const Color(0xFFECFDF5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              isClinic ? Icons.medical_services_outlined : Icons.local_hospital,
+              color: isClinic
+                  ? const Color(0xFF4F46E5)
+                  : const Color(0xFF059669),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  facility.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.trustBlueDark,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  facility.address,
+                  style: const TextStyle(
+                    color: AppColors.slateMuted,
+                    fontSize: 12,
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${facility.region} · ${isClinic ? 'Clinic' : 'Hospital'} · $doctorCount doctors',
+                  style: const TextStyle(
+                    color: AppColors.trustBlue,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Maps',
+            onPressed: onMap,
+            icon: const Icon(Icons.map_outlined, color: AppColors.trustBlue),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FacilityDetailCard extends StatelessWidget {
+  const _FacilityDetailCard({
+    required this.facility,
+    required this.onOpenMaps,
+  });
+
+  final CatalogFacility facility;
+  final VoidCallback onOpenMaps;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return SoftCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Text(
-            l.t('resultsFound').replaceAll('{count}', '${filtered.length}'),
+            facility.name,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 18,
+              color: AppColors.trustBlueDark,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            facility.address,
             style: const TextStyle(
               color: AppColors.slateMuted,
-              fontWeight: FontWeight.w600,
               fontSize: 13,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${facility.region} District · ${facility.hours}',
+            style: const TextStyle(
+              color: AppColors.slateMuted,
+              fontSize: 12,
             ),
           ),
           const SizedBox(height: 12),
-          if (_loading)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (filtered.isEmpty)
-            EmptyHint(l.t('noDoctorsFound'))
-          else
-            ...filtered.map(
-              (d) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _DoctorResultCard(
-                  doctor: d,
-                  onBook: () => _book(d),
-                ),
-              ),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onOpenMaps,
+              icon: const Icon(Icons.map_outlined),
+              label: Text(l.t('openClinicInMaps')),
             ),
+          ),
         ],
       ),
     );
@@ -329,221 +513,6 @@ class _SearchOptionsCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _ClinicsMapCard extends StatelessWidget {
-  const _ClinicsMapCard();
-
-  static const _pins = [
-    _MapPin('Durdans - Col 03', Alignment(-0.55, -0.35), Color(0xFF22C55E)),
-    _MapPin('Nawaloka - Col 02', Alignment(0.15, -0.55), Color(0xFFF59E0B)),
-    _MapPin('Asiri Central - Col 10', Alignment(0.45, 0.05), Color(0xFF60A5FA)),
-    _MapPin('Lanka Hosp - Col 05', Alignment(-0.1, 0.45), Color(0xFFA78BFA)),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0B1F3A), Color(0xFF071526)],
-        ),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l.t('liveClinicsMap'),
-                      style: const TextStyle(
-                        color: AppColors.onlineGreen,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 11,
-                        letterSpacing: 0.9,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      l.t('accreditedMap'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  l.t('sriLankaHub'),
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    fontWeight: FontWeight.w600,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Container(
-            height: 168,
-            decoration: BoxDecoration(
-              color: const Color(0xFF0A192F),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: CustomPaint(painter: _MapLinesPainter()),
-                  ),
-                  ..._pins.map(
-                    (pin) => Align(
-                      alignment: pin.alignment,
-                      child: _MapPinChip(label: pin.label, color: pin.color),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            l.t('mappedAddressRef'),
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.45),
-              fontWeight: FontWeight.w700,
-              fontSize: 10,
-              letterSpacing: 0.9,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            l.t('mappedAddresses'),
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
-              fontStyle: FontStyle.italic,
-              fontSize: 12,
-              height: 1.45,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MapPin {
-  const _MapPin(this.label, this.alignment, this.color);
-  final String label;
-  final Alignment alignment;
-  final Color color;
-}
-
-class _MapPinChip extends StatelessWidget {
-  const _MapPinChip({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.all(6),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: const Color(0xFF13233A),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MapLinesPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF1E3A5F)
-      ..strokeWidth = 1.2
-      ..style = PaintingStyle.stroke;
-
-    final path = Path()
-      ..moveTo(0, size.height * 0.35)
-      ..quadraticBezierTo(
-        size.width * 0.35,
-        size.height * 0.1,
-        size.width * 0.7,
-        size.height * 0.4,
-      )
-      ..quadraticBezierTo(
-        size.width * 0.9,
-        size.height * 0.55,
-        size.width,
-        size.height * 0.3,
-      );
-    canvas.drawPath(path, paint);
-
-    final path2 = Path()
-      ..moveTo(0, size.height * 0.7)
-      ..quadraticBezierTo(
-        size.width * 0.4,
-        size.height * 0.55,
-        size.width * 0.65,
-        size.height * 0.8,
-      )
-      ..quadraticBezierTo(
-        size.width * 0.85,
-        size.height * 0.95,
-        size.width,
-        size.height * 0.65,
-      );
-    canvas.drawPath(path2, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 /// Mobile-safe doctor card — vertical stack avoids the mockup overlap bugs.

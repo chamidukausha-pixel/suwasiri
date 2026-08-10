@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/map_launcher.dart';
+import '../../data/catalogs/doctor_catalog.dart';
 import '../../data/models/appointment.dart';
 import '../../data/models/vaccine_models.dart';
 import '../../data/repositories/health_repository.dart';
@@ -23,13 +25,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   Appointment? _nextAppt;
   VaccineProtocol? _vaccine;
-
-  static const _categories = [
-    'Cardiology',
-    'Pediatrics',
-    'Dermatology',
-    'Neurology',
-  ];
+  String? _nextHospital;
 
   @override
   void initState() {
@@ -50,10 +46,31 @@ class _HomeScreenState extends State<HomeScreen> {
           .toList()
         ..sort((a, b) => a.timeSlot.compareTo(b.timeSlot));
       _nextAppt = upcoming.isEmpty ? null : upcoming.first;
+      if (_nextAppt != null) {
+        final doc = DoctorCatalog.doctorById(_nextAppt!.doctorId);
+        _nextHospital = doc?.hospital;
+      } else {
+        _nextHospital = null;
+      }
       _vaccine = protocols.where((p) => p.progress < 1.0).isNotEmpty
           ? protocols.firstWhere((p) => p.progress < 1.0)
           : (protocols.isEmpty ? null : protocols.first);
     });
+  }
+
+  Future<void> _openAppointmentMaps() async {
+    final appt = _nextAppt;
+    if (appt == null) return;
+    final doctor = DoctorCatalog.doctorById(appt.doctorId);
+    if (doctor != null) {
+      await MapLauncher.showMapChoice(context, doctor: doctor);
+      return;
+    }
+    await MapLauncher.showPlaceMapChoice(
+      context,
+      title: appt.doctorName,
+      address: _nextHospital ?? appt.specialty,
+    );
   }
 
   @override
@@ -83,21 +100,6 @@ class _HomeScreenState extends State<HomeScreen> {
           _SearchField(
             hint: l.t('searchDoctors'),
             onTap: () => widget.onNavigate(1),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 38,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _categories.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 8),
-              itemBuilder: (context, i) {
-                return _CategoryChip(
-                  label: _categories[i],
-                  onTap: () => widget.onNavigate(1),
-                );
-              },
-            ),
           ),
           const SizedBox(height: 24),
           Text(
@@ -135,11 +137,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          _LabReportsTile(
-            label: l.t('myLabReports'),
-            onTap: () => widget.onNavigate(3),
-          ),
           const SizedBox(height: 24),
           Row(
             children: [
@@ -167,10 +164,11 @@ class _HomeScreenState extends State<HomeScreen> {
           if (_nextAppt != null)
             _UpcomingAppointmentCard(
               appointment: _nextAppt!,
+              hospitalName: _nextHospital,
               upcomingLabel: l.t('upcoming'),
               detailsLabel: l.t('viewDetailsMap'),
               inPersonLabel: l.t('inPerson'),
-              onDetails: () => widget.onNavigate(1),
+              onDetails: _openAppointmentMaps,
             )
           else
             SoftCard(
@@ -245,35 +243,6 @@ class _SearchField extends StatelessWidget {
   }
 }
 
-class _CategoryChip extends StatelessWidget {
-  const _CategoryChip({required this.label, required this.onTap});
-
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return MinTap(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.trustBlueSoft,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: AppColors.trustBlueDark,
-            fontWeight: FontWeight.w600,
-            fontSize: 13,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _QuickActionCard extends StatelessWidget {
   const _QuickActionCard({
     required this.icon,
@@ -336,60 +305,6 @@ class _QuickActionCard extends StatelessWidget {
   }
 }
 
-class _LabReportsTile extends StatelessWidget {
-  const _LabReportsTile({required this.label, required this.onTap});
-
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return MinTap(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.labBeige,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.description_outlined,
-                color: AppColors.labIcon,
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  color: AppColors.trustBlueDark,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15,
-                ),
-              ),
-            ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.slateMuted,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _UpcomingAppointmentCard extends StatelessWidget {
   const _UpcomingAppointmentCard({
     required this.appointment,
@@ -397,9 +312,11 @@ class _UpcomingAppointmentCard extends StatelessWidget {
     required this.detailsLabel,
     required this.inPersonLabel,
     required this.onDetails,
+    this.hospitalName,
   });
 
   final Appointment appointment;
+  final String? hospitalName;
   final String upcomingLabel;
   final String detailsLabel;
   final String inPersonLabel;
@@ -470,6 +387,17 @@ class _UpcomingAppointmentCard extends StatelessWidget {
               fontSize: 22,
             ),
           ),
+          if (hospitalName != null && hospitalName!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              hospitalName!,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.95),
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
+          ],
           const SizedBox(height: 4),
           Text(
             '${appointment.specialty} Consultation',

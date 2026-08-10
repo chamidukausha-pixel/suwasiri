@@ -35,7 +35,7 @@ class UniqueHealthIdCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF0B1F3A), Color(0xFF123A63)],
+                colors: [Color(0xFF065F46), Color(0xFF059669)],
               ),
               borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
             ),
@@ -72,7 +72,7 @@ class UniqueHealthIdCard extends StatelessWidget {
                   style: const TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 20,
-                    color: AppColors.trustBlueDark,
+                    color: Color(0xFF065F46),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -133,7 +133,7 @@ class UniqueHealthIdCard extends StatelessWidget {
                               textAlign: TextAlign.center,
                               style: AppTheme.mono(
                                 fontSize: 13,
-                                color: AppColors.trustBlueDark,
+                                color: const Color(0xFF065F46),
                                 weight: FontWeight.w700,
                               ),
                             ),
@@ -168,7 +168,7 @@ class UniqueHealthIdCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
+        color: const Color(0xFFECFDF5),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -177,7 +177,7 @@ class UniqueHealthIdCard extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
-              color: AppColors.slateMuted,
+              color: Color(0xFF047857),
               fontSize: 10,
               fontWeight: FontWeight.w700,
             ),
@@ -186,7 +186,7 @@ class UniqueHealthIdCard extends StatelessWidget {
           Text(
             value,
             style: const TextStyle(
-              color: AppColors.trustBlueDark,
+              color: Color(0xFF065F46),
               fontWeight: FontWeight.w800,
               fontSize: 13,
             ),

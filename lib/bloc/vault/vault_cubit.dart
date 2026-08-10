@@ -213,7 +213,7 @@ class VaultCubit extends Cubit<VaultState> {
     emit(state.copyWith(selectedReport: report, clearAi: true));
   }
 
-  Future<void> askAi(String question) async {
+  Future<void> askAi(String question, {String? language}) async {
     VaultReport? report = state.selectedReport;
     if (report == null) {
       for (final r in state.labReports) {
@@ -226,11 +226,15 @@ class VaultCubit extends Cubit<VaultState> {
     }
     if (report == null) return;
     emit(state.copyWith(loading: true, selectedReport: report));
+    final lang = (language == null || language.isEmpty)
+        ? 'the patient\'s preferred language (English, Sinhala, or Tamil)'
+        : language;
+    final q = question.isEmpty
+        ? 'Explain this lab report clearly in $lang for a Sri Lankan patient'
+        : '$question\n\nPlease answer in $lang.';
     final reply = await _health.askReportAssistant(
       report: report,
-      question: question.isEmpty
-          ? 'Explain this lab report in simple language for a Sri Lankan patient'
-          : question,
+      question: q,
     );
     emit(state.copyWith(aiReply: reply, loading: false));
   }
