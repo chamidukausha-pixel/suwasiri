@@ -5,12 +5,13 @@ import 'package:image_picker/image_picker.dart';
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/locale/locale_cubit.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_theme.dart';
-import '../../data/models/user_profile.dart';
 import '../../localization/app_localizations.dart';
+import '../../localization/health_intake_l10n.dart';
+import '../auth/health_intake_screen.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/suwasiri_brand_header.dart';
+import 'unique_health_id_card.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -94,6 +95,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Navigator.of(context).pushNamedAndRemoveUntil('/auth', (_) => false);
   }
 
+  Future<void> _openHealthIntake() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const HealthIntakeScreen(editing: true),
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
   Future<void> _changePhoto() async {
     final l = AppLocalizations.of(context);
     final user = context.read<AuthCubit>().state.user;
@@ -159,7 +169,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           const SuwasiriBrandHeader(),
           const SizedBox(height: 18),
-          _IdentityCard(user: user, onChangePhoto: _changePhoto),
+          _IdentityCard(
+            userName: user.displayName,
+            email: user.email,
+            onChangePhoto: _changePhoto,
+            onEditIntake: _openHealthIntake,
+          ),
+          const SizedBox(height: 14),
+          UniqueHealthIdCard(
+            user: user,
+            onEdit: _openHealthIntake,
+          ),
+          const SizedBox(height: 14),
+          SoftCard(
+            onTap: _openHealthIntake,
+            child: Row(
+              children: [
+                const Icon(Icons.medical_information_outlined,
+                    color: AppColors.trustBlue),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        HealthIntakeL10n.t(context, 'editIntake'),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.trustBlueDark,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        HealthIntakeL10n.t(context, 'intakeSubtitle'),
+                        style: const TextStyle(
+                          color: AppColors.slateMuted,
+                          fontSize: 12,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: AppColors.slateMuted),
+              ],
+            ),
+          ),
           const SizedBox(height: 14),
           _CommunicationCard(
             sms: _sms,
@@ -176,8 +231,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onSave: _saveSettings,
           ),
           const SizedBox(height: 14),
-          _TreatmentHistoryCard(entries: _historyFor(user)),
-          const SizedBox(height: 14),
           _SecurityCard(
             email: user.email,
             phone: _prettyPhone(user.mobileNo),
@@ -188,83 +241,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
-  List<_HistoryEntry> _historyFor(UserProfile user) {
-    return [
-      _HistoryEntry(
-        dateLabel: 'JUN 12, 2026',
-        category: _HistoryCategory.treatmentPlan,
-        title: 'Clinic Consultation & E-Prescription Issued',
-        doctor: 'Dr. Aruni Perera (Cardiology Specialist)',
-        facility: 'Asiri Central Hospital, Colombo 10',
-        summary:
-            'Symptom check: Normal cardiorespiratory rhythm. Issued Electronic prescription (EP-5290) for lipids management.',
-      ),
-      _HistoryEntry(
-        dateLabel: 'MAY 28, 2023',
-        category: _HistoryCategory.familyCare,
-        title: 'Routine Pediatric Growth Review',
-        doctor: 'Dr. Sandeep Bandara (Pediatrician)',
-        facility: 'Nawaloka Hospital, Colombo 02',
-        summary:
-            'Growth parameters within expected percentile. Nutritional counselling provided for balanced diet adherence.',
-        medicines: const [
-          'Multivitamin Syrup (5ml daily - 14 Days)',
-          'Oral Rehydration Salts (as needed)',
-        ],
-      ),
-      _HistoryEntry(
-        dateLabel: 'OCT 12, 2023',
-        category: _HistoryCategory.labReport,
-        title: 'Full Blood Count (FBC) Review',
-        doctor: 'Dr. S. Perera',
-        facility: 'Lanka Hospitals PLC',
-        summary:
-            'Hematology panel synced from LankaLab. Hemoglobin and WBC within normal clinical ranges.',
-      ),
-      _HistoryEntry(
-        dateLabel: 'SEP 22, 2023',
-        category: _HistoryCategory.immunization,
-        title: 'Influenza Vaccine (Seasonal)',
-        doctor: 'MOH Clinic Officer',
-        facility: 'National Hospital of Sri Lanka',
-        summary:
-            'Seasonal influenza dose administered. Batch IN-044-L recorded in MOH national registry.',
-      ),
-    ];
-  }
-}
-
-enum _HistoryCategory { treatmentPlan, familyCare, labReport, immunization }
-
-class _HistoryEntry {
-  const _HistoryEntry({
-    required this.dateLabel,
-    required this.category,
-    required this.title,
-    required this.doctor,
-    required this.facility,
-    required this.summary,
-    this.medicines = const [],
-  });
-
-  final String dateLabel;
-  final _HistoryCategory category;
-  final String title;
-  final String doctor;
-  final String facility;
-  final String summary;
-  final List<String> medicines;
 }
 
 class _IdentityCard extends StatelessWidget {
   const _IdentityCard({
-    required this.user,
+    required this.userName,
+    required this.email,
     required this.onChangePhoto,
+    required this.onEditIntake,
   });
 
-  final UserProfile user;
+  final String userName;
+  final String email;
   final VoidCallback onChangePhoto;
+  final VoidCallback onEditIntake;
 
   @override
   Widget build(BuildContext context) {
@@ -308,7 +298,7 @@ class _IdentityCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  user.name,
+                  userName,
                   style: const TextStyle(
                     color: AppColors.trustBlueDark,
                     fontWeight: FontWeight.w800,
@@ -316,25 +306,9 @@ class _IdentityCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  user.email,
+                  email,
                   style: const TextStyle(color: AppColors.slateMuted),
                 ),
-                if (user.ceylonHealthId != null)
-                  Text(
-                    user.ceylonHealthId!,
-                    style: AppTheme.mono(
-                      fontSize: 12,
-                      color: AppColors.trustBlue,
-                    ),
-                  ),
-                if (user.region != null)
-                  Text(
-                    'MOH ${user.region}',
-                    style: const TextStyle(
-                      color: AppColors.slateMuted,
-                      fontSize: 12,
-                    ),
-                  ),
                 const SizedBox(height: 4),
                 MinTap(
                   enforceMinSize: false,
@@ -352,9 +326,8 @@ class _IdentityCard extends StatelessWidget {
             ),
           ),
           IconButton(
-            tooltip: l.t('editProfile'),
-            onPressed: () =>
-                Navigator.of(context).pushNamed('/register-profile'),
+            tooltip: HealthIntakeL10n.t(context, 'editIntake'),
+            onPressed: onEditIntake,
             icon: const Icon(Icons.edit_outlined, color: AppColors.trustBlue),
           ),
         ],
@@ -601,275 +574,6 @@ class _ToggleRow extends StatelessWidget {
       ],
     );
   }
-}
-
-class _TreatmentHistoryCard extends StatelessWidget {
-  const _TreatmentHistoryCard({required this.entries});
-
-  final List<_HistoryEntry> entries;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-
-    return SoftCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.monitor_heart_outlined,
-                  color: AppColors.trustBlue),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  l.t('treatmentHistory'),
-                  style: const TextStyle(
-                    color: AppColors.trustBlueDark,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            l.t('treatmentHistoryHint'),
-            style: const TextStyle(
-              color: AppColors.slateMuted,
-              fontSize: 12,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 16),
-          ...entries.map(
-            (e) => Padding(
-              padding: const EdgeInsets.only(bottom: 14),
-              child: _HistoryTimelineItem(entry: e),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _HistoryTimelineItem extends StatelessWidget {
-  const _HistoryTimelineItem({required this.entry});
-
-  final _HistoryEntry entry;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final style = _badgeStyle(entry.category, l);
-
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            width: 20,
-            child: Column(
-              children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: style.dot,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: style.dot.withValues(alpha: 0.35),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Container(
-                    width: 2,
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    color: AppColors.border,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        entry.dateLabel,
-                        style: const TextStyle(
-                          color: AppColors.slateMuted,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 11,
-                          letterSpacing: 0.6,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: style.bg,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Text(
-                        style.label,
-                        style: TextStyle(
-                          color: style.fg,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  entry.title,
-                  style: const TextStyle(
-                    color: AppColors.trustBlueDark,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  entry.doctor,
-                  style: const TextStyle(
-                    color: AppColors.slateMuted,
-                    fontSize: 12,
-                  ),
-                ),
-                Text(
-                  entry.facility,
-                  style: const TextStyle(
-                    color: AppColors.slateMuted,
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    entry.summary,
-                    style: const TextStyle(
-                      color: AppColors.slateMuted,
-                      fontSize: 12,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-                if (entry.medicines.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.trustBlueSoft,
-                      borderRadius: BorderRadius.circular(12),
-                      border: const Border(
-                        top: BorderSide(color: AppColors.trustBlue, width: 2),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          l.t('issuedClinicalMedicines'),
-                          style: const TextStyle(
-                            color: AppColors.trustBlue,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        ...entry.medicines.map(
-                          (m) => Padding(
-                            padding: const EdgeInsets.only(bottom: 2),
-                            child: Text(
-                              '• $m',
-                              style: const TextStyle(
-                                color: AppColors.trustBlueDark,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  _BadgeStyle _badgeStyle(_HistoryCategory category, AppLocalizations l) {
-    return switch (category) {
-      _HistoryCategory.treatmentPlan => _BadgeStyle(
-          label: l.t('treatmentPlan'),
-          bg: AppColors.trustBlueSoft,
-          fg: AppColors.trustBlue,
-          dot: AppColors.trustBlue,
-        ),
-      _HistoryCategory.familyCare => const _BadgeStyle(
-          label: 'Family Care',
-          bg: Color(0xFFFEF3C7),
-          fg: Color(0xFFB45309),
-          dot: Color(0xFFF59E0B),
-        ),
-      _HistoryCategory.labReport => const _BadgeStyle(
-          label: 'Lab Report',
-          bg: Color(0xFFF3E8FF),
-          fg: Color(0xFF7E22CE),
-          dot: Color(0xFFA855F7),
-        ),
-      _HistoryCategory.immunization => const _BadgeStyle(
-          label: 'Immunization',
-          bg: Color(0xFFCCFBF1),
-          fg: Color(0xFF0F766E),
-          dot: Color(0xFF14B8A6),
-        ),
-    };
-  }
-}
-
-class _BadgeStyle {
-  const _BadgeStyle({
-    required this.label,
-    required this.bg,
-    required this.fg,
-    required this.dot,
-  });
-
-  final String label;
-  final Color bg;
-  final Color fg;
-  final Color dot;
 }
 
 class _SecurityCard extends StatelessWidget {

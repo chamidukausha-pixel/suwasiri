@@ -36,7 +36,12 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) return;
     final auth = context.read<AuthCubit>().state;
     if (auth.status == AuthStatus.authenticated) {
-      Navigator.of(context).pushReplacementNamed('/main');
+      final user = auth.user;
+      if (user != null && !user.isProfileComplete) {
+        Navigator.of(context).pushReplacementNamed('/register-profile');
+      } else {
+        Navigator.of(context).pushReplacementNamed('/main');
+      }
     } else {
       final seen = context.read<LocaleCubit>().prefsSeenOnboarding();
       Navigator.of(context).pushReplacementNamed(seen ? '/auth' : '/onboarding');

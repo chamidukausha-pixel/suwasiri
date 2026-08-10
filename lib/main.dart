@@ -14,7 +14,7 @@ import 'data/repositories/health_repository.dart';
 import 'data/services/app_services.dart';
 import 'localization/app_localizations.dart';
 import 'ui/auth/auth_screen.dart';
-import 'ui/auth/profile_registration_screen.dart';
+import 'ui/auth/health_intake_screen.dart';
 import 'ui/onboarding/onboarding_screen.dart';
 import 'ui/shell/main_shell.dart';
 import 'ui/splash/splash_screen.dart';
@@ -65,7 +65,7 @@ class SuwasiriApp extends StatelessWidget {
                 '/': (_) => const SplashScreen(),
                 '/onboarding': (_) => const OnboardingScreen(),
                 '/auth': (_) => const AuthScreen(),
-                '/register-profile': (_) => const ProfileRegistrationScreen(),
+                '/register-profile': (_) => const HealthIntakeScreen(),
                 '/main': (_) => const MainShell(),
               },
             );

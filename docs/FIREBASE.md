@@ -40,7 +40,7 @@ Aligned with `firestore.rules` and `FirebaseHealthRepository` / `FirebaseAuthRep
 
 | Collection | Key fields | Owner rule |
 |------------|------------|------------|
-| `users` | profile map (`name`, `email`, `NIC`, …) | `users/{uid}` = auth uid |
+| `users` | profile map (`name`, `email`, `NIC`, `bloodGroup`, `barcodeNumber`, `healthIntake`, …) | `users/{uid}` = auth uid |
 | `vault` | `patientId`, `title`, `issuedBy`, `date`, `metrics` | `patientId == uid` |
 | `vaccinations` | `patientId`, facility, `slot`, `status` | write if `patientId == uid` |
 | `appointments` | `patientId`, doctor fields, `timeSlot`, `token` | `patientId == uid` |

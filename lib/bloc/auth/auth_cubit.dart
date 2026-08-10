@@ -110,8 +110,9 @@ class AuthCubit extends Cubit<AuthState> {
   Future<void> updateProfile(UserProfile profile) async {
     emit(state.copyWith(loading: true, clearError: true));
     try {
-      await _auth.updateProfile(profile);
-      emit(AuthState(status: AuthStatus.authenticated, user: profile));
+      final ensured = profile.withEnsuredBarcode();
+      await _auth.updateProfile(ensured);
+      emit(AuthState(status: AuthStatus.authenticated, user: ensured));
     } catch (e) {
       emit(state.copyWith(loading: false, error: e.toString()));
     }

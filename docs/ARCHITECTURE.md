@@ -54,7 +54,10 @@ Never call Firestore/Auth from widgets. Add methods on the repository interface,
 
 ## Auth profile completeness
 
-`UserProfile.isProfileComplete` gates NIC + DOB + region. Registration screen writes via `updateProfile` → Firestore `users/{uid}`.
+`UserProfile.isProfileComplete` gates NIC + DOB + blood group + mandatory health questionnaire
+(basic identity + safety fields). First login routes to `HealthIntakeScreen` (`/register-profile`).
+Questionnaire labels are EN / Sinhala / Tamil via `HealthIntakeL10n` (follows app locale).
+Stable `barcodeNumber` is generated once from uid + NIC and shown on Profile Unique Health ID card.
 
 ## Localization
 

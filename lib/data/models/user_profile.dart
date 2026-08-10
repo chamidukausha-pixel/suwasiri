@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import 'patient_health_intake.dart';
+
 class UserProfile extends Equatable {
   const UserProfile({
     required this.id,
@@ -12,6 +14,8 @@ class UserProfile extends Equatable {
     this.dateOfBirth,
     this.emergencyContacts = const [],
     this.ceylonHealthId,
+    this.barcodeNumber,
+    this.healthIntake,
   });
 
   final String id;
@@ -24,13 +28,36 @@ class UserProfile extends Equatable {
   final DateTime? dateOfBirth;
   final List<String> emergencyContacts;
   final String? ceylonHealthId;
+  /// Unique barcode number (stable). Displayed on Profile ID card.
+  final String? barcodeNumber;
+  final PatientHealthIntake? healthIntake;
 
-  bool get isProfileComplete =>
-      nic != null &&
-      nic!.isNotEmpty &&
-      dateOfBirth != null &&
-      region != null &&
-      region!.isNotEmpty;
+  int? get ageYears {
+    final dob = dateOfBirth ?? healthIntake?.dateOfBirth;
+    if (dob == null) return null;
+    final now = DateTime.now();
+    var age = now.year - dob.year;
+    if (now.month < dob.month ||
+        (now.month == dob.month && now.day < dob.day)) {
+      age--;
+    }
+    return age < 0 ? null : age;
+  }
+
+  String get displayName {
+    final fromIntake = healthIntake?.fullName.trim();
+    if (fromIntake != null && fromIntake.isNotEmpty) return fromIntake;
+    return name;
+  }
+
+  bool get isProfileComplete {
+    final intake = healthIntake;
+    final nicOk = nic != null && nic!.isNotEmpty;
+    final dobOk = dateOfBirth != null || intake?.dateOfBirth != null;
+    final bloodOk = bloodGroup != null && bloodGroup!.isNotEmpty;
+    final intakeOk = intake != null && intake.isMandatoryComplete;
+    return nicOk && dobOk && bloodOk && intakeOk;
+  }
 
   UserProfile copyWith({
     String? id,
@@ -43,6 +70,8 @@ class UserProfile extends Equatable {
     DateTime? dateOfBirth,
     List<String>? emergencyContacts,
     String? ceylonHealthId,
+    String? barcodeNumber,
+    PatientHealthIntake? healthIntake,
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -55,6 +84,20 @@ class UserProfile extends Equatable {
       dateOfBirth: dateOfBirth ?? this.dateOfBirth,
       emergencyContacts: emergencyContacts ?? this.emergencyContacts,
       ceylonHealthId: ceylonHealthId ?? this.ceylonHealthId,
+      barcodeNumber: barcodeNumber ?? this.barcodeNumber,
+      healthIntake: healthIntake ?? this.healthIntake,
+    );
+  }
+
+  /// Ensures a stable barcode is assigned when NIC is known.
+  UserProfile withEnsuredBarcode() {
+    if (barcodeNumber != null && barcodeNumber!.isNotEmpty) return this;
+    final n = nic;
+    if (n == null || n.isEmpty) return this;
+    final code = SuwasiriHealthId.generate(userId: id, nic: n);
+    return copyWith(
+      barcodeNumber: code,
+      ceylonHealthId: ceylonHealthId ?? code,
     );
   }
 
@@ -68,9 +111,12 @@ class UserProfile extends Equatable {
         'dateOfBirth': dateOfBirth?.toIso8601String(),
         'emergencyContacts': emergencyContacts,
         'ceylonHealthId': ceylonHealthId,
+        'barcodeNumber': barcodeNumber,
+        if (healthIntake != null) 'healthIntake': healthIntake!.toMap(),
       };
 
   factory UserProfile.fromMap(String id, Map<String, dynamic> map) {
+    final intakeRaw = map['healthIntake'];
     return UserProfile(
       id: id,
       name: map['name'] as String? ?? '',
@@ -87,6 +133,10 @@ class UserProfile extends Equatable {
               .toList() ??
           const [],
       ceylonHealthId: map['ceylonHealthId'] as String?,
+      barcodeNumber: map['barcodeNumber'] as String?,
+      healthIntake: intakeRaw is Map<String, dynamic>
+          ? PatientHealthIntake.fromMap(intakeRaw)
+          : null,
     );
   }
 
@@ -102,5 +152,7 @@ class UserProfile extends Equatable {
         dateOfBirth,
         emergencyContacts,
         ceylonHealthId,
+        barcodeNumber,
+        healthIntake,
       ];
 }
