@@ -8,12 +8,14 @@ import 'package:uuid/uuid.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/notification/notification_cubit.dart';
+import '../../bloc/vault/vault_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/catalogs/patient_health_samples.dart';
 import '../../data/models/user_profile.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../localization/app_localizations.dart';
+import '../vault/prescription_form_view.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/suwasiri_brand_header.dart';
 import 'prescription_detail_sheet.dart';
@@ -173,36 +175,15 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
 
     setState(() {
       _sessionId = const Uuid().v4();
-      _sessionRx = [
-        Prescription(
-          id: 'preview-amox',
-          medicine: 'Amoxicillin 500mg',
-          doctor: _doctorName,
-          code: 'EP-PREVIEW',
-          active: true,
-          patientId: user.id,
-          schedule: 'Antibiotic (TDS Schedule)',
-          doseBadge: '1Ã—3',
-          sessionId: _sessionId,
-          issuedAt: DateTime.now(),
-          clinicName: _clinicName,
-          updating: true,
-        ),
-        Prescription(
-          id: 'preview-para',
-          medicine: 'Paracetamol 500mg',
-          doctor: _doctorName,
-          code: 'EP-PREVIEW-2',
-          active: true,
-          patientId: user.id,
-          schedule: 'As Needed for Pain/Fever',
-          doseBadge: 'PRN',
-          sessionId: _sessionId,
-          issuedAt: DateTime.now(),
-          clinicName: _clinicName,
-          updating: true,
-        ),
-      ];
+      _sessionRx = PatientHealthSamples.latestDoctorScript(
+        patientId: user.id,
+        doctorName: _doctorName,
+        clinicName: _clinicName,
+        sessionId: _sessionId,
+        issuedAt: DateTime.now(),
+      )
+          .map((p) => p.copyWith(updating: true))
+          .toList();
       _rxUpdating = true;
       _remaining = const Duration(minutes: 8, seconds: 18);
       _showAiOverlay = true;
@@ -279,7 +260,11 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     if (!mounted) return;
     await notifications.load();
     if (!mounted) return;
-    // After pharmacy send, remove from Call E-Prescription (moves to Vault history).
+    try {
+      await context.read<VaultCubit>().load(user.id);
+    } catch (_) {}
+    if (!mounted) return;
+    // After pharmacy send, remove from Call E-Prescription (moves to Vault Issued Medicines).
     setState(() {
       _sessionRx = [];
       _rxUpdating = false;
@@ -304,6 +289,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
       doctorName: doctorName,
       patient: user,
       mediLankaSynced: synced,
+      showFormalForm: true,
       onSyncMediLanka: () => _sendToMediLanka(medicines: medicines),
     );
   }
@@ -922,12 +908,13 @@ class _EPrescriptionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final pending = medicines.where((m) => !m.sentToPharmacare).toList();
+    final pending = latestPendingPrescription(medicines);
     final first = pending.isNotEmpty ? pending.first : null;
     final issuedLabel = first?.issuedAt != null
         ? DateFormat('d MMM yyyy · hh:mm a').format(first!.issuedAt!)
         : '—';
     final clinic = first?.clinicName ?? clinicName;
+    final doctor = first?.doctor ?? doctorName;
     final empty = pending.isEmpty && !updating;
 
     return Container(
@@ -984,7 +971,7 @@ class _EPrescriptionCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      l.t('liveSessionRxOnly'),
+                      l.t('latestDoctorRxOnly'),
                       style: const TextStyle(
                         color: AppColors.slateMuted,
                         fontSize: 12,
@@ -1011,119 +998,46 @@ class _EPrescriptionCard extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(height: 4),
                       Text(
-                        '${l.t('medicalClinic')}:',
+                        clinic,
                         style: const TextStyle(
-                          color: AppColors.slateMuted,
-                          fontSize: 11,
+                          color: AppColors.trustBlueDark,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        doctor,
+                        style: const TextStyle(
+                          color: AppColors.trustBlueDark,
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      if (updating)
+                      if (first != null)
                         Text(
-                          clinic,
+                          '${l.t('mediLankaIssuedNo')}: ${first.prescriberNumber}',
                           style: const TextStyle(
-                            color: AppColors.trustBlueDark,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        )
-                      else
-                        MinTap(
-                          enforceMinSize: false,
-                          onTap: () => onOpenClinic(
-                            pending,
-                            clinic,
-                            first?.doctor ?? doctorName,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  clinic,
-                                  style: const TextStyle(
-                                    color: AppColors.trustBlue,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w800,
-                                    decoration: TextDecoration.underline,
-                                    decorationColor: AppColors.trustBlue,
-                                  ),
-                                ),
-                              ),
-                              const Icon(
-                                Icons.open_in_new,
-                                size: 16,
-                                color: AppColors.trustBlue,
-                              ),
-                            ],
+                            color: AppColors.slateMuted,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                      const SizedBox(height: 12),
-                      ...pending.map(
-                        (m) => Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppColors.border),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        m.medicine,
-                                        style: const TextStyle(
-                                          color: AppColors.trustBlueDark,
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      if (m.schedule.isNotEmpty) ...[
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          m.schedule,
-                                          style: const TextStyle(
-                                            color: AppColors.slateMuted,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFE2E8F0),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    m.doseBadge.isEmpty ? m.code : m.doseBadge,
-                                    style: const TextStyle(
-                                      color: AppColors.trustBlueDark,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                      const SizedBox(height: 10),
+                      MinTap(
+                        enforceMinSize: false,
+                        onTap: updating
+                            ? null
+                            : () => onOpenClinic(pending, clinic, doctor),
+                        child: PrescriptionFormView(
+                          medicines: pending,
+                          doctorName: doctor,
+                          clinicName: clinic,
+                          patient: patient,
                         ),
                       ),
-                      if (updating)
+                      if (updating) ...[
+                        const SizedBox(height: 10),
                         Row(
                           children: [
                             Container(
@@ -1146,108 +1060,9 @@ class _EPrescriptionCard extends StatelessWidget {
                               ),
                             ),
                           ],
-                        )
-                      else
-                        Text(
-                          l.t('tapClinicForRx'),
-                          style: const TextStyle(
-                            color: AppColors.slateMuted,
-                            fontSize: 12,
-                            height: 1.35,
-                          ),
                         ),
+                      ],
                     ],
-                    const SizedBox(height: 14),
-                    Text(
-                      l.t('sampleRxTitle'),
-                      style: const TextStyle(
-                        color: AppColors.trustBlueDark,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      l.t('sampleRxHint'),
-                      style: const TextStyle(
-                        color: AppColors.slateMuted,
-                        fontSize: 11,
-                        height: 1.3,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ...() {
-                      final samples = PatientHealthSamples.pendingMedicines(
-                        patientId: patient?.id ?? 'sample',
-                      );
-                      final byClinic = <String, List<Prescription>>{};
-                      for (final p in samples) {
-                        byClinic.putIfAbsent(p.clinicName, () => []).add(p);
-                      }
-                      return byClinic.entries.map((entry) {
-                        final sampleIssued = entry.value.first.issuedAt;
-                        final sampleDate = sampleIssued != null
-                            ? DateFormat('d MMM yyyy').format(sampleIssued)
-                            : '—';
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: MinTap(
-                            enforceMinSize: false,
-                            onTap: () => onOpenClinic(
-                              entry.value,
-                              entry.key,
-                              entry.value.first.doctor,
-                            ),
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: AppColors.border),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '${l.t('issuedDate')}: $sampleDate',
-                                    style: const TextStyle(
-                                      color: AppColors.slateMuted,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  Text(
-                                    entry.key,
-                                    style: const TextStyle(
-                                      color: AppColors.trustBlue,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w800,
-                                      decoration: TextDecoration.underline,
-                                    ),
-                                  ),
-                                  Text(
-                                    entry.value.first.doctor,
-                                    style: const TextStyle(
-                                      color: AppColors.trustBlueDark,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  Text(
-                                    '${entry.value.length} ${l.t('rxItemsPrinted')}',
-                                    style: const TextStyle(
-                                      color: AppColors.slateMuted,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      });
-                    }(),
                   ],
                 ),
               ),
@@ -1258,7 +1073,6 @@ class _EPrescriptionCard extends StatelessWidget {
     );
   }
 }
-
 class _QuickNotesCard extends StatelessWidget {
   const _QuickNotesCard({
     required this.notes,

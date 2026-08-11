@@ -197,34 +197,13 @@ class DemoHealthRepository implements HealthRepository {
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     final now = DateTime.now();
-    final batch = [
-      Prescription(
-        id: _uuid.v4(),
-        medicine: 'Amoxicillin 500mg',
-        doctor: doctorName,
-        code: 'EP-${now.millisecondsSinceEpoch % 10000}',
-        active: true,
-        patientId: patientId,
-        schedule: 'Antibiotic (TDS Schedule)',
-        doseBadge: '1x3',
-        sessionId: sessionId,
-        issuedAt: now,
-        clinicName: 'Lanka GP Care · Durdans Teleclinic',
-      ),
-      Prescription(
-        id: _uuid.v4(),
-        medicine: 'Paracetamol 500mg',
-        doctor: doctorName,
-        code: 'EP-${(now.millisecondsSinceEpoch + 1) % 10000}',
-        active: true,
-        patientId: patientId,
-        schedule: 'As Needed for Pain/Fever',
-        doseBadge: 'PRN',
-        sessionId: sessionId,
-        issuedAt: now,
-        clinicName: 'Lanka GP Care · Durdans Teleclinic',
-      ),
-    ];
+    final batch = PatientHealthSamples.latestDoctorScript(
+      patientId: patientId,
+      doctorName: doctorName,
+      clinicName: 'Lanka GP Care · Durdans Teleclinic',
+      sessionId: sessionId,
+      issuedAt: now,
+    );
     _rxMemory = [..._rxMemory, ...batch];
     await pushNotification(
       AppNotification(

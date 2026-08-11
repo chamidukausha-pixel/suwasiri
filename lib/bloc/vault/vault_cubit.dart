@@ -140,7 +140,11 @@ class VaultCubit extends Cubit<VaultState> {
     final mergedRx = <Prescription>[
       ...rx,
       for (final s in sampleRx)
-        if (!rxById.containsKey(s.id)) s,
+        if (!rxById.containsKey(s.id) &&
+            !(s.sentToPharmacare == false &&
+                rx.any((p) =>
+                    p.code == s.code && p.sentToPharmacare)))
+          s,
     ]..sort((a, b) =>
         (b.issuedAt ?? DateTime(0)).compareTo(a.issuedAt ?? DateTime(0)));
 

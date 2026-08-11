@@ -134,6 +134,7 @@ class Prescription extends Equatable {
     this.updating = false,
     this.issuedAt,
     this.clinicName = 'Lanka GP Care Virtual Clinic',
+    this.prescriberNumber = '1234567',
   });
 
   final String id;
@@ -149,6 +150,8 @@ class Prescription extends Equatable {
   final bool updating;
   final DateTime? issuedAt;
   final String clinicName;
+  /// Doctor registration / issued number shown on the formal script.
+  final String prescriberNumber;
 
   Prescription copyWith({
     String? id,
@@ -164,6 +167,7 @@ class Prescription extends Equatable {
     bool? updating,
     DateTime? issuedAt,
     String? clinicName,
+    String? prescriberNumber,
   }) {
     return Prescription(
       id: id ?? this.id,
@@ -179,6 +183,7 @@ class Prescription extends Equatable {
       updating: updating ?? this.updating,
       issuedAt: issuedAt ?? this.issuedAt,
       clinicName: clinicName ?? this.clinicName,
+      prescriberNumber: prescriberNumber ?? this.prescriberNumber,
     );
   }
 
@@ -195,6 +200,7 @@ class Prescription extends Equatable {
         'updating': updating,
         'issuedAt': (issuedAt ?? DateTime.now()).toIso8601String(),
         'clinicName': clinicName,
+        'prescriberNumber': prescriberNumber,
       };
 
   factory Prescription.fromMap(String id, Map<String, dynamic> map) {
@@ -214,6 +220,7 @@ class Prescription extends Equatable {
           ? DateTime.tryParse(map['issuedAt'] as String)
           : null,
       clinicName: map['clinicName'] as String? ?? 'Lanka GP Care Virtual Clinic',
+      prescriberNumber: map['prescriberNumber'] as String? ?? '1234567',
     );
   }
 
@@ -232,5 +239,26 @@ class Prescription extends Equatable {
         updating,
         issuedAt,
         clinicName,
+        prescriberNumber,
       ];
+}
+
+/// Latest doctor-issued script that is not yet sent to MediLanka.
+List<Prescription> latestPendingPrescription(List<Prescription> all) {
+  final pending = all.where((p) => !p.sentToPharmacare).toList()
+    ..sort(
+      (a, b) =>
+          (b.issuedAt ?? DateTime(0)).compareTo(a.issuedAt ?? DateTime(0)),
+    );
+  if (pending.isEmpty) return const [];
+  final code = pending.first.code;
+  return pending.where((p) => p.code == code).toList();
+}
+
+String prescriptionScriptNumber(List<Prescription> medicines) {
+  final raw = medicines.isNotEmpty ? medicines.first.code : '';
+  final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+  if (digits.isEmpty) return '00003194';
+  final padded = digits.padLeft(8, '0');
+  return padded.substring(padded.length - 8);
 }

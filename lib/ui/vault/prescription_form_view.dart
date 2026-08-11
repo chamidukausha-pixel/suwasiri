@@ -99,17 +99,23 @@ class _FormCopy extends StatelessWidget {
         ? (medicines.first.issuedAt ?? DateTime.now())
         : DateTime.now();
     final dateStr = DateFormat('dd/MM/yyyy').format(issued);
-    final digits = medicines.isNotEmpty
-        ? medicines.first.code.replaceAll(RegExp(r'[^0-9]'), '')
-        : '';
-    final scriptNo = digits.isEmpty
-        ? '00003194'
-        : digits.padLeft(8, '0').substring(digits.padLeft(8, '0').length - 8);
+    final scriptNo = prescriptionScriptNumber(medicines);
+    final prescriber = medicines.isNotEmpty
+        ? medicines.first.prescriberNumber
+        : '1234567';
     final patientName =
-        patient?.name.isNotEmpty == true ? patient!.name : 'Kamal Gunasekara';
-    final healthId = patient?.ceylonHealthId?.isNotEmpty == true
-        ? patient!.ceylonHealthId!
-        : (patient?.nic?.isNotEmpty == true ? patient!.nic! : '1234 56789 0-1');
+        patient?.displayName.isNotEmpty == true
+            ? patient!.displayName
+            : (patient?.name.isNotEmpty == true
+                ? patient!.name
+                : 'Kamal Gunasekara');
+    final healthId = patient?.barcodeNumber?.isNotEmpty == true
+        ? patient!.barcodeNumber!
+        : (patient?.ceylonHealthId?.isNotEmpty == true
+            ? patient!.ceylonHealthId!
+            : (patient?.nic?.isNotEmpty == true
+                ? patient!.nic!
+                : '1234 56789 0-1'));
     final address = [
       if (patient?.region != null && patient!.region!.isNotEmpty) patient!.region!,
       'Sri Lanka',
@@ -169,7 +175,7 @@ class _FormCopy extends StatelessWidget {
                             style: const TextStyle(color: _ink, fontSize: 9)),
                         const SizedBox(height: 2),
                         Text(
-                          '${l.t('rxPrescriberNo')} 1234567',
+                          '${l.t('rxPrescriberNo')} $prescriber',
                           style: const TextStyle(color: _ink, fontSize: 9),
                         ),
                         Text(
@@ -274,12 +280,12 @@ class _FormCopy extends StatelessWidget {
                         ),
                         const SizedBox(height: 6),
                         ...medicines.map((m) {
-                          final qty = m.doseBadge.toUpperCase() == 'PRN'
+                                  final qty = m.doseBadge.toUpperCase() == 'PRN'
                               ? '1'
                               : (RegExp(r'(\d+)')
                                       .firstMatch(m.doseBadge)
                                       ?.group(1) ??
-                                  '1');
+                                  m.doseBadge);
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 10),
                             child: Column(

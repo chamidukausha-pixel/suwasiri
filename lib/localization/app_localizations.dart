@@ -457,9 +457,9 @@ class AppLocalizations {
       'ta': 'PDF ஆக பதிவிறக்கு',
     },
     'rxEmailOpened': {
-      'en': 'Email app opened with your prescription summary.',
-      'si': 'ඔබේ වට්ටෝරු සාරාංශය සමඟ ඊමේල් යෙදුම විවෘත විය.',
-      'ta': 'உங்கள் மருந்துச்சீட்டு சுருக்கத்துடன் மின்னஞ்சல் திறக்கப்பட்டது.',
+      'en': 'Opened your email with the e-prescription PDF attached.',
+      'si': 'ඊ-වට්ටෝරු PDF ඇමුණුම සමඟ ඔබේ ඊමේල් විවෘත විය.',
+      'ta': 'மின் மருந்துச்சீட்டு PDF இணைப்புடன் உங்கள் மின்னஞ்சல் திறக்கப்பட்டது.',
     },
     'rxEmailFailed': {
       'en': 'Could not open email app.',
@@ -472,9 +472,22 @@ class AppLocalizations {
       'ta': 'சுயவிவரத்தில் மின்னஞ்சல் இல்லை. சுயவிவர அமைப்புகளில் சேர்க்கவும்.',
     },
     'rxPdfReady': {
-      'en': 'Prescription PDF ready to save or share.',
-      'si': 'වට්ටෝරු PDF සුරැකීමට හෝ බෙදාගැනීමට සූදානම්.',
-      'ta': 'மருந்துச்சீட்டு PDF சேமிக்க/பகிர தயார்.',
+      'en': 'E-prescription downloaded.',
+      'si': 'ඊ-වට්ටෝරුව බාගත විය.',
+      'ta': 'மின் மருந்துச்சீட்டு பதிவிறக்கப்பட்டது.',
+    },
+    'mediLankaIssuedNo': {
+      'en': 'Doctor issued number',
+      'si': 'වෛද්‍ය නිකුත් අංකය',
+      'ta': 'மருத்துவர் வழங்கிய எண்',
+    },
+    'latestDoctorRxOnly': {
+      'en':
+          'Latest e-prescription issued by your doctor. Tap the form to email, sync to MediLanka, or download.',
+      'si':
+          'ඔබේ වෛද්‍යවරයා නිකුත් කළ නවතම ඊ-වට්ටෝරුව. ඊමේල්, MediLanka හෝ බාගැනීමට පෝරමය තට්ටු කරන්න.',
+      'ta':
+          'உங்கள் மருத்துவர் வழங்கிய சமீபத்திய மின் மருந்துச்சீட்டு. மின்னஞ்சல், MediLanka அல்லது பதிவிறக்க படிவத்தைத் தட்டவும்.',
     },
     'rxPdfFailed': {
       'en': 'Could not create PDF.',

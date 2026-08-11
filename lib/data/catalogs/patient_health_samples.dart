@@ -2,87 +2,51 @@ import '../models/vault_report.dart';
 
 /// Sample patient health records for **Vault only** (pending Rx, labs, vaccines, notes).
 abstract final class PatientHealthSamples {
-  /// Pending e-Rx for Vault E-Prescription (not yet sent via MediLanka).
+  /// Latest doctor-issued e-Rx (formal dual-copy script) — not yet sent to MediLanka.
   static List<Prescription> pendingMedicines({required String patientId}) {
-    final now = DateTime.now();
+    return latestDoctorScript(patientId: patientId);
+  }
+
+  /// Canonical latest script matching the issued dual-copy form.
+  static List<Prescription> latestDoctorScript({
+    required String patientId,
+    String doctorName = 'Dr. Andrew Practitioner',
+    String clinicName = 'Lanka GP Care · Durdans Teleclinic',
+    String? sessionId,
+    DateTime? issuedAt,
+    bool sentToPharmacare = false,
+  }) {
+    final when = issuedAt ?? DateTime.now().subtract(const Duration(hours: 2));
     return [
       Prescription(
-        id: 'pending-inperson-1',
-        medicine: 'Amoxicillin 500mg capsules',
-        doctor: 'Dr. Samanthi Wickramasinghe',
-        code: 'EP-IP-1042',
-        active: true,
-        patientId: patientId,
-        schedule: '1 capsule TDS after meals × 5 days',
-        doseBadge: '1×3',
-        issuedAt: now.subtract(const Duration(days: 1)),
-        clinicName: 'Nawaloka Hospital · OPD Clinic',
-        sentToPharmacare: false,
-      ),
-      Prescription(
-        id: 'pending-inperson-2',
-        medicine: 'Omeprazole 20mg capsules',
-        doctor: 'Dr. Samanthi Wickramasinghe',
-        code: 'EP-IP-1042',
-        active: true,
-        patientId: patientId,
-        schedule: '1 capsule daily before breakfast × 14 days',
-        doseBadge: '1×1',
-        issuedAt: now.subtract(const Duration(days: 1)),
-        clinicName: 'Nawaloka Hospital · OPD Clinic',
-        sentToPharmacare: false,
-      ),
-      Prescription(
-        id: 'pending-clinic-3',
-        medicine: 'Cetirizine 10mg tablets',
-        doctor: 'Dr. Ruwan Perera',
-        code: 'EP-IP-2088',
-        active: true,
-        patientId: patientId,
-        schedule: '1 tablet at night for allergy',
-        doseBadge: '1×1',
-        issuedAt: now.subtract(const Duration(days: 4)),
-        clinicName: 'Asiri Medical · Allergy Clinic',
-        sentToPharmacare: false,
-      ),
-      Prescription(
-        id: 'pending-eye-1',
+        id: 'latest-fluoro',
         medicine: 'Fluorometholone 0.1% eye drops, 5 mL',
-        doctor: 'Dr. Andrew Practitioner',
+        doctor: doctorName,
         code: 'EP-00003194',
         active: true,
         patientId: patientId,
         schedule: '4× per day right eye',
-        doseBadge: '1×4',
-        issuedAt: now.subtract(const Duration(days: 2)),
-        clinicName: 'Lanka Eye Care · Colombo 07',
-        sentToPharmacare: false,
+        doseBadge: '1',
+        sessionId: sessionId,
+        issuedAt: when,
+        clinicName: clinicName,
+        sentToPharmacare: sentToPharmacare,
+        prescriberNumber: '1234567',
       ),
       Prescription(
-        id: 'pending-gp-1',
+        id: 'latest-para',
         medicine: 'Paracetamol 500mg tablets',
-        doctor: 'Dr. Aruni Perera',
-        code: 'EP-GP-4410',
+        doctor: doctorName,
+        code: 'EP-00003194',
         active: true,
         patientId: patientId,
-        schedule: '1–2 tablets every 6 hours if fever or pain',
-        doseBadge: 'PRN',
-        issuedAt: now.subtract(const Duration(hours: 18)),
-        clinicName: 'Lanka GP Care · Durdans Teleclinic',
-        sentToPharmacare: false,
-      ),
-      Prescription(
-        id: 'pending-gp-2',
-        medicine: 'ORS sachets (WHO formula)',
-        doctor: 'Dr. Aruni Perera',
-        code: 'EP-GP-4410',
-        active: true,
-        patientId: patientId,
-        schedule: '1 sachet in 1L water after each loose stool',
-        doseBadge: 'PRN',
-        issuedAt: now.subtract(const Duration(hours: 18)),
-        clinicName: 'Lanka GP Care · Durdans Teleclinic',
-        sentToPharmacare: false,
+        schedule: '1-2 tablets 4-6 hourly',
+        doseBadge: '20',
+        sessionId: sessionId,
+        issuedAt: when,
+        clinicName: clinicName,
+        sentToPharmacare: sentToPharmacare,
+        prescriberNumber: '1234567',
       ),
     ];
   }

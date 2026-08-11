@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -51,6 +53,10 @@ abstract final class PrescriptionExportService {
               pw.Text(doctorName,
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
               pw.Text(clinicName),
+              if (medicines.isNotEmpty)
+                pw.Text(
+                  'Prescriber No. ${medicines.first.prescriberNumber}',
+                ),
               pw.SizedBox(height: 8),
               pw.Text("Patient's name: $patientName"),
               pw.Text('Ceylon Health ID / NIC: $healthId'),
@@ -97,7 +103,22 @@ abstract final class PrescriptionExportService {
     return doc.save();
   }
 
-  static Future<void> downloadPdf({
+  static Future<String> savePdfToDevice(Uint8List bytes, String filename) async {
+    Directory? dir;
+    try {
+      dir = await getDownloadsDirectory();
+    } catch (_) {}
+    dir ??= await getApplicationDocumentsDirectory();
+    final folder = Directory('${dir.path}/Suwasiri');
+    if (!await folder.exists()) {
+      await folder.create(recursive: true);
+    }
+    final file = File('${folder.path}/$filename');
+    await file.writeAsBytes(bytes, flush: true);
+    return file.path;
+  }
+
+  static Future<String> downloadPdf({
     required List<Prescription> medicines,
     required String clinicName,
     required String doctorName,
@@ -111,7 +132,12 @@ abstract final class PrescriptionExportService {
     );
     final name =
         'suwasiri_rx_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.pdf';
-    await Printing.sharePdf(bytes: bytes, filename: name);
+    try {
+      return await savePdfToDevice(bytes, name);
+    } catch (_) {
+      await Printing.sharePdf(bytes: bytes, filename: name);
+      return name;
+    }
   }
 
   static Future<Uint8List> buildLabReportPdfBytes({
@@ -205,30 +231,56 @@ abstract final class PrescriptionExportService {
     final dateStr = DateFormat('d MMM yyyy').format(issued);
     final patientName =
         (patient?.name.isNotEmpty == true) ? patient!.name : 'Patient';
+    final script = prescriptionScriptNumber(medicines);
+    final prescriber = medicines.isNotEmpty
+        ? medicines.first.prescriberNumber
+        : '1234567';
     final lines = medicines
         .map(
           (m) =>
               '• ${m.medicine} — ${m.schedule.isEmpty ? m.doseBadge : m.schedule}',
         )
         .join('\n');
+    final subject = 'Suwasiri e-prescription — $clinicName';
     final body = '''
-Suwasiri e-prescription
+Suwasiri e-prescription (PDF attached)
 Clinic: $clinicName
 Doctor: $doctorName
+Prescriber No.: $prescriber
+Script No.: $script
 Patient: $patientName
 Issued: $dateStr
 
 $lines
-
-Please attach the PDF from Suwasiri (Download PDF) if required by your pharmacy.
 ''';
+    final bytes = await buildPdfBytes(
+      medicines: medicines,
+      clinicName: clinicName,
+      doctorName: doctorName,
+      patient: patient,
+    );
+    final name =
+        'suwasiri_rx_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.pdf';
+    try {
+      await savePdfToDevice(bytes, name);
+    } catch (_) {}
+
+    final shared = await Printing.sharePdf(
+      bytes: bytes,
+      filename: name,
+      subject: subject,
+      body: body,
+      emails: [toEmail],
+    );
+    if (shared) return;
+
     final uri = Uri.parse(
       'mailto:$toEmail'
-      '?subject=${Uri.encodeComponent('Suwasiri e-prescription — $clinicName')}'
+      '?subject=${Uri.encodeComponent(subject)}'
       '&body=${Uri.encodeComponent(body)}',
     );
     if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
       throw Exception('Cannot open email app');
     }

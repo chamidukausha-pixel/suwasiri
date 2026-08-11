@@ -17,7 +17,7 @@ Future<void> showPrescriptionDetailSheet({
   UserProfile? patient,
   Future<void> Function()? onSyncMediLanka,
   bool mediLankaSynced = false,
-  bool showFormalForm = false,
+  bool showFormalForm = true,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -48,7 +48,7 @@ class _PrescriptionDetailSheet extends StatefulWidget {
     this.patient,
     this.onSyncMediLanka,
     this.mediLankaSynced = false,
-    this.showFormalForm = false,
+    this.showFormalForm = true,
   });
 
   final List<Prescription> medicines;
@@ -69,6 +69,12 @@ class _PrescriptionDetailSheetState extends State<_PrescriptionDetailSheet> {
   bool _busyPdf = false;
   bool _busySync = false;
   late bool _synced;
+
+  String get _prescriber => widget.medicines.isNotEmpty
+      ? widget.medicines.first.prescriberNumber
+      : '1234567';
+
+  String get _scriptNo => prescriptionScriptNumber(widget.medicines);
 
   @override
   void initState() {
@@ -113,7 +119,7 @@ class _PrescriptionDetailSheetState extends State<_PrescriptionDetailSheet> {
     final l = AppLocalizations.of(context);
     setState(() => _busyPdf = true);
     try {
-      await PrescriptionExportService.downloadPdf(
+      final path = await PrescriptionExportService.downloadPdf(
         medicines: widget.medicines,
         clinicName: widget.clinicName,
         doctorName: widget.doctorName,
@@ -121,7 +127,7 @@ class _PrescriptionDetailSheetState extends State<_PrescriptionDetailSheet> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.t('rxPdfReady'))),
+        SnackBar(content: Text('${l.t('rxPdfReady')}\n$path')),
       );
     } catch (_) {
       if (!mounted) return;
@@ -141,9 +147,31 @@ class _PrescriptionDetailSheetState extends State<_PrescriptionDetailSheet> {
       await widget.onSyncMediLanka!();
       if (!mounted) return;
       setState(() => _synced = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.t('mediLankaSynced'))),
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(l.t('mediLankaSynced')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${l.t('mediLankaIssuedNo')}: $_prescriber'),
+              const SizedBox(height: 6),
+              Text('${l.t('rxScriptNo')}: $_scriptNo'),
+              const SizedBox(height: 8),
+              Text(l.t('rxMovedToHistory')),
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
       );
+      if (!mounted) return;
+      Navigator.of(context).maybePop();
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -167,9 +195,9 @@ class _PrescriptionDetailSheetState extends State<_PrescriptionDetailSheet> {
 
     return DraggableScrollableSheet(
       expand: false,
-      initialChildSize: 0.82,
+      initialChildSize: 0.88,
       minChildSize: 0.5,
-      maxChildSize: 0.95,
+      maxChildSize: 0.97,
       builder: (context, scrollCtrl) {
         return Padding(
           padding: EdgeInsets.fromLTRB(16, 10, 16, 12 + bottom),
@@ -221,75 +249,21 @@ class _PrescriptionDetailSheetState extends State<_PrescriptionDetailSheet> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
+              Text(
+                '${l.t('mediLankaIssuedNo')}: $_prescriber',
+                style: const TextStyle(
+                  color: AppColors.slateMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const SizedBox(height: 14),
-              if (widget.showFormalForm) ...[
+              if (widget.showFormalForm)
                 PrescriptionFormView(
                   medicines: widget.medicines,
                   doctorName: widget.doctorName,
                   clinicName: widget.clinicName,
                   patient: widget.patient,
-                ),
-                const SizedBox(height: 14),
-              ],
-              if (!widget.showFormalForm)
-                ...widget.medicines.map(
-                  (m) => Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                m.medicine,
-                                style: const TextStyle(
-                                  color: AppColors.trustBlueDark,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              if (m.schedule.isNotEmpty) ...[
-                                const SizedBox(height: 3),
-                                Text(
-                                  m.schedule,
-                                  style: const TextStyle(
-                                    color: AppColors.slateMuted,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE2E8F0),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            m.doseBadge.isEmpty ? m.code : m.doseBadge,
-                            style: const TextStyle(
-                              color: AppColors.trustBlueDark,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
               const SizedBox(height: 8),
               Text(
@@ -319,7 +293,7 @@ class _PrescriptionDetailSheetState extends State<_PrescriptionDetailSheet> {
               ),
               const SizedBox(height: 8),
               _ActionButton(
-                icon: Icons.picture_as_pdf_outlined,
+                icon: Icons.download_outlined,
                 label: l.t('rxDownloadPdf'),
                 busy: _busyPdf,
                 onTap: _busyPdf ? null : _pdf,

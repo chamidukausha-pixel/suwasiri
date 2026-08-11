@@ -12,6 +12,7 @@ import '../../data/services/prescription_export_service.dart';
 import '../../localization/app_localizations.dart';
 import '../telehealth/prescription_detail_sheet.dart';
 import '../widgets/common_widgets.dart';
+import 'prescription_form_view.dart';
 
 /// Pending e-prescriptions only — shown above AI Lab Assistant in Vault.
 class VaultEPrescriptionSection extends StatelessWidget {
@@ -48,15 +49,7 @@ class VaultEPrescriptionSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final patientId =
-        context.watch<AuthCubit>().state.user?.id ?? 'sample';
-    final pending = state.pendingMedicines.isNotEmpty
-        ? state.pendingMedicines
-        : PatientHealthSamples.pendingMedicines(patientId: patientId);
-    final byClinic = <String, List<Prescription>>{};
-    for (final p in pending) {
-      byClinic.putIfAbsent(p.clinicName, () => []).add(p);
-    }
+    final pending = latestPendingPrescription(state.pendingMedicines);
 
     return Container(
       decoration: BoxDecoration(
@@ -107,7 +100,7 @@ class VaultEPrescriptionSection extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      l.t('vaultERxHint'),
+                      l.t('latestDoctorRxOnly'),
                       style: const TextStyle(
                         color: AppColors.slateMuted,
                         fontSize: 12,
@@ -115,7 +108,7 @@ class VaultEPrescriptionSection extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    if (byClinic.isEmpty)
+                    if (pending.isEmpty)
                       Text(
                         l.t('noPendingMedicines'),
                         style: const TextStyle(
@@ -124,72 +117,51 @@ class VaultEPrescriptionSection extends StatelessWidget {
                           fontSize: 13,
                         ),
                       )
-                    else
-                      ...byClinic.entries.map((e) {
-                        final first = e.value.first;
-                        final date = first.issuedAt != null
-                            ? DateFormat('d MMM yyyy · hh:mm a')
-                                .format(first.issuedAt!)
-                            : '—';
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${l.t('issuedDate')}: $date',
-                                style: const TextStyle(
-                                  color: AppColors.slateMuted,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${l.t('medicalClinic')}:',
-                                style: const TextStyle(
-                                  color: AppColors.slateMuted,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              MinTap(
-                                enforceMinSize: false,
-                                onTap: () => _openClinic(context, e.value),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        e.key,
-                                        style: const TextStyle(
-                                          color: AppColors.trustBlue,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w800,
-                                          decoration: TextDecoration.underline,
-                                          decorationColor: AppColors.trustBlue,
-                                        ),
-                                      ),
-                                    ),
-                                    const Icon(Icons.open_in_new,
-                                        size: 16, color: AppColors.trustBlue),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              ...e.value.map(
-                                (m) => Text(
-                                  '• ${m.medicine}',
-                                  style: const TextStyle(
-                                    color: AppColors.trustBlueDark,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
+                    else ...[
+                      Text(
+                        '${l.t('issuedDate')}: ${pending.first.issuedAt != null ? DateFormat('d MMM yyyy · hh:mm a').format(pending.first.issuedAt!) : '—'}',
+                        style: const TextStyle(
+                          color: AppColors.slateMuted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        pending.first.clinicName,
+                        style: const TextStyle(
+                          color: AppColors.trustBlueDark,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        pending.first.doctor,
+                        style: const TextStyle(
+                          color: AppColors.trustBlueDark,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        '${l.t('mediLankaIssuedNo')}: ${pending.first.prescriberNumber}',
+                        style: const TextStyle(
+                          color: AppColors.slateMuted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      MinTap(
+                        enforceMinSize: false,
+                        onTap: () => _openClinic(context, pending),
+                        child: PrescriptionFormView(
+                          medicines: pending,
+                          doctorName: pending.first.doctor,
+                          clinicName: pending.first.clinicName,
+                          patient: context.read<AuthCubit>().state.user,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
