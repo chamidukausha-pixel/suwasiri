@@ -417,9 +417,12 @@ class AppLocalizations {
       'ta': 'வழங்கப்பட்ட சீட்டை திறக்க கிளினிக் பெயரைத் தட்டவும் — மின்னஞ்சல், MediLanka அல்லது PDF.',
     },
     'tapClinicForRx': {
-      'en': 'Tap the clinic name above to view the full doctor-issued prescription.',
-      'si': 'සම්පූර්ණ වෛද්‍ය වට්ටෝරුව බැලීමට ඉහත සායන නම තට්ටු කරන්න.',
-      'ta': 'முழு மருத்துவர் மருந்துச்சீட்டைக் காண மேலே உள்ள கிளினிக் பெயரைத் தட்டவும்.',
+      'en':
+          'Tap the hospital or clinic name to view the e-prescription, email it, sync to MediLanka Pharmacy, or download as PDF.',
+      'si':
+          'ඊ-වට්ටෝරුව බැලීමට, ඊමේල් කිරීමට, MediLanka Pharmacy සමඟ සමමුහුර්ත කිරීමට හෝ PDF බාගැනීමට රෝහල/සායන නම තට්ටු කරන්න.',
+      'ta':
+          'மின் மருந்துச்சீட்டைப் பார்க்க, மின்னஞ்சல் அனுப்ப, MediLanka Pharmacy உடன் ஒத்திசைக்க அல்லது PDF பதிவிறக்க மருத்துவமனை/கிளினிக் பெயரைத் தட்டவும்.',
     },
     'issuedPrescription': {
       'en': 'Issued prescription',
@@ -1545,14 +1548,6 @@ class AppLocalizations {
       'en': 'Vaccine booking',
       'si': 'එන්නත් වෙන්කිරීම',
       'ta': 'தடுப்பூசி முன்பதிவு',
-    },
-    'tapClinicForRx': {
-      'en':
-          'Tap the hospital or clinic name to view the e-prescription, email it, sync to MediLanka Pharmacy, or download as PDF.',
-      'si':
-          'ඊ-වට්ටෝරුව බැලීමට, ඊමේල් කිරීමට, MediLanka Pharmacy සමඟ සමමුහුර්ත කිරීමට හෝ PDF බාගැනීමට රෝහල/සායන නම තට්ටු කරන්න.',
-      'ta':
-          'மின் மருந்துச்சீட்டைப் பார்க்க, மின்னஞ்சல் அனுப்ப, MediLanka Pharmacy உடன் ஒத்திசைக்க அல்லது PDF பதிவிறக்க மருத்துவமனை/கிளினிக் பெயரைத் தட்டவும்.',
     },
     'issuedHospitalClinic': {
       'en': 'Issued hospital / clinic',
