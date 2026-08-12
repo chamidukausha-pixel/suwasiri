@@ -30,7 +30,7 @@ Prioritized next work. Move items to **Done** in [STATUS.md](STATUS.md) when shi
 2. Crashlytics / Analytics
 3. CI: `flutter test` + analyze on PR
 4. App Store / Play listing assets
-5. Home empty-state polish when no appointments (currently soft card)
+5. Home empty-state polish when no appointments (currently soft card); vaccine upcoming uses sample slot when none booked
 
 ## Do not regress
 

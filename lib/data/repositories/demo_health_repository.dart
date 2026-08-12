@@ -11,6 +11,7 @@ import '../models/appointment.dart';
 import '../models/sos_location.dart';
 import '../models/vaccine_models.dart';
 import '../models/vault_report.dart';
+import '../services/lab_assistant_replies.dart';
 import 'health_repository.dart';
 
 class DemoHealthRepository implements HealthRepository {
@@ -370,6 +371,13 @@ class DemoHealthRepository implements HealthRepository {
     await Future<void>.delayed(const Duration(milliseconds: 400)); // handshake
     await Future<void>.delayed(const Duration(milliseconds: 400)); // verify CH ID
     await Future<void>.delayed(const Duration(milliseconds: 400)); // secure slot
+    ClinicFacility? clinic;
+    for (final c in VaccineCatalog.clinics) {
+      if (c.id == facilityId) {
+        clinic = c;
+        break;
+      }
+    }
     final booking = VaccineBooking(
       id: _uuid.v4(),
       facilityId: facilityId,
@@ -377,6 +385,7 @@ class DemoHealthRepository implements HealthRepository {
       slot: slot,
       ceylonHealthId: ceylonHealthId,
       status: 'confirmed',
+      address: clinic?.address ?? '',
     );
     final raw = _prefs.getString(_kBookings);
     final list = raw == null
@@ -384,12 +393,8 @@ class DemoHealthRepository implements HealthRepository {
         : List<Map<String, dynamic>>.from(jsonDecode(raw) as List);
     list.add({
       'id': booking.id,
-      'facilityId': facilityId,
-      'facilityName': facilityName,
-      'slot': slot.toIso8601String(),
-      'ceylonHealthId': ceylonHealthId,
-      'status': booking.status,
       'patientId': patientId,
+      ...booking.toMap(),
     });
     await _prefs.setString(_kBookings, jsonEncode(list));
     await pushNotification(
@@ -402,6 +407,18 @@ class DemoHealthRepository implements HealthRepository {
       ),
     );
     return booking;
+  }
+
+  @override
+  Future<List<VaccineBooking>> getVaccineBookings(String patientId) async {
+    final raw = _prefs.getString(_kBookings);
+    if (raw == null) return const [];
+    final list = List<Map<String, dynamic>>.from(jsonDecode(raw) as List);
+    return list
+        .where((m) => m['patientId'] == patientId)
+        .map((m) => VaccineBooking.fromMap(m['id'] as String? ?? '', m))
+        .toList()
+      ..sort((a, b) => a.slot.compareTo(b.slot));
   }
 
   @override
@@ -523,23 +540,7 @@ class DemoHealthRepository implements HealthRepository {
     required String question,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 600));
-    final q = question.toLowerCase();
-    if (q.contains('hba1c') || report.title.toLowerCase().contains('hba1c')) {
-      return 'Your HbA1c of 5.9% is in the prediabetes attention range '
-          '(5.7–6.4%). This reflects average blood glucose over ~3 months. '
-          'Discuss lifestyle measures and follow-up with your GP. '
-          'This is educational guidance, not a diagnosis.';
-    }
-    if (report.metrics.isNotEmpty) {
-      final lines = report.metrics
-          .map((m) => '• ${m.name}: ${m.value} (${m.status})')
-          .join('\n');
-      return 'Here is a structured summary of "${report.title}" '
-          'from ${report.issuedBy}:\n$lines\n\n'
-          'Ask your clinician before changing any treatment.';
-    }
-    return 'I reviewed "${report.title}". No structured metrics were attached. '
-        'Upload the full PDF or ask a more specific question.';
+    return LabAssistantReplies.reply(report: report, question: question);
   }
 
   @override

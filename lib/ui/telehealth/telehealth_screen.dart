@@ -11,11 +11,9 @@ import '../../bloc/notification/notification_cubit.dart';
 import '../../bloc/vault/vault_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/catalogs/patient_health_samples.dart';
-import '../../data/models/user_profile.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../localization/app_localizations.dart';
-import '../vault/prescription_form_view.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/suwasiri_brand_header.dart';
 import 'prescription_detail_sheet.dart';
@@ -331,7 +329,6 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final patientLabel = _patientLabel(context);
-    final patient = context.watch<AuthCubit>().state.user;
 
     return SafeArea(
       bottom: false,
@@ -384,7 +381,6 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
           _EPrescriptionCard(
             medicines: _sessionRx,
             updating: _rxUpdating,
-            patient: patient,
             doctorName: _doctorName,
             clinicName: _clinicName,
             onOpenClinic: (meds, clinic, doctor) => _openClinicPrescription(
@@ -891,12 +887,10 @@ class _EPrescriptionCard extends StatelessWidget {
     required this.doctorName,
     required this.clinicName,
     required this.onOpenClinic,
-    this.patient,
   });
 
   final List<Prescription> medicines;
   final bool updating;
-  final UserProfile? patient;
   final String doctorName;
   final String clinicName;
   final void Function(
@@ -971,7 +965,7 @@ class _EPrescriptionCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      l.t('latestDoctorRxOnly'),
+                      l.t('tapClinicForRx'),
                       style: const TextStyle(
                         color: AppColors.slateMuted,
                         fontSize: 12,
@@ -989,7 +983,7 @@ class _EPrescriptionCard extends StatelessWidget {
                         ),
                       ),
                     ] else ...[
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 12),
                       Text(
                         '${l.t('issuedDate')}: $issuedLabel',
                         style: const TextStyle(
@@ -998,42 +992,56 @@ class _EPrescriptionCard extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      Text(
-                        clinic,
-                        style: const TextStyle(
-                          color: AppColors.trustBlueDark,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      Text(
-                        doctor,
-                        style: const TextStyle(
-                          color: AppColors.trustBlueDark,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      if (first != null)
-                        Text(
-                          '${l.t('mediLankaIssuedNo')}: ${first.prescriberNumber}',
-                          style: const TextStyle(
-                            color: AppColors.slateMuted,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
                       const SizedBox(height: 10),
+                      Text(
+                        l.t('issuedHospitalClinic'),
+                        style: const TextStyle(
+                          color: AppColors.slateMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
                       MinTap(
                         enforceMinSize: false,
                         onTap: updating
                             ? null
                             : () => onOpenClinic(pending, clinic, doctor),
-                        child: PrescriptionFormView(
-                          medicines: pending,
-                          doctorName: doctor,
-                          clinicName: clinic,
-                          patient: patient,
+                        child: Text(
+                          clinic,
+                          style: const TextStyle(
+                            color: AppColors.trustBlue,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            decoration: TextDecoration.underline,
+                            decorationColor: AppColors.trustBlue,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        l.t('issuedDoctorName'),
+                        style: const TextStyle(
+                          color: AppColors.slateMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      MinTap(
+                        enforceMinSize: false,
+                        onTap: updating
+                            ? null
+                            : () => onOpenClinic(pending, clinic, doctor),
+                        child: Text(
+                          doctor,
+                          style: const TextStyle(
+                            color: AppColors.trustBlueDark,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                       if (updating) ...[

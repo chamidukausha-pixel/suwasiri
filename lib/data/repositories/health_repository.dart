@@ -43,6 +43,7 @@ abstract class HealthRepository {
     required DateTime slot,
     required String ceylonHealthId,
   });
+  Future<List<VaccineBooking>> getVaccineBookings(String patientId);
   Future<DateTime?> lastMohSync();
   Future<void> syncMoh();
 

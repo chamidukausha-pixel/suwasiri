@@ -189,20 +189,45 @@ abstract final class PatientHealthSamples {
     final now = DateTime.now();
     return [
       VaultReport(
-        id: 'lab-hba1c',
+        id: 'lab-cbc',
         patientId: patientId,
-        title: 'Glycated Hemoglobin (HbA1c)',
+        title: 'Complete Blood Count (CBC)',
         issuedBy: 'LankaLab',
-        date: now.subtract(const Duration(days: 12)),
+        date: DateTime(now.year, 10, 10).isAfter(now)
+            ? DateTime(now.year - 1, 10, 10)
+            : DateTime(now.year, 10, 10),
         category: 'Blood Work',
         facility: 'LankaLab Central · Colombo',
-        requestedBy: 'Dr. Kavinda Jayawardena',
-        fileSizeMb: 1.4,
+        requestedBy: 'Dr. Samantha Silva',
+        fileSizeMb: 1.8,
         kind: VaultRecordKind.lab,
+        clinicalComments:
+            'All parameters are within normal clinical thresholds. Adequate hydration is recommended.',
         metrics: const [
-          MetricReading(name: 'HbA1c', value: '5.9%', status: 'attention'),
           MetricReading(
-              name: 'Fasting Glucose', value: '108 mg/dL', status: 'attention'),
+            name: 'Hemoglobin',
+            value: '14.2 g/dL',
+            status: 'normal',
+            normalRange: '13.5 - 17.5 g/dL',
+          ),
+          MetricReading(
+            name: 'White Blood Cells (WBC)',
+            value: '6500 cells/mcL',
+            status: 'normal',
+            normalRange: '4500 - 11000 cells/mcL',
+          ),
+          MetricReading(
+            name: 'Platelets',
+            value: '245000 /mcL',
+            status: 'normal',
+            normalRange: '150000 - 450000 /mcL',
+          ),
+          MetricReading(
+            name: 'Red Blood Cells (RBC)',
+            value: '4.8 million/mcL',
+            status: 'normal',
+            normalRange: '4.3 - 5.9 million/mcL',
+          ),
         ],
       ),
       VaultReport(
@@ -387,6 +412,67 @@ abstract final class PatientHealthSamples {
       ),
     ];
   }
+
+  static List<DoctorCertificate> doctorCertificates({required String patientId}) {
+    final now = DateTime.now();
+    return [
+      DoctorCertificate(
+        id: 'cert-fit-1',
+        patientId: patientId,
+        title: 'Medical Fitness Certificate',
+        doctor: 'Dr. Aruni Perera',
+        clinicName: 'Lanka GP Care · Durdans Teleclinic',
+        certificateNo: 'MC-2026-4410',
+        date: now.subtract(const Duration(days: 8)),
+        body:
+            'This is to certify that the above-named patient was examined on the date stated and is medically fit to resume usual occupation and daily activities. No restriction of physical duty is advised at this time.',
+      ),
+      DoctorCertificate(
+        id: 'cert-sick-1',
+        patientId: patientId,
+        title: 'Sick Leave / Medical Certificate',
+        doctor: 'Dr. Samanthi Wickramasinghe',
+        clinicName: 'Nawaloka Hospital · OPD Clinic',
+        certificateNo: 'MC-2026-3381',
+        date: now.subtract(const Duration(days: 20)),
+        body:
+            'The patient was under medical care for an acute febrile illness and is advised rest from work for 3 days from the date of issue. Follow-up if fever persists beyond 72 hours.',
+      ),
+      DoctorCertificate(
+        id: 'cert-sport-1',
+        patientId: patientId,
+        title: 'Sports / Physical Activity Clearance',
+        doctor: 'Dr. Kavinda Jayawardena',
+        clinicName: 'Nawaloka Heart Clinic · Colombo 02',
+        certificateNo: 'MC-2026-2194',
+        date: now.subtract(const Duration(days: 45)),
+        body:
+            'Cardiovascular examination and resting ECG are within normal limits. Cleared for moderate recreational sport. Avoid unaccustomed extreme exertion until next review.',
+      ),
+    ];
+  }
+}
+
+class DoctorCertificate {
+  const DoctorCertificate({
+    required this.id,
+    required this.patientId,
+    required this.title,
+    required this.doctor,
+    required this.clinicName,
+    required this.certificateNo,
+    required this.date,
+    required this.body,
+  });
+
+  final String id;
+  final String patientId;
+  final String title;
+  final String doctor;
+  final String clinicName;
+  final String certificateNo;
+  final DateTime date;
+  final String body;
 }
 
 class TreatmentNote {

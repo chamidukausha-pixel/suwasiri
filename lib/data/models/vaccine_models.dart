@@ -74,6 +74,10 @@ class VaccineBooking extends Equatable {
     required this.slot,
     required this.ceylonHealthId,
     required this.status,
+    this.vaccineName = '',
+    this.address = '',
+    this.latitude,
+    this.longitude,
   });
 
   final String id;
@@ -82,8 +86,57 @@ class VaccineBooking extends Equatable {
   final DateTime slot;
   final String ceylonHealthId;
   final String status;
+  final String vaccineName;
+  final String address;
+  final double? latitude;
+  final double? longitude;
+
+  String get placeLabel {
+    final parts = [
+      facilityName,
+      if (address.isNotEmpty) address,
+    ];
+    return parts.join(', ');
+  }
+
+  Map<String, dynamic> toMap() => {
+        'facilityId': facilityId,
+        'facilityName': facilityName,
+        'slot': slot.toIso8601String(),
+        'ceylonHealthId': ceylonHealthId,
+        'status': status,
+        'vaccineName': vaccineName,
+        'address': address,
+        'latitude': latitude,
+        'longitude': longitude,
+      };
+
+  factory VaccineBooking.fromMap(String id, Map<String, dynamic> map) {
+    return VaccineBooking(
+      id: id,
+      facilityId: map['facilityId'] as String? ?? '',
+      facilityName: map['facilityName'] as String? ?? '',
+      slot: DateTime.tryParse(map['slot'] as String? ?? '') ?? DateTime.now(),
+      ceylonHealthId: map['ceylonHealthId'] as String? ?? '',
+      status: map['status'] as String? ?? 'confirmed',
+      vaccineName: map['vaccineName'] as String? ?? '',
+      address: map['address'] as String? ?? '',
+      latitude: (map['latitude'] as num?)?.toDouble(),
+      longitude: (map['longitude'] as num?)?.toDouble(),
+    );
+  }
 
   @override
-  List<Object?> get props =>
-      [id, facilityId, facilityName, slot, ceylonHealthId, status];
+  List<Object?> get props => [
+        id,
+        facilityId,
+        facilityName,
+        slot,
+        ceylonHealthId,
+        status,
+        vaccineName,
+        address,
+        latitude,
+        longitude,
+      ];
 }

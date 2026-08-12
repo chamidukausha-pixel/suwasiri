@@ -199,4 +199,24 @@ abstract final class VaccineCatalog {
       priceLkr: 7200,
     ),
   ];
+
+  /// Sample booked slot for Home upcoming (used when Firestore has none).
+  static VaccineBooking sampleUpcomingBooking({
+    required String patientId,
+    required String ceylonHealthId,
+  }) {
+    final day = DateTime.now().add(const Duration(days: 5));
+    return VaccineBooking(
+      id: 'sample-vax-home',
+      facilityId: 'moh-cmc',
+      facilityName: 'MOH Clinic, Colombo Municipal Council',
+      slot: DateTime(day.year, day.month, day.day, 8, 30),
+      ceylonHealthId: ceylonHealthId,
+      status: 'confirmed',
+      vaccineName: 'Dengue Prevention (Dose 2) (Qdenga®)',
+      address: 'Town Hall, Colombo 07',
+      latitude: 6.9271,
+      longitude: 79.8612,
+    );
+  }
 }

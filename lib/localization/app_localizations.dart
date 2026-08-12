@@ -483,11 +483,11 @@ class AppLocalizations {
     },
     'latestDoctorRxOnly': {
       'en':
-          'Latest e-prescription issued by your doctor. Tap the form to email, sync to MediLanka, or download.',
+          'Tap the hospital or clinic name to view the e-prescription, email it, sync to MediLanka Pharmacy, or download as PDF.',
       'si':
-          'ඔබේ වෛද්‍යවරයා නිකුත් කළ නවතම ඊ-වට්ටෝරුව. ඊමේල්, MediLanka හෝ බාගැනීමට පෝරමය තට්ටු කරන්න.',
+          'ඊ-වට්ටෝරුව බැලීමට, ඊමේල් කිරීමට, MediLanka Pharmacy සමඟ සමමුහුර්ත කිරීමට හෝ PDF බාගැනීමට රෝහල/සායන නම තට්ටු කරන්න.',
       'ta':
-          'உங்கள் மருத்துவர் வழங்கிய சமீபத்திய மின் மருந்துச்சீட்டு. மின்னஞ்சல், MediLanka அல்லது பதிவிறக்க படிவத்தைத் தட்டவும்.',
+          'மின் மருந்துச்சீட்டைப் பார்க்க, மின்னஞ்சல் அனுப்ப, MediLanka Pharmacy உடன் ஒத்திசைக்க அல்லது PDF பதிவிறக்க மருத்துவமனை/கிளினிக் பெயரைத் தட்டவும்.',
     },
     'rxPdfFailed': {
       'en': 'Could not create PDF.',
@@ -1535,6 +1535,162 @@ class AppLocalizations {
       'en': 'Apple Maps',
       'si': 'Apple Maps',
       'ta': 'Apple Maps',
+    },
+    'upcomingVaccine': {
+      'en': 'UPCOMING VACCINE',
+      'si': 'ඉදිරි එන්නත',
+      'ta': 'வரவிருக்கும் தடுப்பூசி',
+    },
+    'vaccineBooking': {
+      'en': 'Vaccine booking',
+      'si': 'එන්නත් වෙන්කිරීම',
+      'ta': 'தடுப்பூசி முன்பதிவு',
+    },
+    'tapClinicForRx': {
+      'en':
+          'Tap the hospital or clinic name to view the e-prescription, email it, sync to MediLanka Pharmacy, or download as PDF.',
+      'si':
+          'ඊ-වට්ටෝරුව බැලීමට, ඊමේල් කිරීමට, MediLanka Pharmacy සමඟ සමමුහුර්ත කිරීමට හෝ PDF බාගැනීමට රෝහල/සායන නම තට්ටු කරන්න.',
+      'ta':
+          'மின் மருந்துச்சீட்டைப் பார்க்க, மின்னஞ்சல் அனுப்ப, MediLanka Pharmacy உடன் ஒத்திசைக்க அல்லது PDF பதிவிறக்க மருத்துவமனை/கிளினிக் பெயரைத் தட்டவும்.',
+    },
+    'issuedHospitalClinic': {
+      'en': 'Issued hospital / clinic',
+      'si': 'නිකුත් කළ රෝහල / සායනය',
+      'ta': 'வழங்கிய மருத்துவமனை / கிளினிக்',
+    },
+    'issuedDoctorName': {
+      'en': 'Issued doctor',
+      'si': 'නිකුත් කළ වෛද්‍යවරයා',
+      'ta': 'வழங்கிய மருத்துவர்',
+    },
+    'doctorCertificates': {
+      'en': 'Doctor certificates',
+      'si': 'වෛද්‍ය සහතික',
+      'ta': 'மருத்துவர் சான்றிதழ்கள்',
+    },
+    'noCertificates': {
+      'en': 'No doctor certificates yet.',
+      'si': 'වෛද්‍ය සහතික නැත.',
+      'ta': 'மருத்துவர் சான்றிதழ்கள் இல்லை.',
+    },
+    'certificateDetail': {
+      'en': 'Doctor certificate',
+      'si': 'වෛද්‍ය සහතිකය',
+      'ta': 'மருத்துவர் சான்றிதழ்',
+    },
+    'downloadCertificate': {
+      'en': 'Download',
+      'si': 'බාගන්න',
+      'ta': 'பதிவிறக்கு',
+    },
+    'emailCertificate': {
+      'en': 'Send by email',
+      'si': 'ඊමේල් කරන්න',
+      'ta': 'மின்னஞ்சல் அனுப்பு',
+    },
+    'certReady': {
+      'en': 'Certificate ready to save / share.',
+      'si': 'සහතිකය සුරැකීමට/බෙදාගැනීමට සූදානම්.',
+      'ta': 'சான்றிதழ் சேமிக்க/பகிர தயார்.',
+    },
+    'certEmailSent': {
+      'en': 'Opened email with the certificate PDF.',
+      'si': 'සහතික PDF සමඟ ඊමේල් විවෘත විය.',
+      'ta': 'சான்றிதழ் PDF உடன் மின்னஞ்சல் திறக்கப்பட்டது.',
+    },
+    'copilotTitle': {
+      'en': 'SUWASIRI INTEGRATED CO-PILOT',
+      'si': 'SUWASIRI INTEGRATED CO-PILOT',
+      'ta': 'SUWASIRI INTEGRATED CO-PILOT',
+    },
+    'copilotSubtitle': {
+      'en': 'Explain & Recommend Doctor',
+      'si': 'පැහැදිලි කරන්න සහ වෛද්‍යවරයෙකු නිර්දේශ කරන්න',
+      'ta': 'விளக்கி மருத்துவரை பரிந்துரை',
+    },
+    'copilotOnline': {
+      'en': 'ONLINE',
+      'si': 'සජීවී',
+      'ta': 'ஆன்லைன்',
+    },
+    'copilotGreeting': {
+      'en':
+          '👋 Hello {name}! I am Suwasiri AI Clinical Assistant. I have indexed your clinical file "{title}" (Category: {category}) containing {count} biomarkers. Ask me any questions like "Explain my ranges" or "Recommend the best doctor specialty" or type in custom symptoms. I will translate clinical findings and recommend matching Sri Lankan experts.',
+      'si':
+          '👋 ආයුබෝවන් {name}! මම Suwasiri AI සායනික සහායකයා. මම ඔබේ "{title}" (වර්ගය: {category}) ගොනුව සුචිගත කර ඇත. ජෛව සලකුණු {count}ක් ඇත. "පරාස පැහැදිලි කරන්න" හෝ "විශේෂඥ වෛද්‍යවරයෙකු නිර්දේශ කරන්න" වැනි ප්‍රශ්න අසන්න. මම සායනික සොයාගැනීම් පරිවර්තනය කර ශ්‍රී ලාංකික විශේෂඥයන් නිර්දේශ කරමි.',
+      'ta':
+          '👋 வணக்கம் {name}! நான் Suwasiri AI மருத்துவ உதவியாளர். உங்கள் "{title}" (வகை: {category}) கோப்பை அட்டவணைப்படுத்தியுள்ளேன். {count} உயிர்குறிகள் உள்ளன. "என் வரம்புகளை விளக்கு" அல்லது "சிறந்த மருத்துவ சிறப்பை பரிந்துரை" எனக் கேளுங்கள். மருத்துவ கண்டுபிடிப்புகளை மொழிபெயர்த்து இலங்கை நிபுணர்களை பரிந்துரைப்பேன்.',
+    },
+    'summarizeReport': {
+      'en': 'Summarize Report',
+      'si': 'වාර්තාව සාරාංශ කරන්න',
+      'ta': 'அறிக்கையை சுருக்கு',
+    },
+    'recommendSpecialist': {
+      'en': 'Recommend Specialist Doctor',
+      'si': 'විශේෂඥ වෛද්‍යවරයෙකු නිර්දේශ කරන්න',
+      'ta': 'சிறப்பு மருத்துவரை பரிந்துரை',
+    },
+    'askClinicalAssistant': {
+      'en': 'Ask clinical assistant anything about report...',
+      'si': 'වාර්තාව ගැන සායනික සහායකයාගෙන් අසන්න...',
+      'ta': 'அறிக்கை பற்றி மருத்துவ உதவியாளரிடம் கேளுங்கள்...',
+    },
+    'downloadPdfDocument': {
+      'en': 'Download PDF Document',
+      'si': 'PDF ලේඛනය බාගන්න',
+      'ta': 'PDF ஆவணத்தை பதிவிறக்கு',
+    },
+    'close': {
+      'en': 'Close',
+      'si': 'වසන්න',
+      'ta': 'மூடு',
+    },
+    'send': {
+      'en': 'Send',
+      'si': 'යවන්න',
+      'ta': 'அனுப்பு',
+    },
+    'laboratoryComments': {
+      'en': 'Laboratory Clinical Comments',
+      'si': 'රසායනාගාර සායනික අදහස්',
+      'ta': 'ஆய்வக மருத்துவ கருத்துகள்',
+    },
+    'labCommentsFallback': {
+      'en': 'No laboratory comments were attached to this report.',
+      'si': 'මෙම වාර්තාවට රසායනාගාර අදහස් ඇමිණී නැත.',
+      'ta': 'இந்த அறிக்கையில் ஆய்வக கருத்துகள் இணைக்கப்படவில்லை.',
+    },
+    'biochemicalMarkers': {
+      'en': 'BIOCHEMICAL MARKERS BREAKDOWN',
+      'si': 'ජෛව රසායනික සලකුණු විස්තරය',
+      'ta': 'உயிர்வேதியியல் குறிகள் பிரிவு',
+    },
+    'diagnosticNormal': {
+      'en': 'DIAGNOSTIC: NORMAL',
+      'si': 'රෝග විනිශ්චය: සාමාන්‍ය',
+      'ta': 'நோயறிதல்: இயல்பு',
+    },
+    'diagnosticAttention': {
+      'en': 'DIAGNOSTIC: ATTENTION',
+      'si': 'රෝග විනිශ්චය: අවධානය',
+      'ta': 'நோயறிதல்: கவனம்',
+    },
+    'orderedBy': {
+      'en': 'Ordered by',
+      'si': 'ඇණවුම් කළේ',
+      'ta': 'ஆர்டர் செய்தவர்',
+    },
+    'reportDate': {
+      'en': 'Date',
+      'si': 'දිනය',
+      'ta': 'தேதி',
+    },
+    'labPdfReady': {
+      'en': 'Lab report PDF ready to save / share.',
+      'si': 'රසායනාගාර වාර්තා PDF සුරැකීමට/බෙදාගැනීමට සූදානම්.',
+      'ta': 'ஆய்வக அறிக்கை PDF சேமிக்க/பகிர தயார்.',
     },
   };
 

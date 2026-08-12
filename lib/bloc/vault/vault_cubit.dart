@@ -5,7 +5,7 @@ import '../../data/catalogs/patient_health_samples.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/repositories/health_repository.dart';
 
-enum HealthHistoryTab { medicines, labs, vaccines, notes }
+enum HealthHistoryTab { medicines, labs, vaccines, certificates, notes }
 
 enum VaultFilter { labs, medicines, history }
 
@@ -15,6 +15,7 @@ class VaultState extends Equatable {
     this.prescriptions = const [],
     this.treatmentNotes = const [],
     this.vaccineHistory = const [],
+    this.certificates = const [],
     this.unlocked = false,
     this.loading = false,
     this.syncingLankaLab = false,
@@ -31,6 +32,7 @@ class VaultState extends Equatable {
   final List<Prescription> prescriptions;
   final List<TreatmentNote> treatmentNotes;
   final List<VaccineHistoryEntry> vaccineHistory;
+  final List<DoctorCertificate> certificates;
   final bool unlocked;
   final bool loading;
   final bool syncingLankaLab;
@@ -56,6 +58,7 @@ class VaultState extends Equatable {
     List<Prescription>? prescriptions,
     List<TreatmentNote>? treatmentNotes,
     List<VaccineHistoryEntry>? vaccineHistory,
+    List<DoctorCertificate>? certificates,
     bool? unlocked,
     bool? loading,
     bool? syncingLankaLab,
@@ -74,6 +77,7 @@ class VaultState extends Equatable {
       prescriptions: prescriptions ?? this.prescriptions,
       treatmentNotes: treatmentNotes ?? this.treatmentNotes,
       vaccineHistory: vaccineHistory ?? this.vaccineHistory,
+      certificates: certificates ?? this.certificates,
       unlocked: unlocked ?? this.unlocked,
       loading: loading ?? this.loading,
       syncingLankaLab: syncingLankaLab ?? this.syncingLankaLab,
@@ -94,6 +98,7 @@ class VaultState extends Equatable {
         prescriptions,
         treatmentNotes,
         vaccineHistory,
+        certificates,
         unlocked,
         loading,
         syncingLankaLab,
@@ -164,6 +169,9 @@ class VaultCubit extends Cubit<VaultState> {
           ),
       vaccineHistory: List<VaccineHistoryEntry>.from(
         PatientHealthSamples.vaccineHistory(patientId: patientId),
+      ),
+      certificates: List<DoctorCertificate>.from(
+        PatientHealthSamples.doctorCertificates(patientId: patientId),
       ),
       loading: false,
     ));

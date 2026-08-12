@@ -6,6 +6,7 @@ import '../../bloc/auth/auth_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/map_launcher.dart';
 import '../../data/catalogs/doctor_catalog.dart';
+import '../../data/catalogs/vaccine_catalog.dart';
 import '../../data/models/appointment.dart';
 import '../../data/models/vaccine_models.dart';
 import '../../data/repositories/health_repository.dart';
@@ -26,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Appointment? _nextAppt;
   VaccineProtocol? _vaccine;
   String? _nextHospital;
+  VaccineBooking? _nextVaccineBooking;
 
   @override
   void initState() {
@@ -39,6 +41,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final health = context.read<HealthRepository>();
     final appts = await health.getAppointments(user.id);
     final protocols = await health.getVaccineProtocols(user.id);
+    List<VaccineBooking> bookings = const [];
+    try {
+      bookings = await health.getVaccineBookings(user.id);
+    } catch (_) {}
     if (!mounted) return;
     setState(() {
       final upcoming = appts
@@ -55,6 +61,18 @@ class _HomeScreenState extends State<HomeScreen> {
       _vaccine = protocols.where((p) => p.progress < 1.0).isNotEmpty
           ? protocols.firstWhere((p) => p.progress < 1.0)
           : (protocols.isEmpty ? null : protocols.first);
+      final futureBookings = bookings
+          .where((b) =>
+              b.status == 'confirmed' &&
+              b.slot.isAfter(DateTime.now().subtract(const Duration(hours: 2))))
+          .toList()
+        ..sort((a, b) => a.slot.compareTo(b.slot));
+      _nextVaccineBooking = futureBookings.isNotEmpty
+          ? futureBookings.first
+          : VaccineCatalog.sampleUpcomingBooking(
+              patientId: user.id,
+              ceylonHealthId: user.ceylonHealthId ?? user.barcodeNumber ?? 'CH',
+            );
     });
   }
 
@@ -70,6 +88,18 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       title: appt.doctorName,
       address: _nextHospital ?? appt.specialty,
+    );
+  }
+
+  Future<void> _openVaccineMaps() async {
+    final b = _nextVaccineBooking;
+    if (b == null) return;
+    await MapLauncher.showPlaceMapChoice(
+      context,
+      title: b.facilityName,
+      address: b.placeLabel,
+      latitude: b.latitude,
+      longitude: b.longitude,
     );
   }
 
@@ -177,6 +207,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
+          if (_nextVaccineBooking != null) ...[
+            const SizedBox(height: 12),
+            _UpcomingVaccineCard(
+              booking: _nextVaccineBooking!,
+              onDetails: _openVaccineMaps,
+            ),
+          ],
           const SizedBox(height: 14),
           if (_vaccine != null)
             _VaccinationStatusCard(
@@ -454,6 +491,157 @@ class _UpcomingAppointmentCard extends StatelessWidget {
               onPressed: onDetails,
               child: Text(
                 detailsLabel,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UpcomingVaccineCard extends StatelessWidget {
+  const _UpcomingVaccineCard({
+    required this.booking,
+    required this.onDetails,
+  });
+
+  final VaccineBooking booking;
+  final VoidCallback onDetails;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final date = DateFormat('MMM d, y').format(booking.slot);
+    final time = DateFormat('hh:mm a').format(booking.slot);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.emerald,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.emerald.withValues(alpha: 0.35),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  l.t('upcomingVaccine'),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.vaccines_outlined,
+                  color: Colors.white,
+                  size: 18,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            booking.vaccineName.isEmpty
+                ? l.t('vaccineBooking')
+                : booking.vaccineName,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 20,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            booking.facilityName,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.95),
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
+          if (booking.address.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              booking.address,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.85),
+                fontSize: 13,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Divider(color: Colors.white.withValues(alpha: 0.25), height: 1),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              const Icon(Icons.calendar_today_outlined,
+                  color: Colors.white, size: 16),
+              const SizedBox(width: 6),
+              Text(
+                date,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              const Spacer(),
+              const Icon(Icons.access_time, color: Colors.white, size: 16),
+              const SizedBox(width: 6),
+              Text(
+                time,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: AppColors.emerald,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                elevation: 0,
+              ),
+              onPressed: onDetails,
+              child: Text(
+                l.t('viewDetailsMap'),
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
             ),

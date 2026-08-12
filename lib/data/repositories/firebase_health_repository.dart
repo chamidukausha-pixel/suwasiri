@@ -10,6 +10,7 @@ import '../models/appointment.dart';
 import '../models/sos_location.dart';
 import '../models/vaccine_models.dart';
 import '../models/vault_report.dart';
+import '../services/lab_assistant_replies.dart';
 import 'health_repository.dart';
 
 /// Firestore-backed health data; clinics/doctors stay as curated catalogs.
@@ -262,6 +263,13 @@ class FirebaseHealthRepository implements HealthRepository {
     required DateTime slot,
     required String ceylonHealthId,
   }) async {
+    ClinicFacility? clinic;
+    for (final c in VaccineCatalog.clinics) {
+      if (c.id == facilityId) {
+        clinic = c;
+        break;
+      }
+    }
     final booking = VaccineBooking(
       id: _uuid.v4(),
       facilityId: facilityId,
@@ -269,14 +277,11 @@ class FirebaseHealthRepository implements HealthRepository {
       slot: slot,
       ceylonHealthId: ceylonHealthId,
       status: 'confirmed',
+      address: clinic?.address ?? '',
     );
     await _vaccinations.doc(booking.id).set({
       'patientId': patientId,
-      'facilityId': facilityId,
-      'facilityName': facilityName,
-      'slot': slot.toIso8601String(),
-      'ceylonHealthId': ceylonHealthId,
-      'status': booking.status,
+      ...booking.toMap(),
     });
     await pushNotification(
       AppNotification(
@@ -288,6 +293,17 @@ class FirebaseHealthRepository implements HealthRepository {
       ),
     );
     return booking;
+  }
+
+  @override
+  Future<List<VaccineBooking>> getVaccineBookings(String patientId) async {
+    final snap =
+        await _vaccinations.where('patientId', isEqualTo: patientId).get();
+    final list = snap.docs
+        .map((d) => VaccineBooking.fromMap(d.id, d.data()))
+        .toList()
+      ..sort((a, b) => a.slot.compareTo(b.slot));
+    return list;
   }
 
   @override
@@ -386,23 +402,7 @@ class FirebaseHealthRepository implements HealthRepository {
     required String question,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 600));
-    final q = question.toLowerCase();
-    if (q.contains('hba1c') || report.title.toLowerCase().contains('hba1c')) {
-      return 'Your HbA1c of 5.9% is in the prediabetes attention range '
-          '(5.7–6.4%). This reflects average blood glucose over ~3 months. '
-          'Discuss lifestyle measures and follow-up with your GP. '
-          'This is educational guidance, not a diagnosis.';
-    }
-    if (report.metrics.isNotEmpty) {
-      final lines = report.metrics
-          .map((m) => '• ${m.name}: ${m.value} (${m.status})')
-          .join('\n');
-      return 'Here is a structured summary of "${report.title}" '
-          'from ${report.issuedBy}:\n$lines\n\n'
-          'Ask your clinician before changing any treatment.';
-    }
-    return 'I reviewed "${report.title}". No structured metrics were attached. '
-        'Upload the full PDF or ask a more specific question.';
+    return LabAssistantReplies.reply(report: report, question: question);
   }
 
   @override

@@ -5,26 +5,30 @@ class MetricReading extends Equatable {
     required this.name,
     required this.value,
     required this.status,
+    this.normalRange = '',
   });
 
   final String name;
   final String value;
   final String status; // normal | attention | critical
+  final String normalRange;
 
   Map<String, dynamic> toMap() => {
         'name': name,
         'value': value,
         'status': status,
+        'normalRange': normalRange,
       };
 
   factory MetricReading.fromMap(Map<String, dynamic> map) => MetricReading(
         name: map['name'] as String? ?? '',
         value: map['value'] as String? ?? '',
         status: map['status'] as String? ?? 'normal',
+        normalRange: map['normalRange'] as String? ?? '',
       );
 
   @override
-  List<Object?> get props => [name, value, status];
+  List<Object?> get props => [name, value, status, normalRange];
 }
 
 class VaultReport extends Equatable {
@@ -42,6 +46,7 @@ class VaultReport extends Equatable {
     this.fileSizeMb,
     this.kind = VaultRecordKind.lab,
     this.batchCode,
+    this.clinicalComments = '',
   });
 
   final String id;
@@ -57,6 +62,7 @@ class VaultReport extends Equatable {
   final double? fileSizeMb;
   final VaultRecordKind kind;
   final String? batchCode;
+  final String clinicalComments;
 
   bool get readyForAi => metrics.isNotEmpty || kind == VaultRecordKind.lab;
 
@@ -73,6 +79,7 @@ class VaultReport extends Equatable {
         'fileSizeMb': fileSizeMb,
         'kind': kind.name,
         'batchCode': batchCode,
+        'clinicalComments': clinicalComments,
       };
 
   factory VaultReport.fromMap(String id, Map<String, dynamic> map) {
@@ -96,6 +103,7 @@ class VaultReport extends Equatable {
         orElse: () => VaultRecordKind.lab,
       ),
       batchCode: map['batchCode'] as String?,
+      clinicalComments: map['clinicalComments'] as String? ?? '',
     );
   }
 
@@ -114,6 +122,7 @@ class VaultReport extends Equatable {
         fileSizeMb,
         kind,
         batchCode,
+        clinicalComments,
       ];
 }
 

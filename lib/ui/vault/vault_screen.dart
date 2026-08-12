@@ -7,6 +7,7 @@ import '../../bloc/vault/vault_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/suwasiri_brand_header.dart';
+import 'lab_report_detail_sheet.dart';
 import 'patient_health_section.dart';
 
 class VaultScreen extends StatefulWidget {
@@ -17,8 +18,6 @@ class VaultScreen extends StatefulWidget {
 }
 
 class _VaultScreenState extends State<VaultScreen> {
-  final _aiQuestion = TextEditingController();
-
   @override
   void initState() {
     super.initState();
@@ -37,96 +36,17 @@ class _VaultScreenState extends State<VaultScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _aiQuestion.dispose();
-    super.dispose();
-  }
-
   Future<void> _showAiSheet(VaultState state) async {
-    final l = AppLocalizations.of(context);
-    final cubit = context.read<VaultCubit>();
-    if (state.selectedReport == null && state.reports.isNotEmpty) {
-      final ready = state.reports.where((r) => r.readyForAi);
-      cubit.selectReport(ready.isNotEmpty ? ready.first : state.reports.first);
+    final labs = state.labReports;
+    if (labs.isEmpty) {
+      final l = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l.t('noReports'))),
+      );
+      return;
     }
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            bottom: MediaQuery.viewInsetsOf(ctx).bottom + 16,
-            top: 8,
-          ),
-          child: BlocBuilder<VaultCubit, VaultState>(
-            builder: (context, s) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    l.t('aiLabAssistant'),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 18,
-                      color: AppColors.trustBlueDark,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    s.selectedReport == null
-                        ? l.t('aiSelectReport')
-                        : '${l.t('askingAbout')}: ${s.selectedReport!.title}',
-                    style: const TextStyle(color: AppColors.slateMuted),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _aiQuestion,
-                    decoration: InputDecoration(
-                      hintText: l.t('aiExplainHint'),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    onPressed: s.selectedReport == null || s.loading
-                        ? null
-                        : () => cubit.askAi(_aiQuestion.text.trim()),
-                    child: Text(l.t('tryExplainNow')),
-                  ),
-                  if (s.loading) ...[
-                    const SizedBox(height: 12),
-                    const LinearProgressIndicator(),
-                  ],
-                  if (s.aiReply != null) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.trustBlueSoft,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        s.aiReply!,
-                        style: const TextStyle(
-                          color: AppColors.trustBlueDark,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                ],
-              );
-            },
-          ),
-        );
-      },
-    );
+    final report = state.selectedReport ?? labs.first;
+    await showLabReportDetailSheet(context: context, report: report);
   }
 
   @override

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
@@ -12,6 +12,7 @@ import '../../data/services/prescription_export_service.dart';
 import '../../localization/app_localizations.dart';
 import '../telehealth/prescription_detail_sheet.dart';
 import '../widgets/common_widgets.dart';
+import 'lab_report_detail_sheet.dart';
 import 'prescription_form_view.dart';
 
 /// Pending e-prescriptions only — shown above AI Lab Assistant in Vault.
@@ -173,7 +174,7 @@ class VaultEPrescriptionSection extends StatelessWidget {
   }
 }
 
-/// Issued Medical History with four colored category tiles.
+/// Issued Medical History with colored category tiles.
 class IssuedMedicalHistorySection extends StatelessWidget {
   const IssuedMedicalHistorySection({super.key, required this.state});
 
@@ -182,6 +183,7 @@ class IssuedMedicalHistorySection extends StatelessWidget {
   static const _medColor = Color(0xFF1A66FF);
   static const _labColor = Color(0xFF0D9488);
   static const _vaxColor = Color(0xFF059669);
+  static const _certColor = Color(0xFF7C3AED);
   static const _noteColor = Color(0xFFD97706);
 
   @override
@@ -201,6 +203,9 @@ class IssuedMedicalHistorySection extends StatelessWidget {
     final notes = state.treatmentNotes.isNotEmpty
         ? state.treatmentNotes
         : PatientHealthSamples.treatmentNotes(patientId: patientId);
+    final certificates = state.certificates.isNotEmpty
+        ? state.certificates
+        : PatientHealthSamples.doctorCertificates(patientId: patientId);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -270,6 +275,23 @@ class IssuedMedicalHistorySection extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: _CategoryTile(
+                icon: Icons.workspace_premium_outlined,
+                title: l.t('doctorCertificates'),
+                count: certificates.length,
+                color: _certColor,
+                selected: state.healthTab == HealthHistoryTab.certificates,
+                onTap: () => context
+                    .read<VaultCubit>()
+                    .setHealthTab(HealthHistoryTab.certificates),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _CategoryTile(
                 icon: Icons.note_alt_outlined,
                 title: l.t('treatmentNotes'),
                 count: notes.length,
@@ -279,6 +301,7 @@ class IssuedMedicalHistorySection extends StatelessWidget {
                     context.read<VaultCubit>().setHealthTab(HealthHistoryTab.notes),
               ),
             ),
+            const Expanded(child: SizedBox()),
           ],
         ),
         const SizedBox(height: 14),
@@ -288,6 +311,8 @@ class IssuedMedicalHistorySection extends StatelessWidget {
           _LabsList(labs: labs)
         else if (state.healthTab == HealthHistoryTab.vaccines)
           _VaccinesList(entries: vaccines)
+        else if (state.healthTab == HealthHistoryTab.certificates)
+          _CertificatesList(certificates: certificates)
         else
           _NotesList(notes: notes),
       ],
@@ -656,6 +681,206 @@ class _VaccinesList extends StatelessWidget {
   }
 }
 
+class _CertificatesList extends StatelessWidget {
+  const _CertificatesList({required this.certificates});
+
+  final List<DoctorCertificate> certificates;
+
+  Future<void> _open(BuildContext context, DoctorCertificate c) async {
+    final l = AppLocalizations.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            8,
+            20,
+            20 + MediaQuery.paddingOf(ctx).bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l.t('certificateDetail'),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                  color: Color(0xFF7C3AED),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                c.title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                  color: AppColors.trustBlueDark,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${c.doctor} · ${c.clinicName}',
+                style: const TextStyle(
+                  color: AppColors.trustBlueDark,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              Text(
+                '${c.certificateNo} · ${DateFormat('d MMM yyyy').format(c.date)}',
+                style: const TextStyle(
+                  color: AppColors.slateMuted,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                c.body,
+                style: const TextStyle(
+                  color: AppColors.trustBlueDark,
+                  height: 1.45,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final user = context.read<AuthCubit>().state.user;
+                        try {
+                          await PrescriptionExportService
+                              .downloadCertificatePdf(
+                            certificate: c,
+                            patient: user,
+                          );
+                          if (!context.mounted) return;
+                          Navigator.of(ctx).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(l.t('certReady'))),
+                          );
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('${l.t('rxPdfFailed')}: $e'),
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.download_outlined),
+                      label: Text(l.t('downloadCertificate')),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () async {
+                        final user = context.read<AuthCubit>().state.user;
+                        final email = user?.email ?? '';
+                        if (email.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(l.t('rxEmailMissing'))),
+                          );
+                          return;
+                        }
+                        try {
+                          await PrescriptionExportService.emailCertificate(
+                            certificate: c,
+                            toEmail: email,
+                            patient: user,
+                          );
+                          if (!context.mounted) return;
+                          Navigator.of(ctx).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(l.t('certEmailSent'))),
+                          );
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('$e')),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.email_outlined),
+                      label: Text(l.t('emailCertificate')),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    if (certificates.isEmpty) return EmptyHint(l.t('noCertificates'));
+    return Column(
+      children: [
+        for (final c in certificates)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: MinTap(
+              enforceMinSize: false,
+              onTap: () => _open(context, c),
+              child: SoftCard(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF7C3AED).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.workspace_premium_outlined,
+                        color: Color(0xFF7C3AED),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            c.title,
+                            style: const TextStyle(
+                              color: AppColors.trustBlueDark,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            '${c.doctor} · ${DateFormat('d MMM yyyy').format(c.date)}',
+                            style: const TextStyle(
+                              color: AppColors.slateMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right, color: AppColors.slateMuted),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _NotesList extends StatelessWidget {
   const _NotesList({required this.notes});
 
@@ -786,271 +1011,3 @@ class _NotesList extends StatelessWidget {
   }
 }
 
-Future<void> showLabReportDetailSheet({
-  required BuildContext context,
-  required VaultReport report,
-}) {
-  return showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (ctx) => _LabReportDetailBody(report: report),
-  );
-}
-
-class _LabReportDetailBody extends StatefulWidget {
-  const _LabReportDetailBody({required this.report});
-
-  final VaultReport report;
-
-  @override
-  State<_LabReportDetailBody> createState() => _LabReportDetailBodyState();
-}
-
-class _LabReportDetailBodyState extends State<_LabReportDetailBody> {
-  final _question = TextEditingController();
-  String _language = 'English';
-  bool _aiOpen = false;
-
-  static const _langs = [
-    'English',
-    'Sinhala',
-    'Tamil',
-    'Simple English',
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    context.read<VaultCubit>().selectReport(widget.report);
-  }
-
-  @override
-  void dispose() {
-    _question.dispose();
-    super.dispose();
-  }
-
-  Future<void> _download() async {
-    final user = context.read<AuthCubit>().state.user;
-    try {
-      await PrescriptionExportService.downloadLabReportPdf(
-        report: widget.report,
-        patient: user,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lab report ready to save / share')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Download failed: $e')),
-      );
-    }
-  }
-
-  Future<void> _askAi() async {
-    await context.read<VaultCubit>().askAi(
-          _question.text.trim(),
-          language: _language,
-        );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final report = widget.report;
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        8,
-        20,
-        20 + MediaQuery.paddingOf(context).bottom,
-      ),
-      child: BlocBuilder<VaultCubit, VaultState>(
-        builder: (context, state) {
-          return SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l.t('labReportDetail'),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 18,
-                    color: AppColors.trustBlueDark,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  report.title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                    color: AppColors.trustBlueDark,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '${report.facility ?? report.issuedBy} · ${DateFormat('d MMM yyyy').format(report.date)}',
-                  style: const TextStyle(
-                    color: AppColors.slateMuted,
-                    fontSize: 13,
-                  ),
-                ),
-                if (report.requestedBy != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    '${l.t('issuedByLabel')}: ${report.requestedBy}',
-                    style: const TextStyle(
-                      color: AppColors.trustBlueDark,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 14),
-                ...report.metrics.map(
-                  (m) => Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            m.name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.trustBlueDark,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          m.value,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.trustBlueDark,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          m.status,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: m.status == 'normal'
-                                ? AppColors.emerald
-                                : AppColors.warning,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _download,
-                        icon: const Icon(Icons.download_outlined),
-                        label: const Text('Download report'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () => setState(() => _aiOpen = !_aiOpen),
-                        icon: const Icon(Icons.auto_awesome),
-                        label: Text(
-                          _aiOpen ? 'Hide AI' : 'AI Lab Assistant',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (_aiOpen) ...[
-                  const SizedBox(height: 14),
-                  Text(
-                    'Explain in language',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                      color: AppColors.slateMuted,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _langs.map((lang) {
-                      final selected = _language == lang;
-                      return ChoiceChip(
-                        label: Text(lang),
-                        selected: selected,
-                        onSelected: (_) => setState(() => _language = lang),
-                        selectedColor: AppColors.trustBlue,
-                        labelStyle: TextStyle(
-                          color: selected
-                              ? Colors.white
-                              : AppColors.trustBlueDark,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
-                        showCheckmark: false,
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _question,
-                    decoration: InputDecoration(
-                      hintText: l.t('aiExplainHint'),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  FilledButton(
-                    onPressed: state.loading ? null : _askAi,
-                    child: Text(l.t('tryExplainNow')),
-                  ),
-                  if (state.loading) ...[
-                    const SizedBox(height: 12),
-                    const LinearProgressIndicator(),
-                  ],
-                  if (state.aiReply != null) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.trustBlueSoft,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        state.aiReply!,
-                        style: const TextStyle(
-                          color: AppColors.trustBlueDark,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
