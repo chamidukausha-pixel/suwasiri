@@ -613,9 +613,12 @@ class AppLocalizations {
       'ta': 'AI கிளினிக் உதவியாளர் செயலில்',
     },
     'aiCopilotHint': {
-      'en': 'Ask AI Co-Pilot about diagnostics during the call',
-      'si': 'ඇමතුම අතරතුර රෝග විනිශ්චය ගැන AI ගෙන් අසන්න',
-      'ta': 'அழைப்பின்போது நோயறிதல் பற்றி AI-யிடம் கேளுங்கள்',
+      'en':
+          'Ask in English, Sinhala, or Tamil. Answers stay educational — not a diagnosis. You can also open Google for more detail.',
+      'si':
+          'ඉංග්‍රීසි, සිංහල හෝ දෙමළෙන් අසන්න. පිළිතුරු අධ්‍යාපනිකයි — රෝග විනිශ්චයක් නොවේ. වැඩි විස්තර සඳහා Google ද විවෘත කළ හැක.',
+      'ta':
+          'ஆங்கிலம், சிங்களம் அல்லது தமிழில் கேளுங்கள். பதில்கள் கல்வி வழிகாட்டல் — நோய் கண்டறிதல் அல்ல. மேலும் விவரங்களுக்கு Google-ஐயும் திறக்கலாம்.',
     },
     'aiCopilotPlaceholder': {
       'en': 'e.g. explain normal pulse range in Sinhala…',
@@ -1686,6 +1689,62 @@ class AppLocalizations {
       'en': 'Lab report PDF ready to save / share.',
       'si': 'රසායනාගාර වාර්තා PDF සුරැකීමට/බෙදාගැනීමට සූදානම්.',
       'ta': 'ஆய்வக அறிக்கை PDF சேமிக்க/பகிர தயார்.',
+    },
+    'digitalCertificate': {
+      'en': 'DIGITAL DOCTOR CERTIFICATE',
+      'si': 'ඩිජිටල් වෛද්‍ය සහතිකය',
+      'ta': 'டிஜிட்டல் மருத்துவர் சான்றிதழ்',
+    },
+    'certificateNo': {
+      'en': 'Certificate No.',
+      'si': 'සහතික අංකය',
+      'ta': 'சான்றிதழ் எண்',
+    },
+    'patientName': {
+      'en': 'Patient',
+      'si': 'රෝගියා',
+      'ta': 'நோயாளி',
+    },
+    'healthIdLabel': {
+      'en': 'Health ID',
+      'si': 'සෞඛ්‍ය හැඳුනුම',
+      'ta': 'சுகாதார அடையாளம்',
+    },
+    'certificateBody': {
+      'en': 'CLINICAL STATEMENT',
+      'si': 'සායනික ප්‍රකාශය',
+      'ta': 'மருத்துவ அறிக்கை',
+    },
+    'doctorSignature': {
+      'en': 'Doctor signature',
+      'si': 'වෛද්‍ය අත්සන',
+      'ta': 'மருத்துவர் கையொப்பம்',
+    },
+    'certificateFooter': {
+      'en':
+          'Issued via Suwasiri Vault. For employer / school / travel use. Verify certificate number with the issuing clinic if required.',
+      'si':
+          'Suwasiri Vault හරහා නිකුත් කෙරිණි. රැකියා / පාසල් / සංචාරක භාවිතය සඳහා. අවශ්‍ය නම් නිකුත් කළ සායනයෙන් සහතික අංකය තහවුරු කරන්න.',
+      'ta':
+          'Suwasiri Vault வழியாக வழங்கப்பட்டது. வேலை / பள்ளி / பயண பயன்பாட்டிற்கு. தேவைப்பட்டால் வழங்கிய கிளினிக்கில் சான்றிதழ் எண்ணை உறுதிப்படுத்தவும்.',
+    },
+    'viewEPrescription': {
+      'en': 'View digital e-prescription',
+      'si': 'ඩිජිටල් ඊ-වට්ටෝරුව බලන්න',
+      'ta': 'டிஜிட்டல் மின் மருந்துச்சீட்டைப் பார்',
+    },
+    'searchOnGoogle': {
+      'en': 'Search on Google',
+      'si': 'Google හි සොයන්න',
+      'ta': 'Google-இல் தேடு',
+    },
+    'aiCopilotAnyLanguage': {
+      'en':
+          'Ask in English, Sinhala, or Tamil. Answers stay educational — not a diagnosis. You can also open Google for more detail.',
+      'si':
+          'ඉංග්‍රීසි, සිංහල හෝ දෙමළෙන් අසන්න. පිළිතුරු අධ්‍යාපනිකයි — රෝග විනිශ්චයක් නොවේ. වැඩි විස්තර සඳහා Google ද විවෘත කළ හැක.',
+      'ta':
+          'ஆங்கிலம், சிங்களம் அல்லது தமிழில் கேளுங்கள். பதில்கள் கல்வி வழிகாட்டல் — நோய் கண்டறிதல் அல்ல. மேலும் விவரங்களுக்கு Google-ஐயும் திறக்கலாம்.',
     },
   };
 

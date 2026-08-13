@@ -12,6 +12,7 @@ import '../../data/services/prescription_export_service.dart';
 import '../../localization/app_localizations.dart';
 import '../telehealth/prescription_detail_sheet.dart';
 import '../widgets/common_widgets.dart';
+import 'certificate_form_view.dart';
 import 'lab_report_detail_sheet.dart';
 import 'prescription_form_view.dart';
 
@@ -688,133 +689,103 @@ class _CertificatesList extends StatelessWidget {
 
   Future<void> _open(BuildContext context, DoctorCertificate c) async {
     final l = AppLocalizations.of(context);
+    final user = context.read<AuthCubit>().state.user;
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
+      backgroundColor: AppColors.canvas,
       builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            8,
-            20,
-            20 + MediaQuery.paddingOf(ctx).bottom,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l.t('certificateDetail'),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                  color: Color(0xFF7C3AED),
-                ),
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.88,
+          minChildSize: 0.5,
+          maxChildSize: 0.97,
+          builder: (context, scrollCtrl) {
+            return ListView(
+              controller: scrollCtrl,
+              padding: EdgeInsets.fromLTRB(
+                16,
+                8,
+                16,
+                20 + MediaQuery.paddingOf(ctx).bottom,
               ),
-              const SizedBox(height: 10),
-              Text(
-                c.title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 16,
-                  color: AppColors.trustBlueDark,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '${c.doctor} · ${c.clinicName}',
-                style: const TextStyle(
-                  color: AppColors.trustBlueDark,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-              Text(
-                '${c.certificateNo} · ${DateFormat('d MMM yyyy').format(c.date)}',
-                style: const TextStyle(
-                  color: AppColors.slateMuted,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                c.body,
-                style: const TextStyle(
-                  color: AppColors.trustBlueDark,
-                  height: 1.45,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final user = context.read<AuthCubit>().state.user;
-                        try {
-                          await PrescriptionExportService
-                              .downloadCertificatePdf(
-                            certificate: c,
-                            patient: user,
-                          );
-                          if (!context.mounted) return;
-                          Navigator.of(ctx).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(l.t('certReady'))),
-                          );
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('${l.t('rxPdfFailed')}: $e'),
-                            ),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.download_outlined),
-                      label: Text(l.t('downloadCertificate')),
-                    ),
+              children: [
+                Text(
+                  l.t('certificateDetail'),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                    color: Color(0xFF7C3AED),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () async {
-                        final user = context.read<AuthCubit>().state.user;
-                        final email = user?.email ?? '';
-                        if (email.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(l.t('rxEmailMissing'))),
-                          );
-                          return;
-                        }
-                        try {
-                          await PrescriptionExportService.emailCertificate(
-                            certificate: c,
-                            toEmail: email,
-                            patient: user,
-                          );
-                          if (!context.mounted) return;
-                          Navigator.of(ctx).pop();
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(l.t('certEmailSent'))),
-                          );
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('$e')),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.email_outlined),
-                      label: Text(l.t('emailCertificate')),
-                    ),
+                ),
+                const SizedBox(height: 12),
+                CertificateFormView(certificate: c, patient: user),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      try {
+                        await PrescriptionExportService.downloadCertificatePdf(
+                          certificate: c,
+                          patient: user,
+                        );
+                        if (!context.mounted) return;
+                        Navigator.of(ctx).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(l.t('certReady'))),
+                        );
+                      } catch (e) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('${l.t('rxPdfFailed')}: $e'),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.download_outlined),
+                    label: Text(l.t('downloadCertificate')),
                   ),
-                ],
-              ),
-            ],
-          ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      final email = user?.email ?? '';
+                      if (email.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(l.t('rxEmailMissing'))),
+                        );
+                        return;
+                      }
+                      try {
+                        await PrescriptionExportService.emailCertificate(
+                          certificate: c,
+                          toEmail: email,
+                          patient: user,
+                        );
+                        if (!context.mounted) return;
+                        Navigator.of(ctx).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(l.t('certEmailSent'))),
+                        );
+                      } catch (e) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('$e')),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.email_outlined),
+                    label: Text(l.t('emailCertificate')),
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
     );

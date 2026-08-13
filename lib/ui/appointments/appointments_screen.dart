@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:intl/intl.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
@@ -102,11 +101,20 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     super.dispose();
   }
 
+  bool get _filtersActive {
+    final q = _query.text.trim();
+    return _category != 'All' ||
+        _region != 'All' ||
+        q.isNotEmpty ||
+        _selectedFacility != null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final facilities = _facilities;
     final doctors = _doctorsForView;
+    final showDoctors = _filtersActive;
 
     return SafeArea(
       bottom: false,
@@ -146,26 +154,28 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
             onCategoryChanged: (v) => setState(() => _category = v),
           ),
           const SizedBox(height: 18),
-          if (_selectedFacility != null) ...[
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: () => setState(() => _selectedFacility = null),
-                icon: const Icon(Icons.arrow_back, size: 18),
-                label: Text(l.t('filterByRegion')),
+          if (showDoctors) ...[
+            if (_selectedFacility != null) ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => setState(() => _selectedFacility = null),
+                  icon: const Icon(Icons.arrow_back, size: 18),
+                  label: Text(l.t('filterByRegion')),
+                ),
               ),
-            ),
-            _FacilityDetailCard(
-              facility: _selectedFacility!,
-              onOpenMaps: () => MapLauncher.showPlaceMapChoice(
-                context,
-                title: _selectedFacility!.name,
-                address: _selectedFacility!.placeLabel,
-                latitude: _selectedFacility!.latitude,
-                longitude: _selectedFacility!.longitude,
+              _FacilityDetailCard(
+                facility: _selectedFacility!,
+                onOpenMaps: () => MapLauncher.showPlaceMapChoice(
+                  context,
+                  title: _selectedFacility!.name,
+                  address: _selectedFacility!.placeLabel,
+                  latitude: _selectedFacility!.latitude,
+                  longitude: _selectedFacility!.longitude,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
+            ],
             Text(
               l.t('resultsFound').replaceAll('{count}', '${doctors.length}'),
               style: const TextStyle(
@@ -185,8 +195,8 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
             else
               ...doctors.map(
                 (d) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _DoctorResultCard(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _DoctorNameHospitalCard(
                     doctor: d,
                     onBook: () => _book(d),
                   ),
@@ -515,9 +525,9 @@ class _SearchOptionsCard extends StatelessWidget {
   }
 }
 
-/// Mobile-safe doctor card — vertical stack avoids the mockup overlap bugs.
-class _DoctorResultCard extends StatelessWidget {
-  const _DoctorResultCard({
+/// Filtered directory result: doctor name + working hospital only.
+class _DoctorNameHospitalCard extends StatelessWidget {
+  const _DoctorNameHospitalCard({
     required this.doctor,
     required this.onBook,
   });
@@ -528,221 +538,67 @@ class _DoctorResultCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final fee = NumberFormat.decimalPattern().format(doctor.feeLkr);
     final initial = doctor.name.split(' ').last.isNotEmpty
         ? doctor.name.split(' ').last[0]
         : 'D';
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.trustBlueDark.withValues(alpha: 0.05),
-            blurRadius: 14,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return SoftCard(
+      child: Row(
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundColor: AppColors.trustBlueSoft,
-                    child: Text(
-                      initial,
-                      style: const TextStyle(
-                        color: AppColors.trustBlue,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 22,
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    right: -2,
-                    bottom: -2,
-                    child: Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        color: AppColors.trustBlueSoft,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.white, width: 1.5),
-                      ),
-                      child: const Icon(
-                        Icons.verified_user_rounded,
-                        size: 14,
-                        color: AppColors.trustBlue,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      doctor.name,
-                      style: const TextStyle(
-                        color: AppColors.trustBlueDark,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 17,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${doctor.specialty} Consultation',
-                      style: const TextStyle(
-                        color: AppColors.trustBlue,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.workspace_premium_outlined,
-                          size: 14,
-                          color: AppColors.slateMuted,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            l
-                                .t('yearsExpertise')
-                                .replaceAll('{years}', '${doctor.yearsExperience}'),
-                            style: const TextStyle(
-                              color: AppColors.slateMuted,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '"${doctor.bio}"',
-            style: TextStyle(
-              color: AppColors.slateMuted.withValues(alpha: 0.95),
-              fontStyle: FontStyle.italic,
-              fontSize: 13,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 12),
-          InkWell(
-            onTap: () => MapLauncher.showMapChoice(context, doctor: doctor),
-            borderRadius: BorderRadius.circular(10),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
-                children: [
-                  const Icon(Icons.location_on_outlined,
-                      size: 15, color: AppColors.trustBlue),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      doctor.placeLabel,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.trustBlue,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                        decoration: TextDecoration.underline,
-                        decorationColor: AppColors.trustBlueSoft,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Icon(Icons.access_time,
-                      size: 15, color: AppColors.slateMuted),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      doctor.nextAvailable,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.slateMuted,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
+          CircleAvatar(
+            radius: 22,
+            backgroundColor: AppColors.trustBlueSoft,
+            child: Text(
+              initial,
+              style: const TextStyle(
+                color: AppColors.trustBlue,
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
               ),
             ),
           ),
-          const SizedBox(height: 14),
-          const Divider(height: 1, color: AppColors.border),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l.t('consultationFees'),
-                      style: const TextStyle(
-                        color: AppColors.slateMuted,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 10,
-                        letterSpacing: 0.7,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'LKR $fee',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.emerald,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 20,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: onBook,
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.trustBlue,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(0, 40),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  doctor.name,
+                  style: const TextStyle(
+                    color: AppColors.trustBlueDark,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
                   ),
                 ),
-                child: Text(
-                  l.t('bookSession'),
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                const SizedBox(height: 3),
+                Text(
+                  doctor.hospital,
+                  style: const TextStyle(
+                    color: AppColors.trustBlue,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: onBook,
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.trustBlue,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(0, 36),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
               ),
-            ],
+            ),
+            child: Text(
+              l.t('bookSession'),
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+            ),
           ),
         ],
       ),

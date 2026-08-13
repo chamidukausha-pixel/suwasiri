@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
@@ -13,6 +14,7 @@ import '../../core/theme/app_colors.dart';
 import '../../data/catalogs/patient_health_samples.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/repositories/health_repository.dart';
+import '../../data/services/clinic_copilot_replies.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/suwasiri_brand_header.dart';
@@ -49,6 +51,8 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   bool _rxUpdating = true;
   String? _sessionId;
   List<Prescription> _sessionRx = [];
+  String? _aiReply;
+  String? _aiLastQuery;
   Duration _remaining = const Duration(minutes: 8, seconds: 18);
   Timer? _callTimer;
   Timer? _rxTimer;
@@ -304,10 +308,19 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   void _askAi() {
     final q = _aiCtrl.text.trim();
     if (q.isEmpty) return;
-    _aiCtrl.clear();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AppLocalizations.of(context).t('aiCopilotReply'))),
+    setState(() {
+      _aiReply = ClinicCopilotReplies.reply(q);
+      _aiLastQuery = q;
+      _aiCtrl.clear();
+    });
+  }
+
+  Future<void> _openAiGoogle() async {
+    final q = ClinicCopilotReplies.googleQuery(_aiLastQuery ?? _aiCtrl.text);
+    final uri = Uri.parse(
+      'https://www.google.com/search?q=${Uri.encodeComponent(q)}',
     );
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   String get _timerLabel {
@@ -401,7 +414,9 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
           const SizedBox(height: 14),
           _AiCopilotCard(
             controller: _aiCtrl,
+            reply: _aiReply,
             onSend: _askAi,
+            onGoogle: _openAiGoogle,
           ),
         ],
       ),
@@ -910,8 +925,15 @@ class _EPrescriptionCard extends StatelessWidget {
     final clinic = first?.clinicName ?? clinicName;
     final doctor = first?.doctor ?? doctorName;
     final empty = pending.isEmpty && !updating;
+    void open() {
+      if (updating || pending.isEmpty) return;
+      onOpenClinic(pending, clinic, doctor);
+    }
 
-    return Container(
+    return MinTap(
+      enforceMinSize: false,
+      onTap: empty ? null : open,
+      child: Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
@@ -961,6 +983,11 @@ class _EPrescriptionCard extends StatelessWidget {
                             ),
                           ),
                         ),
+                        if (!empty)
+                          const Icon(
+                            Icons.chevron_right,
+                            color: AppColors.trustBlue,
+                          ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -1003,20 +1030,14 @@ class _EPrescriptionCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      MinTap(
-                        enforceMinSize: false,
-                        onTap: updating
-                            ? null
-                            : () => onOpenClinic(pending, clinic, doctor),
-                        child: Text(
-                          clinic,
-                          style: const TextStyle(
-                            color: AppColors.trustBlue,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            decoration: TextDecoration.underline,
-                            decorationColor: AppColors.trustBlue,
-                          ),
+                      Text(
+                        clinic,
+                        style: const TextStyle(
+                          color: AppColors.trustBlue,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          decoration: TextDecoration.underline,
+                          decorationColor: AppColors.trustBlue,
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -1030,18 +1051,21 @@ class _EPrescriptionCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      MinTap(
-                        enforceMinSize: false,
-                        onTap: updating
-                            ? null
-                            : () => onOpenClinic(pending, clinic, doctor),
-                        child: Text(
-                          doctor,
-                          style: const TextStyle(
-                            color: AppColors.trustBlueDark,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                          ),
+                      Text(
+                        doctor,
+                        style: const TextStyle(
+                          color: AppColors.trustBlueDark,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: updating ? null : open,
+                          icon: const Icon(Icons.description_outlined),
+                          label: Text(l.t('viewEPrescription')),
                         ),
                       ),
                       if (updating) ...[
@@ -1078,6 +1102,7 @@ class _EPrescriptionCard extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 }
@@ -1208,10 +1233,14 @@ class _AiCopilotCard extends StatelessWidget {
   const _AiCopilotCard({
     required this.controller,
     required this.onSend,
+    required this.onGoogle,
+    this.reply,
   });
 
   final TextEditingController controller;
   final VoidCallback onSend;
+  final VoidCallback onGoogle;
+  final String? reply;
 
   @override
   Widget build(BuildContext context) {
@@ -1244,6 +1273,15 @@ class _AiCopilotCard extends StatelessWidget {
                   ),
                 ),
               ),
+              TextButton.icon(
+                onPressed: onGoogle,
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: Text(l.t('searchOnGoogle')),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.trustBlue,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 6),
@@ -1252,8 +1290,29 @@ class _AiCopilotCard extends StatelessWidget {
             style: const TextStyle(
               color: AppColors.slateMuted,
               fontSize: 13,
+              height: 1.35,
             ),
           ),
+          if (reply != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Text(
+                reply!,
+                style: const TextStyle(
+                  color: AppColors.trustBlueDark,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Row(
             children: [

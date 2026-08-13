@@ -7,7 +7,6 @@ import '../../bloc/vault/vault_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/suwasiri_brand_header.dart';
-import 'lab_report_detail_sheet.dart';
 import 'patient_health_section.dart';
 
 class VaultScreen extends StatefulWidget {
@@ -34,19 +33,6 @@ class _VaultScreenState extends State<VaultScreen> {
     if (user != null && vault.state.unlocked) {
       await vault.load(user.id);
     }
-  }
-
-  Future<void> _showAiSheet(VaultState state) async {
-    final labs = state.labReports;
-    if (labs.isEmpty) {
-      final l = AppLocalizations.of(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.t('noReports'))),
-      );
-      return;
-    }
-    final report = state.selectedReport ?? labs.first;
-    await showLabReportDetailSheet(context: context, report: report);
   }
 
   @override
@@ -133,10 +119,6 @@ class _VaultScreenState extends State<VaultScreen> {
               const SizedBox(height: 16),
               VaultEPrescriptionSection(state: state),
               const SizedBox(height: 12),
-              _AiLabAssistantCard(
-                onTry: () => _showAiSheet(state),
-              ),
-              const SizedBox(height: 12),
               _GpCareSyncedBar(
                   active: state.gpCareSynced || state.prescriptions.isNotEmpty),
               const SizedBox(height: 14),
@@ -202,86 +184,6 @@ class _VaultScreenState extends State<VaultScreen> {
           ),
         );
       },
-    );
-  }
-}
-
-class _AiLabAssistantCard extends StatelessWidget {
-  const _AiLabAssistantCard({required this.onTry});
-
-  final VoidCallback onTry;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1A66FF), Color(0xFF0B4FD9)],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.trustBlue.withValues(alpha: 0.35),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(Icons.auto_awesome, color: Colors.white, size: 26),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            l.t('aiLabAssistant'),
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 20,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            l.t('aiLabAssistantBody'),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.92),
-              fontSize: 13,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: onTry,
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: AppColors.trustBlue,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(28),
-                ),
-              ),
-              child: Text(
-                l.t('tryExplainNow'),
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
