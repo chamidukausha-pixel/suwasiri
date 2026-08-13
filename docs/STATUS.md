@@ -47,7 +47,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Vaccines: pending/scheduled protocols only; completed → Vault Vaccine History; national booking sheet (all 25 districts, EPI-from-birth immunizations, Private Hospital + LKR prices)
 - [x] Profile: removed treatment history; Unique Health ID card (name/age/blood/NIC/barcode); first-login EN/SI/TA health questionnaire (editable in Profile)
 - [x] Home: removed doctor categories + My Lab Reports; upcoming maps sync + clinic name; Doctors: all districts → clinics/hospitals → doctors + maps; removed upcoming list; Vault lab AI+download; larger vaccine book CTA; greener Health ID card
-- [x] Doctors filtered results: doctor name + working hospital only (sample catalog); Call e-Rx card opens digital form with MediLanka / PDF / email; Call AI Clinic Co-Pilot answers EN/SI/TA + Google link; Vault digital doctor certificates with download/email; AI Lab Assistant removed from Vault
+- [x] Doctors page always lists doctors (name + hospital/clinic + address); Call View digital e-prescription opens formal form with email / MediLanka / PDF even while draft is updating
 
 ## In progress / next
 

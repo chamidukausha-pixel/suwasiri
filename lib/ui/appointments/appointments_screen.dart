@@ -1,9 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/utils/map_launcher.dart';
 import '../../data/catalogs/doctor_catalog.dart';
 import '../../data/models/appointment.dart';
 import '../../data/repositories/health_repository.dart';
@@ -25,7 +24,6 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   bool _loading = true;
   String _region = 'All';
   String _category = 'All';
-  CatalogFacility? _selectedFacility;
 
   static final _regions = ['All', ...AppConstants.mohDistricts];
   static const _categories = DoctorCatalog.categories;
@@ -47,39 +45,22 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     });
   }
 
-  List<CatalogFacility> get _facilities {
-    var list = DoctorCatalog.facilitiesInDistrict(_region);
-    final q = _query.text.trim().toLowerCase();
-    if (q.isNotEmpty) {
-      list = list
-          .where(
-            (f) =>
-                f.name.toLowerCase().contains(q) ||
-                f.address.toLowerCase().contains(q) ||
-                f.region.toLowerCase().contains(q),
-          )
-          .toList();
-    }
-    return list;
-  }
-
   List<Doctor> get _doctorsForView {
     Iterable<Doctor> list = _doctors;
-    if (_selectedFacility != null) {
-      list = list.where((d) => d.hospital == _selectedFacility!.name);
-    } else if (_region != 'All') {
+    if (_region != 'All') {
       list = list.where((d) => d.region == _region);
     }
     if (_category != 'All') {
       list = list.where((d) => d.specialty == _category);
     }
     final q = _query.text.trim().toLowerCase();
-    if (q.isNotEmpty && _selectedFacility == null) {
+    if (q.isNotEmpty) {
       list = list.where(
         (d) =>
             d.name.toLowerCase().contains(q) ||
             d.specialty.toLowerCase().contains(q) ||
-            d.hospital.toLowerCase().contains(q),
+            d.hospital.toLowerCase().contains(q) ||
+            d.address.toLowerCase().contains(q),
       );
     }
     return list.toList();
@@ -91,30 +72,16 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     await _refresh();
   }
 
-  void _openFacility(CatalogFacility facility) {
-    setState(() => _selectedFacility = facility);
-  }
-
   @override
   void dispose() {
     _query.dispose();
     super.dispose();
   }
 
-  bool get _filtersActive {
-    final q = _query.text.trim();
-    return _category != 'All' ||
-        _region != 'All' ||
-        q.isNotEmpty ||
-        _selectedFacility != null;
-  }
-
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final facilities = _facilities;
     final doctors = _doctorsForView;
-    final showDoctors = _filtersActive;
 
     return SafeArea(
       bottom: false,
@@ -147,237 +114,36 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
               setState(() {});
               _refresh();
             },
-            onRegionChanged: (v) => setState(() {
-              _region = v;
-              _selectedFacility = null;
-            }),
+            onRegionChanged: (v) => setState(() => _region = v),
             onCategoryChanged: (v) => setState(() => _category = v),
           ),
           const SizedBox(height: 18),
-          if (showDoctors) ...[
-            if (_selectedFacility != null) ...[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () => setState(() => _selectedFacility = null),
-                  icon: const Icon(Icons.arrow_back, size: 18),
-                  label: Text(l.t('filterByRegion')),
-                ),
-              ),
-              _FacilityDetailCard(
-                facility: _selectedFacility!,
-                onOpenMaps: () => MapLauncher.showPlaceMapChoice(
-                  context,
-                  title: _selectedFacility!.name,
-                  address: _selectedFacility!.placeLabel,
-                  latitude: _selectedFacility!.latitude,
-                  longitude: _selectedFacility!.longitude,
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-            Text(
-              l.t('resultsFound').replaceAll('{count}', '${doctors.length}'),
-              style: const TextStyle(
-                color: AppColors.slateMuted,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (doctors.isEmpty)
-              EmptyHint(l.t('noDoctorsFound'))
-            else
-              ...doctors.map(
-                (d) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _DoctorNameHospitalCard(
-                    doctor: d,
-                    onBook: () => _book(d),
-                  ),
-                ),
-              ),
-          ] else ...[
-            Text(
-              'Registered clinics & hospitals (${facilities.length})',
-              style: const TextStyle(
-                color: AppColors.slateMuted,
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-                letterSpacing: 0.6,
-              ),
-            ),
-            const SizedBox(height: 10),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (facilities.isEmpty)
-              const EmptyHint('No clinics or hospitals in this district.')
-            else
-              ...facilities.map(
-                (f) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _FacilityListTile(
-                    facility: f,
-                    doctorCount:
-                        DoctorCatalog.doctorsAtFacility(f.name).length,
-                    onTap: () => _openFacility(f),
-                    onMap: () => MapLauncher.showPlaceMapChoice(
-                      context,
-                      title: f.name,
-                      address: f.placeLabel,
-                      latitude: f.latitude,
-                      longitude: f.longitude,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _FacilityListTile extends StatelessWidget {
-  const _FacilityListTile({
-    required this.facility,
-    required this.doctorCount,
-    required this.onTap,
-    required this.onMap,
-  });
-
-  final CatalogFacility facility;
-  final int doctorCount;
-  final VoidCallback onTap;
-  final VoidCallback onMap;
-
-  @override
-  Widget build(BuildContext context) {
-    final isClinic = facility.type == FacilityKind.clinic;
-    return SoftCard(
-      onTap: onTap,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: isClinic
-                  ? const Color(0xFFEEF2FF)
-                  : const Color(0xFFECFDF5),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              isClinic ? Icons.medical_services_outlined : Icons.local_hospital,
-              color: isClinic
-                  ? const Color(0xFF4F46E5)
-                  : const Color(0xFF059669),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  facility.name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.trustBlueDark,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  facility.address,
-                  style: const TextStyle(
-                    color: AppColors.slateMuted,
-                    fontSize: 12,
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${facility.region} · ${isClinic ? 'Clinic' : 'Hospital'} · $doctorCount doctors',
-                  style: const TextStyle(
-                    color: AppColors.trustBlue,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Maps',
-            onPressed: onMap,
-            icon: const Icon(Icons.map_outlined, color: AppColors.trustBlue),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FacilityDetailCard extends StatelessWidget {
-  const _FacilityDetailCard({
-    required this.facility,
-    required this.onOpenMaps,
-  });
-
-  final CatalogFacility facility;
-  final VoidCallback onOpenMaps;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return SoftCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
           Text(
-            facility.name,
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 18,
-              color: AppColors.trustBlueDark,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            facility.address,
+            l.t('resultsFound').replaceAll('{count}', '${doctors.length}'),
             style: const TextStyle(
               color: AppColors.slateMuted,
+              fontWeight: FontWeight.w600,
               fontSize: 13,
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${facility.region} District · ${facility.hours}',
-            style: const TextStyle(
-              color: AppColors.slateMuted,
-              fontSize: 12,
             ),
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: onOpenMaps,
-              icon: const Icon(Icons.map_outlined),
-              label: Text(l.t('openClinicInMaps')),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (doctors.isEmpty)
+            EmptyHint(l.t('noDoctorsFound'))
+          else
+            ...doctors.map(
+              (d) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _DoctorNameHospitalCard(
+                  doctor: d,
+                  onBook: () => _book(d),
+                ),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -471,7 +237,7 @@ class _SearchOptionsCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            // Controlled filter — keep `value` until FormField API settles.
+            // Controlled filter â€” keep `value` until FormField API settles.
             // ignore: deprecated_member_use
             value: region,
             decoration: const InputDecoration(),
@@ -525,7 +291,7 @@ class _SearchOptionsCard extends StatelessWidget {
   }
 }
 
-/// Filtered directory result: doctor name + working hospital only.
+/// Doctor directory card: name, hospital/clinic, and address.
 class _DoctorNameHospitalCard extends StatelessWidget {
   const _DoctorNameHospitalCard({
     required this.doctor,
@@ -541,9 +307,13 @@ class _DoctorNameHospitalCard extends StatelessWidget {
     final initial = doctor.name.split(' ').last.isNotEmpty
         ? doctor.name.split(' ').last[0]
         : 'D';
+    final address = doctor.address.isNotEmpty
+        ? doctor.address
+        : doctor.placeLabel;
 
     return SoftCard(
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           CircleAvatar(
             radius: 22,
@@ -570,15 +340,27 @@ class _DoctorNameHospitalCard extends StatelessWidget {
                     fontSize: 15,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 4),
                 Text(
                   doctor.hospital,
                   style: const TextStyle(
                     color: AppColors.trustBlue,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     fontSize: 13,
                   ),
                 ),
+                if (address.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    address,
+                    style: const TextStyle(
+                      color: AppColors.slateMuted,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 12,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

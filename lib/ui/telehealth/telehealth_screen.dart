@@ -926,14 +926,11 @@ class _EPrescriptionCard extends StatelessWidget {
     final doctor = first?.doctor ?? doctorName;
     final empty = pending.isEmpty && !updating;
     void open() {
-      if (updating || pending.isEmpty) return;
+      if (pending.isEmpty) return;
       onOpenClinic(pending, clinic, doctor);
     }
 
-    return MinTap(
-      enforceMinSize: false,
-      onTap: empty ? null : open,
-      child: Container(
+    return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
@@ -983,11 +980,6 @@ class _EPrescriptionCard extends StatelessWidget {
                             ),
                           ),
                         ),
-                        if (!empty)
-                          const Icon(
-                            Icons.chevron_right,
-                            color: AppColors.trustBlue,
-                          ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -1036,8 +1028,6 @@ class _EPrescriptionCard extends StatelessWidget {
                           color: AppColors.trustBlue,
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
-                          decoration: TextDecoration.underline,
-                          decorationColor: AppColors.trustBlue,
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -1062,8 +1052,8 @@ class _EPrescriptionCard extends StatelessWidget {
                       const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: updating ? null : open,
+                        child: FilledButton.icon(
+                          onPressed: open,
                           icon: const Icon(Icons.description_outlined),
                           label: Text(l.t('viewEPrescription')),
                         ),
@@ -1102,7 +1092,6 @@ class _EPrescriptionCard extends StatelessWidget {
           ],
         ),
       ),
-    ),
     );
   }
 }
