@@ -33,7 +33,8 @@ dependencies:
   google_sign_in: ^6.3.0
   image_picker: ^1.2.3
   file_selector: ^1.1.0
-  speech_to_text: ^7.3.0
+  # 7.5.0-beta.1+: Built-in Kotlin (no KGP apply) — clears Flutter KGP warning.
+  speech_to_text: ^7.5.0-beta.1
   # AGP 9+: does not apply KGP (Built-in Kotlin ready).
   package_info_plus: ^10.2.1
   camera: ^0.12.0+2
