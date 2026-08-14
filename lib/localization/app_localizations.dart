@@ -1839,6 +1839,24 @@ class AppLocalizations {
       'si': 'රෝග ලක්ෂණ විස්තර කර මගපෙන්වීම ලබා ගන්නේ කෙසේද?',
       'ta': 'அறிகுறிகளை விவரித்து வழிகாட்டல் பெறுவது எப்படி?',
     },
+    'helpPromptSymptomsDescribe': {
+      'en':
+          'I have fever, body pain and headache for 2 days. What is happening and which doctor should I see?',
+      'si':
+          'මට දින 2කට උණ, ශරීර වේදනා සහ හිසරදය තියෙනවා. මොකද වෙන්නේ සහ කුමන වෛද්‍යවරයෙකු හමුවිය යුතුද?',
+      'ta':
+          'எனக்கு 2 நாட்களாக காய்ச்சல், உடல் வலி மற்றும் தலைவலி உள்ளது. என்ன நடக்கிறது மற்றும் எந்த மருத்துவரை பார்க்க வேண்டும்?',
+    },
+    'helpSuggestedDoctors': {
+      'en': 'Suggested doctors',
+      'si': 'නිර්දේශිත වෛද්‍යවරු',
+      'ta': 'பரிந்துரைக்கப்பட்ட மருத்துவர்கள்',
+    },
+    'helpOpenDoctors': {
+      'en': 'Open Doctors to book',
+      'si': 'Doctors වෙත ගොස් වෙන්කරන්න',
+      'ta': 'Doctors-இல் முன்பதிவு செய்',
+    },
   };
 
   String t(String key) {

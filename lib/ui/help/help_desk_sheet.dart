@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../data/models/appointment.dart';
 import '../../data/services/help_desk_replies.dart';
 import '../../localization/app_localizations.dart';
+import '../widgets/profile_avatar.dart';
 
 /// Opens the Suwasiri AI Help Desk chat sheet.
 Future<void> showHelpDeskSheet(BuildContext context) {
@@ -157,11 +159,13 @@ class _ChatBubble {
     required this.text,
     required this.isUser,
     this.imagePath,
+    this.suggestedDoctors = const [],
   });
 
   final String text;
   final bool isUser;
   final String? imagePath;
+  final List<Doctor> suggestedDoctors;
 }
 
 class _HelpDeskSheet extends StatefulWidget {
@@ -221,9 +225,15 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
 
     await Future<void>.delayed(const Duration(milliseconds: 450));
     if (!mounted) return;
-    final reply = HelpDeskReplies.reply(text);
+    final answer = HelpDeskReplies.answer(text);
     setState(() {
-      _messages.add(_ChatBubble(text: reply, isUser: false));
+      _messages.add(
+        _ChatBubble(
+          text: answer.text,
+          isUser: false,
+          suggestedDoctors: answer.suggestedDoctors,
+        ),
+      );
       _busy = false;
     });
     _scrollToEnd();
@@ -391,7 +401,7 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
                     ),
                     _QuickChip(
                       label: l.t('helpChipSymptoms'),
-                      onTap: () => _send(l.t('helpPromptSymptoms')),
+                      onTap: () => _send(l.t('helpPromptSymptomsDescribe')),
                     ),
                     _QuickChip(
                       label: l.t('helpChipCert'),
@@ -421,7 +431,13 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
                     );
                   }
                   final m = _messages[i];
-                  return _BubbleTile(message: m);
+                  return _BubbleTile(
+                    message: m,
+                    onOpenDoctors: () {
+                      Navigator.of(context).pop();
+                      MainTabScope.go(context, 1);
+                    },
+                  );
                 },
               ),
             ),
@@ -521,12 +537,17 @@ class _QuickChip extends StatelessWidget {
 }
 
 class _BubbleTile extends StatelessWidget {
-  const _BubbleTile({required this.message});
+  const _BubbleTile({
+    required this.message,
+    this.onOpenDoctors,
+  });
 
   final _ChatBubble message;
+  final VoidCallback? onOpenDoctors;
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final align =
         message.isUser ? Alignment.centerRight : Alignment.centerLeft;
     final bg = message.isUser ? AppColors.trustBlue : Colors.white;
@@ -536,7 +557,7 @@ class _BubbleTile extends StatelessWidget {
       alignment: align,
       child: Container(
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.82,
+          maxWidth: MediaQuery.sizeOf(context).width * 0.88,
         ),
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -577,6 +598,64 @@ class _BubbleTile extends StatelessWidget {
               message.text,
               style: TextStyle(color: fg, fontSize: 13.5, height: 1.4),
             ),
+            if (!message.isUser && message.suggestedDoctors.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                l.t('helpSuggestedDoctors'),
+                style: const TextStyle(
+                  color: AppColors.trustBlue,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 6),
+              for (final d in message.suggestedDoctors)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.trustBlueSoft,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        d.name,
+                        style: const TextStyle(
+                          color: AppColors.trustBlueDark,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        d.specialty,
+                        style: const TextStyle(
+                          color: AppColors.trustBlue,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        d.hospital,
+                        style: const TextStyle(
+                          color: AppColors.slateMuted,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onOpenDoctors,
+                  icon: const Icon(Icons.calendar_month_outlined, size: 18),
+                  label: Text(l.t('helpOpenDoctors')),
+                ),
+              ),
+            ],
           ],
         ),
       ),

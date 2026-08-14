@@ -49,6 +49,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Home: removed doctor categories + My Lab Reports; upcoming maps sync + clinic name; Doctors: all districts → clinics/hospitals → doctors + maps; removed upcoming list; Vault lab AI+download; larger vaccine book CTA; greener Health ID card
 - [x] Doctors page always lists doctors (name + hospital/clinic + address); Call View digital e-prescription opens formal form with email / MediLanka / PDF even while draft is updating
 - [x] Global yellow Help FAB + AI Help Desk chat (EN/SI/TA): app features, diseases/symptoms, medical certificate upload & explain
+- [x] Help Desk symptom chat explains what may be happening and suggests matching specialties + sample doctors (opens Doctors tab)
 
 ## In progress / next
 
