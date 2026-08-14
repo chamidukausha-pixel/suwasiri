@@ -1746,6 +1746,99 @@ class AppLocalizations {
       'ta':
           'ஆங்கிலம், சிங்களம் அல்லது தமிழில் கேளுங்கள். பதில்கள் கல்வி வழிகாட்டல் — நோய் கண்டறிதல் அல்ல. மேலும் விவரங்களுக்கு Google-ஐயும் திறக்கலாம்.',
     },
+    'help': {
+      'en': 'Help',
+      'si': 'උදව්',
+      'ta': 'உதவி',
+    },
+    'helpDeskTitle': {
+      'en': 'AI Help Desk',
+      'si': 'AI උදව් මධ්‍යස්ථානය',
+      'ta': 'AI உதவி மையம்',
+    },
+    'helpDeskSubtitle': {
+      'en': 'App help · diseases & symptoms · medical certificates',
+      'si': 'යෙදුම් උදව් · රෝග/ලක්ෂණ · වෛද්‍ය සහතික',
+      'ta': 'செயலி உதவி · நோய்/அறிகுறி · மருத்துவ சான்றிதழ்',
+    },
+    'helpDeskWelcome': {
+      'en':
+          'Hello! I am Suwasiri Help Desk. Ask in English, Sinhala, or Tamil about how this app works, diseases and symptoms, or upload a medical certificate for an explanation. Educational guidance only — not a diagnosis.',
+      'si':
+          'ආයුබෝවන්! මම Suwasiri Help Desk. යෙදුමේ ක්‍රියාකාරිත්වය, රෝග සහ ලක්ෂණ, හෝ වෛද්‍ය සහතිකයක් උඩුගත කර පැහැදිලි කිරීම ගැන ඉංග්‍රීසි/සිංහල/දෙමළෙන් අසන්න. අධ්‍යාපනික මගපෙන්වීම පමණි — රෝග විනිශ්චයක් නොවේ.',
+      'ta':
+          'வணக்கம்! நான் Suwasiri Help Desk. செயலி அம்சங்கள், நோய் மற்றும் அறிகுறிகள் அல்லது மருத்துவ சான்றிதழைப் பதிவேற்றி விளக்கம் பெற ஆங்கிலம்/சிங்களம்/தமிழில் கேளுங்கள். கல்வி வழிகாட்டல் மட்டும் — நோய் கண்டறிதல் அல்ல.',
+    },
+    'helpDeskPlaceholder': {
+      'en': 'Ask anything about the app, symptoms, or certificates…',
+      'si': 'යෙදුම, රෝග ලක්ෂණ හෝ සහතික ගැන අසන්න…',
+      'ta': 'செயலி, அறிகுறிகள் அல்லது சான்றிதழ் பற்றி கேளுங்கள்…',
+    },
+    'helpDeskUploadCert': {
+      'en': 'Upload medical certificate',
+      'si': 'වෛද්‍ය සහතිකය උඩුගත කරන්න',
+      'ta': 'மருத்துவ சான்றிதழைப் பதிவேற்று',
+    },
+    'helpDeskCertUploaded': {
+      'en': 'I uploaded a medical certificate. Please explain it.',
+      'si': 'මම වෛද්‍ය සහතිකයක් උඩුගත කළෙමි. කරුණාකර පැහැදිලි කරන්න.',
+      'ta': 'நான் ஒரு மருத்துவ சான்றிதழைப் பதிவேற்றினேன். தயவுசெய்து விளக்குங்கள்.',
+    },
+    'helpDeskPickGallery': {
+      'en': 'Choose from gallery',
+      'si': 'ගැලරියෙන් තෝරන්න',
+      'ta': 'கேலரியில் இருந்து தேர்வு',
+    },
+    'helpDeskPickCamera': {
+      'en': 'Take a photo',
+      'si': 'ඡායාරූපයක් ගන්න',
+      'ta': 'புகைப்படம் எடு',
+    },
+    'helpChipApp': {
+      'en': 'App features',
+      'si': 'යෙදුම් විශේෂාංග',
+      'ta': 'செயலி அம்சங்கள்',
+    },
+    'helpChipFever': {
+      'en': 'Fever',
+      'si': 'උණ',
+      'ta': 'காய்ச்சல்',
+    },
+    'helpChipDengue': {
+      'en': 'Dengue',
+      'si': 'ඩෙංගු',
+      'ta': 'டெங்கு',
+    },
+    'helpChipSymptoms': {
+      'en': 'Symptoms',
+      'si': 'රෝග ලක්ෂණ',
+      'ta': 'அறிகுறிகள்',
+    },
+    'helpChipCert': {
+      'en': 'Upload certificate',
+      'si': 'සහතිකය උඩුගත',
+      'ta': 'சான்றிதழ் பதிவேற்று',
+    },
+    'helpPromptApp': {
+      'en': 'How do I use the Suwasiri app features?',
+      'si': 'Suwasiri යෙදුමේ විශේෂාංග භාවිතා කරන්නේ කෙසේද?',
+      'ta': 'Suwasiri செயலி அம்சங்களை எப்படி பயன்படுத்துவது?',
+    },
+    'helpPromptFever': {
+      'en': 'What should I do if I have fever?',
+      'si': 'උණ ඇත්නම් මා කුමක් කළ යුතුද?',
+      'ta': 'காய்ச்சல் இருந்தால் நான் என்ன செய்ய வேண்டும்?',
+    },
+    'helpPromptDengue': {
+      'en': 'Tell me about dengue symptoms in Sri Lanka',
+      'si': 'ශ්‍රී ලංකාවේ ඩෙංගු රෝග ලක්ෂණ ගැන කියන්න',
+      'ta': 'இலங்கையில் டெங்கு அறிகுறிகள் பற்றி சொல்லுங்கள்',
+    },
+    'helpPromptSymptoms': {
+      'en': 'How can I describe symptoms and get guidance?',
+      'si': 'රෝග ලක්ෂණ විස්තර කර මගපෙන්වීම ලබා ගන්නේ කෙසේද?',
+      'ta': 'அறிகுறிகளை விவரித்து வழிகாட்டல் பெறுவது எப்படி?',
+    },
   };
 
   String t(String key) {

@@ -5,6 +5,7 @@ import '../../bloc/notification/notification_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../localization/app_localizations.dart';
 import '../appointments/appointments_screen.dart';
+import '../help/help_desk_sheet.dart';
 import '../home/home_screen.dart';
 import '../profile/profile_screen.dart';
 import '../telehealth/telehealth_screen.dart';
@@ -51,6 +52,11 @@ class _MainShellState extends State<MainShell> {
           children: [
             IndexedStack(index: _index, children: pages),
             const ToastOverlay(),
+            Positioned(
+              right: 16,
+              bottom: 16,
+              child: const HelpFab(),
+            ),
           ],
         ),
         bottomNavigationBar: NavigationBar(
