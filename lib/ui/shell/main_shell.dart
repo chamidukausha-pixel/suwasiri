@@ -52,10 +52,8 @@ class _MainShellState extends State<MainShell> {
           children: [
             IndexedStack(index: _index, children: pages),
             const ToastOverlay(),
-            Positioned(
-              right: 16,
-              bottom: 16,
-              child: const HelpFab(),
+            const Positioned.fill(
+              child: DraggableHelpFab(),
             ),
           ],
         ),

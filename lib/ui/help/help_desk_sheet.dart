@@ -17,56 +17,139 @@ Future<void> showHelpDeskSheet(BuildContext context) {
   );
 }
 
-class HelpFab extends StatelessWidget {
-  const HelpFab({super.key});
+/// Compact yellow Help button that can be dragged anywhere on screen.
+class DraggableHelpFab extends StatefulWidget {
+  const DraggableHelpFab({super.key});
+
+  static const double size = 56;
+
+  @override
+  State<DraggableHelpFab> createState() => _DraggableHelpFabState();
+}
+
+class _DraggableHelpFabState extends State<DraggableHelpFab> {
+  Offset? _offset;
+  Offset _dragStart = Offset.zero;
+  Offset _originAtDrag = Offset.zero;
+  bool _moved = false;
+
+  Offset _defaultOffset(Size area) {
+    const margin = 12.0;
+    return Offset(
+      area.width - DraggableHelpFab.size - margin,
+      area.height - DraggableHelpFab.size - margin,
+    );
+  }
+
+  Offset _clamp(Offset raw, Size area) {
+    const margin = 4.0;
+    final maxX = (area.width - DraggableHelpFab.size - margin)
+        .clamp(margin, double.infinity);
+    final maxY = (area.height - DraggableHelpFab.size - margin)
+        .clamp(margin, double.infinity);
+    return Offset(
+      raw.dx.clamp(margin, maxX),
+      raw.dy.clamp(margin, maxY),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final area = Size(constraints.maxWidth, constraints.maxHeight);
+        final pos = _clamp(_offset ?? _defaultOffset(area), area);
+
+        return Stack(
+          children: [
+            Positioned(
+              left: pos.dx,
+              top: pos.dy,
+              child: GestureDetector(
+                onPanStart: (d) {
+                  _dragStart = d.globalPosition;
+                  _originAtDrag = pos;
+                  _moved = false;
+                },
+                onPanUpdate: (d) {
+                  final delta = d.globalPosition - _dragStart;
+                  if (delta.distance > 6) _moved = true;
+                  setState(() {
+                    _offset = _clamp(_originAtDrag + delta, area);
+                  });
+                },
+                onPanEnd: (_) {
+                  if (!_moved && mounted) {
+                    showHelpDeskSheet(context);
+                  }
+                },
+                child: const _HelpFabVisual(),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _HelpFabVisual extends StatelessWidget {
+  const _HelpFabVisual();
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return Material(
       color: Colors.transparent,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: () => showHelpDeskSheet(context),
-        child: Ink(
-          width: 72,
-          height: 72,
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFD400),
-            shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFFE6B800), width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.18),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.chat_bubble_outline_rounded,
+      elevation: 4,
+      shadowColor: Colors.black26,
+      shape: const CircleBorder(),
+      child: Container(
+        width: DraggableHelpFab.size,
+        height: DraggableHelpFab.size,
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFD400),
+          shape: BoxShape.circle,
+          border: Border.all(color: const Color(0xFFE6B800), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.16),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.chat_bubble_outline_rounded,
+              color: Colors.black87,
+              size: 20,
+            ),
+            const SizedBox(height: 1),
+            Text(
+              l.t('help'),
+              style: const TextStyle(
                 color: Colors.black87,
-                size: 26,
+                fontWeight: FontWeight.w800,
+                fontSize: 10,
+                height: 1,
               ),
-              const SizedBox(height: 2),
-              Text(
-                l.t('help'),
-                style: const TextStyle(
-                  color: Colors.black87,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12,
-                  height: 1,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+/// Kept for any direct references; prefer [DraggableHelpFab].
+class HelpFab extends StatelessWidget {
+  const HelpFab({super.key});
+
+  @override
+  Widget build(BuildContext context) => const _HelpFabVisual();
 }
 
 class _ChatBubble {
