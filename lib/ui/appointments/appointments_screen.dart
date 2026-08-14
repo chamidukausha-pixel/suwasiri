@@ -291,7 +291,7 @@ class _SearchOptionsCard extends StatelessWidget {
   }
 }
 
-/// Doctor directory card: name, hospital/clinic, and address.
+/// Doctor directory card with specialty and full details.
 class _DoctorNameHospitalCard extends StatelessWidget {
   const _DoctorNameHospitalCard({
     required this.doctor,
@@ -310,77 +310,145 @@ class _DoctorNameHospitalCard extends StatelessWidget {
     final address = doctor.address.isNotEmpty
         ? doctor.address
         : doctor.placeLabel;
+    final fee = doctor.feeLkr;
 
     return SoftCard(
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: AppColors.trustBlueSoft,
-            child: Text(
-              initial,
-              style: const TextStyle(
-                color: AppColors.trustBlue,
-                fontWeight: FontWeight.w800,
-                fontSize: 16,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  doctor.name,
-                  style: const TextStyle(
-                    color: AppColors.trustBlueDark,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  doctor.hospital,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 26,
+                backgroundColor: AppColors.trustBlueSoft,
+                child: Text(
+                  initial,
                   style: const TextStyle(
                     color: AppColors.trustBlue,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
                   ),
                 ),
-                if (address.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    address,
-                    style: const TextStyle(
-                      color: AppColors.slateMuted,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 12,
-                      height: 1.3,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      doctor.name,
+                      style: const TextStyle(
+                        color: AppColors.trustBlueDark,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
                     ),
-                  ),
-                ],
-              ],
-            ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.trustBlueSoft,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        doctor.specialty,
+                        style: const TextStyle(
+                          color: AppColors.trustBlue,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      doctor.hospital,
+                      style: const TextStyle(
+                        color: AppColors.trustBlueDark,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                    if (address.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        address,
+                        style: const TextStyle(
+                          color: AppColors.slateMuted,
+                          fontSize: 12,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    Text(
+                      '${doctor.region} · ${l.t('yearsExpertise').replaceAll('{years}', '${doctor.yearsExperience}')}',
+                      style: const TextStyle(
+                        color: AppColors.slateMuted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          FilledButton(
-            onPressed: onBook,
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.trustBlue,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(0, 36),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+          if (doctor.bio.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              doctor.bio,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.slateMuted,
+                fontSize: 12,
+                height: 1.35,
+                fontStyle: FontStyle.italic,
               ),
             ),
-            child: Text(
-              l.t('bookSession'),
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'LKR $fee · ${doctor.nextAvailable}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.emerald,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: onBook,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.trustBlue,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(0, 36),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                child: Text(
+                  l.t('bookSession'),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

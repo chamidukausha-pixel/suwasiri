@@ -77,7 +77,9 @@
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Suwasiri needs photo library access to set your profile picture and upload bank slips.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Suwasiri may use the microphone during telehealth video consultations.</string>
+	<string>Suwasiri needs the microphone for Help Desk voice questions and telehealth calls.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Suwasiri converts your voice to text in the AI Help Desk so you can ask without typing.</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>tel</string>

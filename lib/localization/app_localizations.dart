@@ -1763,16 +1763,16 @@ class AppLocalizations {
     },
     'helpDeskWelcome': {
       'en':
-          'Hello! I am Suwasiri Help Desk. Ask in English, Sinhala, or Tamil about how this app works, diseases and symptoms, or upload a medical certificate for an explanation. Educational guidance only — not a diagnosis.',
+          'Hello! I am Suwasiri Help Desk. Type or tap the mic to speak. Ask anything about the app, symptoms (I explain and suggest doctors), health topics, or upload a medical certificate. Educational guidance only — not a diagnosis.',
       'si':
-          'ආයුබෝවන්! මම Suwasiri Help Desk. යෙදුමේ ක්‍රියාකාරිත්වය, රෝග සහ ලක්ෂණ, හෝ වෛද්‍ය සහතිකයක් උඩුගත කර පැහැදිලි කිරීම ගැන ඉංග්‍රීසි/සිංහල/දෙමළෙන් අසන්න. අධ්‍යාපනික මගපෙන්වීම පමණි — රෝග විනිශ්චයක් නොවේ.',
+          'ආයුබෝවන්! මම Suwasiri Help Desk. ටයිප් කරන්න හෝ mic තට්ටු කර කතා කරන්න. යෙදුම, රෝග ලක්ෂණ (පැහැදිලි කිරීම + වෛද්‍ය නිර්දේශ), සෞඛ්‍ය මාතෘකා, හෝ වෛද්‍ය සහතික උඩුගත කිරීම ගැන ඕනෑම දෙයක් අසන්න. අධ්‍යාපනික මගපෙන්වීම පමණි — රෝග විනිශ්චයක් නොවේ.',
       'ta':
-          'வணக்கம்! நான் Suwasiri Help Desk. செயலி அம்சங்கள், நோய் மற்றும் அறிகுறிகள் அல்லது மருத்துவ சான்றிதழைப் பதிவேற்றி விளக்கம் பெற ஆங்கிலம்/சிங்களம்/தமிழில் கேளுங்கள். கல்வி வழிகாட்டல் மட்டும் — நோய் கண்டறிதல் அல்ல.',
+          'வணக்கம்! நான் Suwasiri Help Desk. டைப் செய்யவும் அல்லது mic தட்டி பேசவும். செயலி, அறிகுறிகள் (விளக்கம் + மருத்துவர் பரிந்துரை), சுகாதார தலைப்புகள் அல்லது மருத்துவ சான்றிதழ் பதிவேற்றம் பற்றி எதையும் கேளுங்கள். கல்வி வழிகாட்டல் மட்டும் — நோய் கண்டறிதல் அல்ல.',
     },
     'helpDeskPlaceholder': {
-      'en': 'Ask anything about the app, symptoms, or certificates…',
-      'si': 'යෙදුම, රෝග ලක්ෂණ හෝ සහතික ගැන අසන්න…',
-      'ta': 'செயலி, அறிகுறிகள் அல்லது சான்றிதழ் பற்றி கேளுங்கள்…',
+      'en': 'Type or use the mic — ask anything…',
+      'si': 'ටයිප් කරන්න හෝ mic භාවිතා කරන්න — ඕනෑම දෙයක් අසන්න…',
+      'ta': 'டைப் செய்யவும் அல்லது mic பயன்படுத்தவும் — எதையும் கேளுங்கள்…',
     },
     'helpDeskUploadCert': {
       'en': 'Upload medical certificate',
@@ -1856,6 +1856,16 @@ class AppLocalizations {
       'en': 'Open Doctors to book',
       'si': 'Doctors වෙත ගොස් වෙන්කරන්න',
       'ta': 'Doctors-இல் முன்பதிவு செய்',
+    },
+    'helpVoiceListening': {
+      'en': 'Listening… tap mic again to stop',
+      'si': 'අසමින්… නැවැත්වීමට නැවත mic තට්ටු කරන්න',
+      'ta': 'கேட்கிறது… நிறுத்த மீண்டும் mic தட்டவும்',
+    },
+    'helpVoiceUnavailable': {
+      'en': 'Voice input is unavailable on this device. Please type your question.',
+      'si': 'මෙම උපාංගයේ කටහඬ ආදානය නොමැත. කරුණාකර ටයිප් කරන්න.',
+      'ta': 'இந்த சாதனத்தில் குரல் உள்ளீடு இல்லை. தயவுசெய்து டைப் செய்யவும்.',
     },
   };
 

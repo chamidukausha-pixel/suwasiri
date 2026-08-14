@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../../core/theme/app_colors.dart';
 import '../../data/models/appointment.dart';
@@ -179,7 +180,11 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
   final _ctrl = TextEditingController();
   final _scroll = ScrollController();
   final _messages = <_ChatBubble>[];
+  final _speech = stt.SpeechToText();
   bool _busy = false;
+  bool _speechReady = false;
+  bool _listening = false;
+  String _voiceLocale = 'en_US';
 
   @override
   void initState() {
@@ -192,11 +197,94 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
           _ChatBubble(text: l.t('helpDeskWelcome'), isUser: false),
         );
       });
+      _initSpeech();
     });
+  }
+
+  Future<void> _initSpeech() async {
+    final ok = await _speech.initialize(
+      onStatus: (status) {
+        if (!mounted) return;
+        if (status == 'done' || status == 'notListening') {
+          setState(() => _listening = false);
+        }
+      },
+      onError: (_) {
+        if (!mounted) return;
+        setState(() => _listening = false);
+      },
+    );
+    if (!mounted) return;
+    final code = AppLocalizations.of(context).locale.languageCode;
+    _voiceLocale = switch (code) {
+      'si' => 'si_LK',
+      'ta' => 'ta_IN',
+      _ => 'en_US',
+    };
+    // Prefer a matching installed locale when available.
+    if (ok) {
+      final locales = await _speech.locales();
+      final match = locales.where((e) {
+        final id = e.localeId.toLowerCase();
+        return id.startsWith(code) ||
+            (code == 'si' && id.contains('si')) ||
+            (code == 'ta' && id.contains('ta'));
+      });
+      if (match.isNotEmpty) {
+        _voiceLocale = match.first.localeId;
+      }
+    }
+    setState(() => _speechReady = ok);
+  }
+
+  Future<void> _toggleVoice() async {
+    final l = AppLocalizations.of(context);
+    if (_busy) return;
+    if (!_speechReady) {
+      await _initSpeech();
+      if (!_speechReady) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l.t('helpVoiceUnavailable'))),
+        );
+        return;
+      }
+    }
+    if (_listening) {
+      await _speech.stop();
+      setState(() => _listening = false);
+      final text = _ctrl.text.trim();
+      if (text.isNotEmpty) {
+        await _send();
+      }
+      return;
+    }
+    setState(() => _listening = true);
+    await _speech.listen(
+      onResult: (result) {
+        if (!mounted) return;
+        setState(() {
+          _ctrl.text = result.recognizedWords;
+          _ctrl.selection = TextSelection.fromPosition(
+            TextPosition(offset: _ctrl.text.length),
+          );
+        });
+        if (result.finalResult) {
+          setState(() => _listening = false);
+        }
+      },
+      listenOptions: stt.SpeechListenOptions(
+        localeId: _voiceLocale,
+        listenMode: stt.ListenMode.dictation,
+        cancelOnError: true,
+        partialResults: true,
+      ),
+    );
   }
 
   @override
   void dispose() {
+    _speech.stop();
     _ctrl.dispose();
     _scroll.dispose();
     super.dispose();
@@ -452,52 +540,99 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
                 color: AppColors.surface,
                 border: Border(top: BorderSide(color: AppColors.border)),
               ),
-              child: Row(
+              child: Column(
                 children: [
-                  IconButton(
-                    tooltip: l.t('helpDeskUploadCert'),
-                    onPressed: _busy ? null : _pickSource,
-                    icon: const Icon(
-                      Icons.attach_file_rounded,
-                      color: AppColors.trustBlue,
-                    ),
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: _ctrl,
-                      minLines: 1,
-                      maxLines: 4,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _send(),
-                      decoration: InputDecoration(
-                        hintText: l.t('helpDeskPlaceholder'),
-                        filled: true,
-                        fillColor: AppColors.canvas,
-                        isDense: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
-                        ),
+                  if (_listening)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.mic, color: AppColors.emergencyRed, size: 16),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              l.t('helpVoiceListening'),
+                              style: const TextStyle(
+                                color: AppColors.emergencyRed,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Material(
-                    color: AppColors.trustBlue,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: _busy ? null : () => _send(),
-                      child: const SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Icon(
-                          Icons.send_rounded,
-                          color: Colors.white,
-                          size: 20,
+                  Row(
+                    children: [
+                      IconButton(
+                        tooltip: l.t('helpDeskUploadCert'),
+                        onPressed: _busy ? null : _pickSource,
+                        icon: const Icon(
+                          Icons.attach_file_rounded,
+                          color: AppColors.trustBlue,
                         ),
                       ),
-                    ),
+                      Expanded(
+                        child: TextField(
+                          controller: _ctrl,
+                          minLines: 1,
+                          maxLines: 4,
+                          enabled: !_busy,
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: (_) => _send(),
+                          decoration: InputDecoration(
+                            hintText: _listening
+                                ? l.t('helpVoiceListening')
+                                : l.t('helpDeskPlaceholder'),
+                            filled: true,
+                            fillColor: AppColors.canvas,
+                            isDense: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Material(
+                        color: _listening
+                            ? AppColors.emergencyRed
+                            : const Color(0xFFFFD400),
+                        borderRadius: BorderRadius.circular(12),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: _busy ? null : _toggleVoice,
+                          child: SizedBox(
+                            width: 48,
+                            height: 48,
+                            child: Icon(
+                              _listening ? Icons.stop_rounded : Icons.mic_rounded,
+                              color: Colors.black87,
+                              size: 22,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Material(
+                        color: AppColors.trustBlue,
+                        borderRadius: BorderRadius.circular(12),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: _busy || _listening ? null : () => _send(),
+                          child: const SizedBox(
+                            width: 48,
+                            height: 48,
+                            child: Icon(
+                              Icons.send_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -617,11 +617,32 @@ abstract final class HelpDeskReplies {
     return _t(
       lang,
       en:
-          'I reviewed your question (“$short”). Describe your symptoms (e.g. fever, cough, chest pain) and I will explain what may be happening and suggest matching doctors in Suwasiri. Or ask about app features / upload a certificate.',
+          'I heard your question (“$short”).\n\n'
+          'Here is practical Suwasiri guidance:\n'
+          '• App how-to — ask about Home, Doctors, Call, Vault, Vaccines, Profile, SOS\n'
+          '• Symptoms — describe what you feel; I explain what may be happening and suggest doctors\n'
+          '• Certificates — attach a medical certificate photo for an explanation\n'
+          '• Health topics — fever, dengue, diabetes, BP, cough, chest pain, and more\n\n'
+          'Ask anything in English, Sinhala, or Tamil by typing or voice (mic). '
+          'Educational guidance only — not a diagnosis. For emergencies use Suwasariya 1990.',
       si:
-          'මම ඔබේ ප්‍රශ්නය සලකා බැලුවෙමි (“$short”). රෝග ලක්ෂණ විස්තර කරන්න (උදා. උණ, කැස්ස, පපුවේ වේදනාව) — මම කුමක් සිදුවිය හැකිදැයි පැහැදිලි කර ගැළපෙන වෛද්‍යවරුන් නිර්දේශ කරමි. යෙදුම් විශේෂාංග හෝ සහතික උඩුගත කිරීම ගැනද අසන්න.',
+          'මම ඔබේ ප්‍රශ්නය ලැබුවෙමි (“$short”).\n\n'
+          'Suwasiri ප්‍රායෝගික මගපෙන්වීම:\n'
+          '• යෙදුම — Home, Doctors, Call, Vault, Vaccines, Profile, SOS\n'
+          '• රෝග ලක්ෂණ — විස්තර කරන්න; මම පැහැදිලි කර වෛද්‍යවරු නිර්දේශ කරමි\n'
+          '• සහතික — ඡායාරූපයක් ඇමිණීමෙන් පැහැදිලි කිරීම\n'
+          '• සෞඛ්‍ය මාතෘකා — උණ, ඩෙංගු, දියවැඩියා, රුධිර පීඩනය, කැස්ස ආදිය\n\n'
+          'ටයිප් කිරීමෙන් හෝ mic (කටහඬ) මගින් ඕනෑම දෙයක් අසන්න. '
+          'අධ්‍යාපනික මගපෙන්වීම පමණි — රෝග විනිශ්චයක් නොවේ. හදිසි අවස්ථාවකදී Suwasariya 1990.',
       ta:
-          'உங்கள் கேள்வியை ஆய்வு செய்தேன் (“$short”). அறிகுறிகளை விவரிக்கவும் (எ.கா. காய்ச்சல், இருமல், மார்பு வலி) — என்ன நடக்கலாம் என்று விளக்கி பொருத்தமான மருத்துவர்களை பரிந்துரைப்பேன். செயலி அம்சங்கள் அல்லது சான்றிதழ் பதிவேற்றம் பற்றியும் கேளுங்கள்.',
+          'உங்கள் கேள்வியைப் பெற்றேன் (“$short”).\n\n'
+          'Suwasiri நடைமுறை வழிகாட்டல்:\n'
+          '• செயலி — Home, Doctors, Call, Vault, Vaccines, Profile, SOS\n'
+          '• அறிகுறிகள் — விவரிக்கவும்; விளக்கி மருத்துவர்களை பரிந்துரைப்பேன்\n'
+          '• சான்றிதழ் — புகைப்படம் இணைத்து விளக்கம் பெறலாம்\n'
+          '• சுகாதார தலைப்புகள் — காய்ச்சல், டெங்கு, நீரிழிவு, இரத்த அழுத்தம், இருமல் போன்றவை\n\n'
+          'டைப் செய்தோ அல்லது mic (குரல்) மூலமோ எதையும் கேளுங்கள். '
+          'கல்வி வழிகாட்டல் மட்டும் — நோய் கண்டறிதல் அல்ல. அவசரத்தில் Suwasariya 1990.',
     );
   }
 }
