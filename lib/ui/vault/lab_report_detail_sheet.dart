@@ -8,6 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/services/prescription_export_service.dart';
 import '../../localization/app_localizations.dart';
+import '../widgets/sheet_close_bar.dart';
 
 Future<void> showLabReportDetailSheet({
   required BuildContext context,
@@ -238,13 +239,7 @@ class _ReportHeader extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            IconButton(
-              onPressed: () => Navigator.of(context).pop(),
-              style: IconButton.styleFrom(
-                backgroundColor: const Color(0xFFE8EEF5),
-              ),
-              icon: const Icon(Icons.close, color: AppColors.trustBlue),
-            ),
+            const SheetCloseActions(),
           ],
         ),
         Text(

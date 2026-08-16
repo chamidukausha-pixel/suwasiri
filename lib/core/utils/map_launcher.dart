@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../data/models/appointment.dart';
 import '../../localization/app_localizations.dart';
 import '../theme/app_colors.dart';
+import '../../ui/widgets/sheet_close_bar.dart';
 
 /// Opens Google Maps or Apple Maps for a clinic place.
 abstract final class MapLauncher {
@@ -68,13 +69,20 @@ abstract final class MapLauncher {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                l.t('openClinicInMaps'),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 16,
-                  color: AppColors.trustBlueDark,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      l.t('openClinicInMaps'),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                        color: AppColors.trustBlueDark,
+                      ),
+                    ),
+                  ),
+                  const SheetCloseActions(),
+                ],
               ),
               const SizedBox(height: 6),
               Text(

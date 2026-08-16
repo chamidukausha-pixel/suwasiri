@@ -37,8 +37,6 @@ class FirebaseHealthRepository implements HealthRepository {
   CollectionReference<Map<String, dynamic>> get _sosSessions =>
       _db.collection('sos_sessions');
 
-  List<ClinicFacility> get _clinics => VaccineCatalog.clinics;
-
   final _doctors = DoctorCatalog.doctors;
 
   @override
@@ -229,14 +227,11 @@ class FirebaseHealthRepository implements HealthRepository {
     FacilityType type = FacilityType.all,
     String query = '',
   }) async {
-    return _clinics.where((c) {
-      final dOk =
-          district == null || district.isEmpty || c.district == district;
-      final tOk = type == FacilityType.all || c.type == type;
-      final q = query.trim().toLowerCase();
-      final qOk = q.isEmpty || c.name.toLowerCase().contains(q);
-      return dOk && tOk && qOk;
-    }).toList();
+    return VaccineCatalog.searchClinics(
+      district: district,
+      type: type,
+      query: query,
+    );
   }
 
   @override
@@ -262,6 +257,7 @@ class FirebaseHealthRepository implements HealthRepository {
     required String facilityName,
     required DateTime slot,
     required String ceylonHealthId,
+    String vaccineName = '',
   }) async {
     ClinicFacility? clinic;
     for (final c in VaccineCatalog.clinics) {
@@ -277,6 +273,7 @@ class FirebaseHealthRepository implements HealthRepository {
       slot: slot,
       ceylonHealthId: ceylonHealthId,
       status: 'confirmed',
+      vaccineName: vaccineName,
       address: clinic?.address ?? '',
     );
     await _vaccinations.doc(booking.id).set({

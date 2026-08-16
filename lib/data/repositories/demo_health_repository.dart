@@ -31,8 +31,6 @@ class DemoHealthRepository implements HealthRepository {
 
   List<Prescription> _rxMemory = [];
 
-  List<ClinicFacility> get _clinics => VaccineCatalog.clinics;
-
   final _doctors = DoctorCatalog.doctors;
 
   void _seedIfNeeded() {
@@ -334,13 +332,11 @@ class DemoHealthRepository implements HealthRepository {
     FacilityType type = FacilityType.all,
     String query = '',
   }) async {
-    return _clinics.where((c) {
-      final dOk = district == null || district.isEmpty || c.district == district;
-      final tOk = type == FacilityType.all || c.type == type;
-      final q = query.trim().toLowerCase();
-      final qOk = q.isEmpty || c.name.toLowerCase().contains(q);
-      return dOk && tOk && qOk;
-    }).toList();
+    return VaccineCatalog.searchClinics(
+      district: district,
+      type: type,
+      query: query,
+    );
   }
 
   @override
@@ -366,6 +362,7 @@ class DemoHealthRepository implements HealthRepository {
     required String facilityName,
     required DateTime slot,
     required String ceylonHealthId,
+    String vaccineName = '',
   }) async {
     // Multi-stage validation simulation
     await Future<void>.delayed(const Duration(milliseconds: 400)); // handshake
@@ -385,6 +382,7 @@ class DemoHealthRepository implements HealthRepository {
       slot: slot,
       ceylonHealthId: ceylonHealthId,
       status: 'confirmed',
+      vaccineName: vaccineName,
       address: clinic?.address ?? '',
     );
     final raw = _prefs.getString(_kBookings);

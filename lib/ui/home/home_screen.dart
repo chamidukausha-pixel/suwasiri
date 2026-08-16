@@ -6,7 +6,6 @@ import '../../bloc/auth/auth_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/map_launcher.dart';
 import '../../data/catalogs/doctor_catalog.dart';
-import '../../data/catalogs/vaccine_catalog.dart';
 import '../../data/models/appointment.dart';
 import '../../data/models/vaccine_models.dart';
 import '../../data/repositories/health_repository.dart';
@@ -15,9 +14,14 @@ import '../widgets/common_widgets.dart';
 import '../widgets/suwasiri_brand_header.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.onNavigate});
+  const HomeScreen({
+    super.key,
+    required this.onNavigate,
+    this.isActive = true,
+  });
 
   final ValueChanged<int> onNavigate;
+  final bool isActive;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -25,7 +29,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   Appointment? _nextAppt;
-  VaccineProtocol? _vaccine;
   String? _nextHospital;
   VaccineBooking? _nextVaccineBooking;
 
@@ -35,12 +38,21 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadHomeData();
   }
 
+  @override
+  void didUpdateWidget(HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      _loadHomeData();
+    }
+  }
+
+  bool _isUpcoming(DateTime slot) => slot.isAfter(DateTime.now());
+
   Future<void> _loadHomeData() async {
     final user = context.read<AuthCubit>().state.user;
     if (user == null) return;
     final health = context.read<HealthRepository>();
     final appts = await health.getAppointments(user.id);
-    final protocols = await health.getVaccineProtocols(user.id);
     List<VaccineBooking> bookings = const [];
     try {
       bookings = await health.getVaccineBookings(user.id);
@@ -48,7 +60,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
     setState(() {
       final upcoming = appts
-          .where((a) => a.status == AppointmentStatus.upcoming)
+          .where((a) =>
+              a.status == AppointmentStatus.upcoming &&
+              _isUpcoming(a.timeSlot))
           .toList()
         ..sort((a, b) => a.timeSlot.compareTo(b.timeSlot));
       _nextAppt = upcoming.isEmpty ? null : upcoming.first;
@@ -58,21 +72,12 @@ class _HomeScreenState extends State<HomeScreen> {
       } else {
         _nextHospital = null;
       }
-      _vaccine = protocols.where((p) => p.progress < 1.0).isNotEmpty
-          ? protocols.firstWhere((p) => p.progress < 1.0)
-          : (protocols.isEmpty ? null : protocols.first);
       final futureBookings = bookings
-          .where((b) =>
-              b.status == 'confirmed' &&
-              b.slot.isAfter(DateTime.now().subtract(const Duration(hours: 2))))
+          .where((b) => b.status == 'confirmed' && _isUpcoming(b.slot))
           .toList()
         ..sort((a, b) => a.slot.compareTo(b.slot));
-      _nextVaccineBooking = futureBookings.isNotEmpty
-          ? futureBookings.first
-          : VaccineCatalog.sampleUpcomingBooking(
-              patientId: user.id,
-              ceylonHealthId: user.ceylonHealthId ?? user.barcodeNumber ?? 'CH',
-            );
+      _nextVaccineBooking =
+          futureBookings.isEmpty ? null : futureBookings.first;
     });
   }
 
@@ -191,7 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          if (_nextAppt != null)
+          if (_nextAppt != null && _isUpcoming(_nextAppt!.timeSlot))
             _UpcomingAppointmentCard(
               appointment: _nextAppt!,
               hospitalName: _nextHospital,
@@ -207,23 +212,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
-          if (_nextVaccineBooking != null) ...[
+          if (_nextVaccineBooking != null &&
+              _isUpcoming(_nextVaccineBooking!.slot)) ...[
             const SizedBox(height: 12),
             _UpcomingVaccineCard(
               booking: _nextVaccineBooking!,
               onDetails: _openVaccineMaps,
             ),
           ],
-          const SizedBox(height: 14),
-          if (_vaccine != null)
-            _VaccinationStatusCard(
-              protocol: _vaccine!,
-              statusLabel: l.t('vaccinationStatus'),
-              pendingLabel: l.t('pending'),
-              scheduleLabel: l.t('scheduleNow'),
-              dueLabel: _dueLabel(l, _vaccine!),
-              onSchedule: () => widget.onNavigate(4),
-            ),
           const SizedBox(height: 14),
           _HealthTipCard(
             title: l.t('healthTipTitle'),
@@ -232,13 +228,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
-  }
-
-  String _dueLabel(AppLocalizations l, VaccineProtocol protocol) {
-    final due = protocol.nextDue;
-    if (due == null) return protocol.doseLabel;
-    final days = due.difference(DateTime.now()).inDays.clamp(0, 999);
-    return l.t('dueInDays').replaceAll('{days}', '$days');
   }
 }
 
@@ -647,191 +636,6 @@ class _UpcomingVaccineCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _VaccinationStatusCard extends StatelessWidget {
-  const _VaccinationStatusCard({
-    required this.protocol,
-    required this.statusLabel,
-    required this.pendingLabel,
-    required this.scheduleLabel,
-    required this.dueLabel,
-    required this.onSchedule,
-  });
-
-  final VaccineProtocol protocol;
-  final String statusLabel;
-  final String pendingLabel;
-  final String scheduleLabel;
-  final String dueLabel;
-  final VoidCallback onSchedule;
-
-  @override
-  Widget build(BuildContext context) {
-    final pct = (protocol.progress * 100).round();
-    final pending = protocol.progress < 1.0;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              width: 5,
-              decoration: const BoxDecoration(
-                color: AppColors.vaccineOrange,
-                borderRadius: BorderRadius.horizontal(
-                  left: Radius.circular(20),
-                ),
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 16, 16, 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: AppColors.vaccineOrangeSoft,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.vaccines_rounded,
-                            color: AppColors.vaccineOrange,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            statusLabel,
-                            style: const TextStyle(
-                              color: AppColors.slateMuted,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 11,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                        ),
-                        if (pending)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: AppColors.vaccineOrange
-                                    .withValues(alpha: 0.55),
-                              ),
-                            ),
-                            child: Text(
-                              pendingLabel,
-                              style: const TextStyle(
-                                color: AppColors.vaccineOrange,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 10,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${protocol.name} (${protocol.doseLabel})',
-                            style: const TextStyle(
-                              color: AppColors.trustBlueDark,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          '$pct%',
-                          style: const TextStyle(
-                            color: AppColors.vaccineOrange,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: LinearProgressIndicator(
-                        value: protocol.progress.clamp(0.0, 1.0),
-                        minHeight: 8,
-                        backgroundColor: AppColors.border,
-                        color: AppColors.vaccineOrange,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.calendar_today_outlined,
-                          size: 14,
-                          color: AppColors.slateMuted,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            dueLabel,
-                            style: const TextStyle(
-                              color: AppColors.slateMuted,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                        MinTap(
-                          onTap: onSchedule,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                scheduleLabel,
-                                style: const TextStyle(
-                                  color: AppColors.trustBlue,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              const SizedBox(width: 2),
-                              const Icon(
-                                Icons.arrow_forward_rounded,
-                                size: 16,
-                                color: AppColors.trustBlue,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

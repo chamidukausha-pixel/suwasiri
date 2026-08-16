@@ -8,6 +8,8 @@ import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/catalogs/vaccine_catalog.dart';
 import '../../data/models/vaccine_models.dart';
+import '../../localization/app_localizations.dart';
+import '../widgets/sheet_close_bar.dart';
 
 /// National Vaccine Slot Booking sheet (MOH Scheduling Coordinator).
 class VaccineBookingSheet extends StatelessWidget {
@@ -45,6 +47,15 @@ class VaccineBookingSheet extends StatelessWidget {
         final clinic = state.selectedClinic;
         final isPrivate = clinic?.type == FacilityType.privateHospital;
         final price = clinic?.priceLkr;
+        final listed = (state.query.trim().length >= 2 ||
+                state.clinics.length <= 60)
+            ? state.clinics
+            : [
+                ?clinic,
+                ...state.clinics
+                    .where((c) => c.id != clinic?.id)
+                    .take(60),
+              ];
 
         return ListView(
           controller: scrollController,
@@ -99,13 +110,7 @@ class VaccineBookingSheet extends StatelessWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFFF1F5F9),
-                  ),
-                  icon: const Icon(Icons.close, size: 20),
-                ),
+                const SheetCloseActions(),
               ],
             ),
             const SizedBox(height: 18),
@@ -144,22 +149,27 @@ class VaccineBookingSheet extends StatelessWidget {
             DropdownButtonFormField<String>(
               key: ValueKey('dist-${state.district ?? ''}'),
               initialValue: (state.district == null || state.district!.isEmpty)
-                  ? 'Colombo'
+                  ? '__all__'
                   : state.district,
               isExpanded: true,
               decoration: const InputDecoration(
                 contentPadding:
                     EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               ),
-              items: AppConstants.mohDistricts
-                  .map(
-                    (d) => DropdownMenuItem(
-                      value: d,
-                      child: Text('$d District'),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) => cubit.setDistrict(v),
+              items: [
+                DropdownMenuItem(
+                  value: '__all__',
+                  child: Text(AppLocalizations.of(context).t('allDistricts')),
+                ),
+                ...AppConstants.mohDistricts.map(
+                  (d) => DropdownMenuItem(
+                    value: d,
+                    child: Text('$d District'),
+                  ),
+                ),
+              ],
+              onChanged: (v) =>
+                  cubit.setDistrict(v == '__all__' ? '' : v),
             ),
             const SizedBox(height: 14),
             const _FieldLabel('Registered Center Type'),
@@ -215,7 +225,8 @@ class VaccineBookingSheet extends StatelessWidget {
             const SizedBox(height: 6),
             TextField(
               decoration: InputDecoration(
-                hintText: 'Type name (e.g., MOH Clinic, Colombo General...)',
+                hintText:
+                    'Search MOH office, hospital or private hospital (all 25 districts)',
                 hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                 prefixIcon: const Icon(Icons.search, size: 20),
                 contentPadding:
@@ -232,6 +243,14 @@ class VaccineBookingSheet extends StatelessWidget {
                 color: Color(0xFF334155),
               ),
             ),
+            if (state.query.trim().length < 2 && state.clinics.length > 60)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'Showing first 60 of ${state.clinics.length}. Type a name to search every MOH office, hospital and private hospital.',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                ),
+              ),
             const SizedBox(height: 8),
             if (state.clinics.isEmpty)
               Padding(
@@ -242,7 +261,7 @@ class VaccineBookingSheet extends StatelessWidget {
                 ),
               )
             else
-              ...state.clinics.map((c) {
+              ...listed.map((c) {
                 final selected = clinic?.id == c.id;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
@@ -280,6 +299,16 @@ class VaccineBookingSheet extends StatelessWidget {
                                       color: Color(0xFF0F172A),
                                     ),
                                   ),
+                                  if (c.address.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${c.address} · ${c.district}',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade700,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
                                   if (c.hours.isNotEmpty) ...[
                                     const SizedBox(height: 4),
                                     Text(

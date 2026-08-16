@@ -5,6 +5,7 @@ import '../../bloc/notification/notification_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/app_notification.dart';
 import '../../localization/app_localizations.dart';
+import 'sheet_close_bar.dart';
 
 Future<void> showNotificationTray(BuildContext context) async {
   final l = AppLocalizations.of(context);
@@ -50,6 +51,7 @@ Future<void> showNotificationTray(BuildContext context) async {
                               context.read<NotificationCubit>().markAllRead(),
                           child: const Text('Mark all read'),
                         ),
+                        const SheetCloseActions(),
                       ],
                     ),
                   ),

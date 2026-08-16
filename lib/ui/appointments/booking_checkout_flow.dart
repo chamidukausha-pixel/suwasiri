@@ -14,6 +14,7 @@ import '../../data/models/appointment.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/sheet_close_bar.dart';
 
 enum _ConsultMode { clinic, video }
 enum _PayChannel { card, bankSlip }
@@ -413,13 +414,7 @@ class _ConfirmStep extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            IconButton(
-              onPressed: onClose,
-              style: IconButton.styleFrom(
-                backgroundColor: const Color(0xFFF1F5F9),
-              ),
-              icon: const Icon(Icons.close, size: 18),
-            ),
+            SheetCloseActions(onClose: onClose),
           ],
         ),
         const SizedBox(height: 12),
@@ -764,13 +759,7 @@ class _PayStep extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            IconButton(
-              onPressed: onClose,
-              style: IconButton.styleFrom(
-                backgroundColor: const Color(0xFFF1F5F9),
-              ),
-              icon: const Icon(Icons.close, size: 18),
-            ),
+            SheetCloseActions(onClose: onClose),
           ],
         ),
         const SizedBox(height: 8),

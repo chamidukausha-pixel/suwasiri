@@ -12,6 +12,7 @@ import '../../data/services/prescription_export_service.dart';
 import '../../localization/app_localizations.dart';
 import '../telehealth/prescription_detail_sheet.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/sheet_close_bar.dart';
 import 'certificate_form_view.dart';
 import 'lab_report_detail_sheet.dart';
 import 'prescription_form_view.dart';
@@ -561,6 +562,12 @@ class _VaccinesList extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const Row(
+                children: [
+                  Spacer(),
+                  SheetCloseActions(),
+                ],
+              ),
               Text(
                 l.t('vaccineDetailTitle'),
                 style: const TextStyle(
@@ -711,6 +718,12 @@ class _CertificatesList extends StatelessWidget {
                 20 + MediaQuery.paddingOf(ctx).bottom,
               ),
               children: [
+                const Row(
+                  children: [
+                    Spacer(),
+                    SheetCloseActions(),
+                  ],
+                ),
                 Text(
                   l.t('certificateDetail'),
                   style: const TextStyle(
@@ -875,6 +888,12 @@ class _NotesList extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const Row(
+                children: [
+                  Spacer(),
+                  SheetCloseActions(),
+                ],
+              ),
               Text(
                 l.t('treatmentNotes'),
                 style: const TextStyle(

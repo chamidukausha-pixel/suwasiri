@@ -18,7 +18,13 @@ class HelpDeskAnswer {
 /// Educational guidance only — not a medical diagnosis.
 abstract final class HelpDeskReplies {
   static HelpDeskAnswer answer(String question, {String? preferredLang}) {
-    final lang = preferredLang ?? detectLanguage(question);
+    final detected = detectLanguage(question);
+    final lang = switch (detected) {
+      'si' || 'ta' => detected,
+      _ => (preferredLang == 'si' || preferredLang == 'ta')
+          ? preferredLang!
+          : 'en',
+    };
     final q = question.toLowerCase();
 
     if (_isAppHelp(q)) {
@@ -624,7 +630,7 @@ abstract final class HelpDeskReplies {
           '• Certificates — attach a medical certificate photo for an explanation\n'
           '• Health topics — fever, dengue, diabetes, BP, cough, chest pain, and more\n\n'
           'Ask anything in English, Sinhala, or Tamil by typing or voice (mic). '
-          'Educational guidance only — not a diagnosis. For emergencies use Suwasariya 1990.',
+          'Use the language chips to switch. Educational guidance only — not a diagnosis. For emergencies use Suwasariya 1990.',
       si:
           'මම ඔබේ ප්‍රශ්නය ලැබුවෙමි (“$short”).\n\n'
           'Suwasiri ප්‍රායෝගික මගපෙන්වීම:\n'

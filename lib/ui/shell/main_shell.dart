@@ -36,7 +36,7 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final pages = [
-      HomeScreen(onNavigate: _goTo),
+      HomeScreen(onNavigate: _goTo, isActive: _index == 0),
       const AppointmentsScreen(),
       const TelehealthScreen(),
       const VaultScreen(),

@@ -1757,17 +1757,17 @@ class AppLocalizations {
       'ta': 'AI உதவி மையம்',
     },
     'helpDeskSubtitle': {
-      'en': 'App help · diseases & symptoms · medical certificates',
-      'si': 'යෙදුම් උදව් · රෝග/ලක්ෂණ · වෛද්‍ය සහතික',
-      'ta': 'செயலி உதவி · நோய்/அறிகுறி · மருத்துவ சான்றிதழ்',
+      'en': 'Ask anything in English, Sinhala or Tamil · type or voice',
+      'si': 'ඉංග්‍රීසි, සිංහල හෝ දෙමළ බසින් ඕනෑම දෙයක් අසන්න · ටයිප් හෝ කටහඬ',
+      'ta': 'ஆங்கிலம், சிங்களம் அல்லது தமிழில் எதையும் கேளுங்கள் · டைப் அல்லது குரல்',
     },
     'helpDeskWelcome': {
       'en':
-          'Hello! I am Suwasiri Help Desk. Type or tap the mic to speak. Ask anything about the app, symptoms (I explain and suggest doctors), health topics, or upload a medical certificate. Educational guidance only — not a diagnosis.',
+          'Hello! I am Suwasiri Help Desk. Choose EN / සිංහල / தமிழ் above, then type or tap the mic. Ask anything about the app, symptoms (I explain and suggest doctors), vaccines, vault, Call, SOS, or upload a medical certificate. Educational guidance only — not a diagnosis.',
       'si':
-          'ආයුබෝවන්! මම Suwasiri Help Desk. ටයිප් කරන්න හෝ mic තට්ටු කර කතා කරන්න. යෙදුම, රෝග ලක්ෂණ (පැහැදිලි කිරීම + වෛද්‍ය නිර්දේශ), සෞඛ්‍ය මාතෘකා, හෝ වෛද්‍ය සහතික උඩුගත කිරීම ගැන ඕනෑම දෙයක් අසන්න. අධ්‍යාපනික මගපෙන්වීම පමණි — රෝග විනිශ්චයක් නොවේ.',
+          'ආයුබෝවන්! මම Suwasiri Help Desk. ඉහත EN / සිංහල / தமிழ் තෝරා ටයිප් කරන්න හෝ mic තට්ටු කරන්න. යෙදුම, රෝග ලක්ෂණ (පැහැදිලි කිරීම + වෛද්‍ය නිර්දේශ), එන්නත්, Vault, Call, SOS, හෝ වෛද්‍ය සහතික ගැන ඕනෑම දෙයක් අසන්න. අධ්‍යාපනික මගපෙන්වීම පමණි — රෝග විනිශ්චයක් නොවේ.',
       'ta':
-          'வணக்கம்! நான் Suwasiri Help Desk. டைப் செய்யவும் அல்லது mic தட்டி பேசவும். செயலி, அறிகுறிகள் (விளக்கம் + மருத்துவர் பரிந்துரை), சுகாதார தலைப்புகள் அல்லது மருத்துவ சான்றிதழ் பதிவேற்றம் பற்றி எதையும் கேளுங்கள். கல்வி வழிகாட்டல் மட்டும் — நோய் கண்டறிதல் அல்ல.',
+          'வணக்கம்! நான் Suwasiri Help Desk. மேலே EN / සිංහල / தமிழ் தேர்ந்தெடுத்து டைப் செய்யவும் அல்லது mic தட்டவும். செயலி, அறிகுறிகள் (விளக்கம் + மருத்துவர் பரிந்துரை), தடுப்பூசி, Vault, Call, SOS அல்லது மருத்துவ சான்றிதழ் பற்றி எதையும் கேளுங்கள். கல்வி வழிகாட்டல் மட்டும் — நோய் கண்டறிதல் அல்ல.',
     },
     'helpDeskPlaceholder': {
       'en': 'Type or use the mic — ask anything…',

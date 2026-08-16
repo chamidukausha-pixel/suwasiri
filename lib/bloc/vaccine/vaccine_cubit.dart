@@ -11,7 +11,7 @@ class VaccineState extends Equatable {
     this.clinics = const [],
     this.slots = const [],
     this.lastSync,
-    this.district = 'Colombo',
+    this.district = '',
     this.facilityType = FacilityType.all,
     this.query = '',
     this.immunizationTarget =
@@ -238,7 +238,7 @@ class VaccineCubit extends Cubit<VaccineState> {
     );
     emit(state.copyWith(
       immunizationTarget: matched,
-      district: state.district?.isNotEmpty == true ? state.district : 'Colombo',
+      district: '',
       facilityType: FacilityType.all,
       query: '',
       clearClinic: true,
@@ -267,6 +267,7 @@ class VaccineCubit extends Cubit<VaccineState> {
       facilityName: clinic.name,
       slot: slot,
       ceylonHealthId: ceylonHealthId,
+      vaccineName: state.immunizationTarget,
     );
     emit(state.copyWith(
       bookingStage: null,

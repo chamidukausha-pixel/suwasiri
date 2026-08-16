@@ -1,4 +1,5 @@
 import '../models/vaccine_models.dart';
+import 'sri_lanka_vaccine_facilities.dart';
 
 /// National immunization targets + registered vaccination centers.
 abstract final class VaccineCatalog {
@@ -80,143 +81,28 @@ abstract final class VaccineCatalog {
     ];
   }
 
-  static List<ClinicFacility> clinics = [
-    const ClinicFacility(
-      id: 'moh-cmc',
-      name: 'MOH Clinic, Colombo Municipal Council',
-      district: 'Colombo',
-      type: FacilityType.mohClinic,
-      address: 'Town Hall, Colombo 07',
-      hours: '08:30 AM - 12:30 PM (Mon, Wed, Fri)',
-    ),
-    const ClinicFacility(
-      id: 'moh-dehi',
-      name: 'MOH Clinic, Dehiwala-Mount Lavinia',
-      district: 'Colombo',
-      type: FacilityType.mohClinic,
-      address: 'Dehiwala',
-      hours: '08:00 AM - 12:00 PM (Tue, Thu)',
-    ),
-    const ClinicFacility(
-      id: 'moh-kadu',
-      name: 'MOH Clinic, Kaduwela Division',
-      district: 'Colombo',
-      type: FacilityType.mohClinic,
-      address: 'Kaduwela',
-      hours: '08:30 AM - 01:00 PM (Mon–Fri)',
-    ),
-    const ClinicFacility(
-      id: 'moh-gamp',
-      name: 'MOH Gampaha',
-      district: 'Gampaha',
-      type: FacilityType.mohClinic,
-      address: 'Gampaha Town',
-      hours: '08:30 AM - 12:30 PM (Mon, Wed, Fri)',
-    ),
-    const ClinicFacility(
-      id: 'moh-kandy',
-      name: 'MOH Kandy',
-      district: 'Kandy',
-      type: FacilityType.mohClinic,
-      address: 'Kandy Municipal Area',
-      hours: '08:00 AM - 12:00 PM (Mon–Fri)',
-    ),
-    const ClinicFacility(
-      id: 'moh-galle',
-      name: 'MOH Galle',
-      district: 'Galle',
-      type: FacilityType.mohClinic,
-      address: 'Galle Fort area',
-      hours: '08:30 AM - 12:30 PM (Tue, Thu, Sat)',
-    ),
-    const ClinicFacility(
-      id: 'hosp-nhsl',
-      name: 'NHSL — National Hospital of Sri Lanka',
-      district: 'Colombo',
-      type: FacilityType.hospital,
-      address: 'Colombo 10',
-      hours: '09:00 AM - 03:00 PM (Mon–Fri)',
-    ),
-    const ClinicFacility(
-      id: 'hosp-ragama',
-      name: 'Ragama Teaching Hospital',
-      district: 'Gampaha',
-      type: FacilityType.hospital,
-      address: 'Ragama',
-      hours: '08:00 AM - 02:00 PM (Mon–Fri)',
-    ),
-    const ClinicFacility(
-      id: 'hosp-kara',
-      name: 'Karapitiya Teaching Hospital',
-      district: 'Galle',
-      type: FacilityType.hospital,
-      address: 'Galle',
-      hours: '08:30 AM - 02:30 PM (Mon–Fri)',
-    ),
-    const ClinicFacility(
-      id: 'priv-nawaloka',
-      name: 'Nawaloka Hospital — Vaccine Desk',
-      district: 'Colombo',
-      type: FacilityType.privateHospital,
-      address: 'Colombo 02',
-      hours: '08:00 AM - 06:00 PM (Daily)',
-      priceLkr: 8500,
-    ),
-    const ClinicFacility(
-      id: 'priv-asiri',
-      name: 'Asiri Central — Immunization Unit',
-      district: 'Colombo',
-      type: FacilityType.privateHospital,
-      address: 'Colombo 05',
-      hours: '08:00 AM - 05:00 PM (Mon–Sat)',
-      priceLkr: 9200,
-    ),
-    const ClinicFacility(
-      id: 'priv-durdans',
-      name: 'Durdans Hospital — Preventive Care',
-      district: 'Colombo',
-      type: FacilityType.privateHospital,
-      address: 'Colombo 03',
-      hours: '09:00 AM - 05:00 PM (Mon–Sat)',
-      priceLkr: 7800,
-    ),
-    const ClinicFacility(
-      id: 'priv-lakeside',
-      name: 'Lakeside Adventist Hospital',
-      district: 'Kandy',
-      type: FacilityType.privateHospital,
-      address: 'Kandy',
-      hours: '08:30 AM - 04:30 PM (Mon–Fri)',
-      priceLkr: 6500,
-    ),
-    const ClinicFacility(
-      id: 'priv-hemas',
-      name: 'Hemas Hospitals Wattala — Vaccines',
-      district: 'Gampaha',
-      type: FacilityType.privateHospital,
-      address: 'Wattala',
-      hours: '08:00 AM - 06:00 PM (Daily)',
-      priceLkr: 7200,
-    ),
-  ];
+  static List<ClinicFacility> get clinics => SriLankaVaccineFacilities.all;
 
-  /// Sample booked slot for Home upcoming (used when Firestore has none).
-  static VaccineBooking sampleUpcomingBooking({
-    required String patientId,
-    required String ceylonHealthId,
+  /// Search MOH offices, government hospitals, and private hospitals.
+  /// A typed query of 2+ characters searches nationwide (district filter off).
+  static List<ClinicFacility> searchClinics({
+    String? district,
+    FacilityType type = FacilityType.all,
+    String query = '',
   }) {
-    final day = DateTime.now().add(const Duration(days: 5));
-    return VaccineBooking(
-      id: 'sample-vax-home',
-      facilityId: 'moh-cmc',
-      facilityName: 'MOH Clinic, Colombo Municipal Council',
-      slot: DateTime(day.year, day.month, day.day, 8, 30),
-      ceylonHealthId: ceylonHealthId,
-      status: 'confirmed',
-      vaccineName: 'Dengue Prevention (Dose 2) (Qdenga®)',
-      address: 'Town Hall, Colombo 07',
-      latitude: 6.9271,
-      longitude: 79.8612,
-    );
+    final q = query.trim().toLowerCase();
+    final nationwide = q.length >= 2;
+    return clinics.where((c) {
+      final dOk = nationwide ||
+          district == null ||
+          district.isEmpty ||
+          c.district == district;
+      final tOk = type == FacilityType.all || c.type == type;
+      final qOk = q.isEmpty ||
+          c.name.toLowerCase().contains(q) ||
+          c.address.toLowerCase().contains(q) ||
+          c.district.toLowerCase().contains(q);
+      return dOk && tOk && qOk;
+    }).toList();
   }
 }

@@ -9,6 +9,7 @@ import '../../data/models/appointment.dart';
 import '../../data/services/help_desk_replies.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/profile_avatar.dart';
+import '../widgets/sheet_close_bar.dart';
 
 /// Opens the Suwasiri AI Help Desk chat sheet.
 Future<void> showHelpDeskSheet(BuildContext context) {
@@ -185,6 +186,7 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
   bool _speechReady = false;
   bool _listening = false;
   String _voiceLocale = 'en_US';
+  String _replyLang = 'en';
 
   @override
   void initState() {
@@ -192,7 +194,9 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final l = AppLocalizations.of(context);
+      final code = l.locale.languageCode;
       setState(() {
+        _replyLang = (code == 'si' || code == 'ta') ? code : 'en';
         _messages.add(
           _ChatBubble(text: l.t('helpDeskWelcome'), isUser: false),
         );
@@ -215,26 +219,35 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
       },
     );
     if (!mounted) return;
-    final code = AppLocalizations.of(context).locale.languageCode;
+    await _applyVoiceLocale();
+    setState(() => _speechReady = ok);
+  }
+
+  Future<void> _applyVoiceLocale() async {
+    final code = _replyLang;
     _voiceLocale = switch (code) {
       'si' => 'si_LK',
-      'ta' => 'ta_IN',
+      'ta' => 'ta_LK',
       _ => 'en_US',
     };
-    // Prefer a matching installed locale when available.
-    if (ok) {
+    try {
       final locales = await _speech.locales();
       final match = locales.where((e) {
         final id = e.localeId.toLowerCase();
         return id.startsWith(code) ||
             (code == 'si' && id.contains('si')) ||
-            (code == 'ta' && id.contains('ta'));
+            (code == 'ta' && (id.contains('ta') || id.contains('tam')));
       });
       if (match.isNotEmpty) {
         _voiceLocale = match.first.localeId;
       }
-    }
-    setState(() => _speechReady = ok);
+    } catch (_) {}
+  }
+
+  Future<void> _setReplyLang(String code) async {
+    setState(() => _replyLang = code);
+    await _applyVoiceLocale();
+    if (mounted) setState(() {});
   }
 
   Future<void> _toggleVoice() async {
@@ -313,7 +326,7 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
 
     await Future<void>.delayed(const Duration(milliseconds: 450));
     if (!mounted) return;
-    final answer = HelpDeskReplies.answer(text);
+    final answer = HelpDeskReplies.answer(text, preferredLang: _replyLang);
     setState(() {
       _messages.add(
         _ChatBubble(
@@ -352,10 +365,10 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
 
     await Future<void>.delayed(const Duration(milliseconds: 650));
     if (!mounted) return;
-    final lang = AppLocalizations.of(context).locale.languageCode;
+    final lang = _replyLang == 'si' || _replyLang == 'ta' ? _replyLang : 'en';
     final reply = HelpDeskReplies.explainCertificate(
       fileName: file.name,
-      lang: lang == 'si' || lang == 'ta' ? lang : 'en',
+      lang: lang,
     );
     setState(() {
       _messages.add(_ChatBubble(text: reply, isUser: false));
@@ -462,9 +475,28 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
                       ],
                     ),
                   ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
+                  const SheetCloseActions(),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: Row(
+                children: [
+                  _LangChip(
+                    label: 'EN',
+                    selected: _replyLang == 'en',
+                    onTap: () => _setReplyLang('en'),
+                  ),
+                  _LangChip(
+                    label: 'සිංහල',
+                    selected: _replyLang == 'si',
+                    onTap: () => _setReplyLang('si'),
+                  ),
+                  _LangChip(
+                    label: 'தமிழ்',
+                    selected: _replyLang == 'ta',
+                    onTap: () => _setReplyLang('ta'),
                   ),
                 ],
               ),
@@ -644,6 +676,43 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
   }
 }
 
+class _LangChip extends StatelessWidget {
+  const _LangChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 12,
+            color: selected ? Colors.white : AppColors.trustBlueDark,
+          ),
+        ),
+        selected: selected,
+        onSelected: (_) => onTap(),
+        selectedColor: AppColors.trustBlue,
+        backgroundColor: Colors.white,
+        showCheckmark: false,
+        side: BorderSide(
+          color: selected ? AppColors.trustBlue : AppColors.border,
+        ),
+      ),
+    );
+  }
+}
+
 class _QuickChip extends StatelessWidget {
   const _QuickChip({required this.label, required this.onTap});
 
@@ -721,7 +790,7 @@ class _BubbleTile extends StatelessWidget {
                   height: 140,
                   width: double.infinity,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const SizedBox(
+                  errorBuilder: (_, _, _) => const SizedBox(
                     height: 80,
                     child: Center(child: Icon(Icons.broken_image_outlined)),
                   ),

@@ -51,6 +51,8 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Global yellow Help FAB + AI Help Desk chat (EN/SI/TA): app features, diseases/symptoms, medical certificate upload & explain
 - [x] Help Desk symptom chat explains what may be happening and suggests matching specialties + sample doctors (opens Doctors tab)
 - [x] Help Desk: typing + voice mic input; ask-anything guidance kept; Doctors cards show specialty category + full details again
+- [x] Home: booked doctor sessions on blue card and vaccine bookings on green card; expired slots hide; vaccination status removed
+- [x] Sub-pages: Close + X to dismiss sheets; Help Desk EN/සිංහල/தமிழ் for all topics; vaccine search covers MOH offices, government and private hospitals in all 25 districts
 
 ## In progress / next
 

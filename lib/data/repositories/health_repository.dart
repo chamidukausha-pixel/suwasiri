@@ -42,6 +42,7 @@ abstract class HealthRepository {
     required String facilityName,
     required DateTime slot,
     required String ceylonHealthId,
+    String vaccineName = '',
   });
   Future<List<VaccineBooking>> getVaccineBookings(String patientId);
   Future<DateTime?> lastMohSync();

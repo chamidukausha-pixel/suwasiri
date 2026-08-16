@@ -7,6 +7,7 @@ import '../../data/models/vault_report.dart';
 import '../../data/services/prescription_export_service.dart';
 import '../../localization/app_localizations.dart';
 import '../vault/prescription_form_view.dart';
+import '../widgets/sheet_close_bar.dart';
 
 /// Sheet showing a doctor's issued script with email / MediLanka / PDF actions.
 Future<void> showPrescriptionDetailSheet({
@@ -215,6 +216,12 @@ class _PrescriptionDetailSheetState extends State<_PrescriptionDetailSheet> {
                 ),
               ),
               const SizedBox(height: 14),
+              const Row(
+                children: [
+                  Spacer(),
+                  SheetCloseActions(),
+                ],
+              ),
               Text(
                 l.t('issuedPrescription'),
                 style: const TextStyle(
