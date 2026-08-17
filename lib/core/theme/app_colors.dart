@@ -16,6 +16,7 @@ abstract final class AppColors {
   static const Color vaultGreen = Color(0xFF004D40);
   static const Color emeraldSoft = Color(0xFFECFDF5);
   static const Color tipTeal = Color(0xFF065F46);
+  static const Color videoBrown = Color(0xFF5D4037);
   static const Color videoPurple = Color(0xFF7C3AED);
   static const Color videoPurpleSoft = Color(0xFFF5F3FF);
   static const Color labBeige = Color(0xFFF5E6D3);
