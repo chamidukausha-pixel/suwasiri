@@ -53,7 +53,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Help Desk: typing + voice mic input; ask-anything guidance kept; Doctors cards show specialty category + full details again
 - [x] Home: booked doctor sessions on blue card and vaccine bookings on green card; expired slots hide; vaccination status removed
 - [x] Sub-pages: Close + X to dismiss sheets; Help Desk EN/සිංහල/தமிழ் for all topics; vaccine search covers MOH offices, government and private hospitals in all 25 districts
-- [x] Telehealth video bookings sync live to Call + Home blue card; in-person on Home blue only; ScheduleCubit auto-updates those sections
+- [x] Home: blue card = in-person clinic only; purple card = video consult (also on Call); green = vaccine; expired bookings hide (blank)
 
 ## In progress / next
 

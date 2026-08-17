@@ -28,6 +28,13 @@ class ScheduleState extends Equatable {
   Appointment? get nextDoctor =>
       activeDoctors.isEmpty ? null : activeDoctors.first;
 
+  Appointment? get nextClinic {
+    for (final a in activeDoctors) {
+      if (!a.isVideo) return a;
+    }
+    return null;
+  }
+
   Appointment? get nextVideo {
     for (final a in activeDoctors) {
       if (a.isVideo) return a;

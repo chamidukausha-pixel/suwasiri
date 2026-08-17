@@ -147,6 +147,16 @@ class AppLocalizations {
       'si': 'ඇමතුම විවෘත කරන්න',
       'ta': 'அழைப்பைத் திற',
     },
+    'upcomingClinic': {
+      'en': 'UPCOMING CLINIC',
+      'si': 'ඉදිරි සායනය',
+      'ta': 'வரவிருக்கும் கிளினிக்',
+    },
+    'upcomingVideoConsult': {
+      'en': 'UPCOMING VIDEO',
+      'si': 'ඉදිරි වීඩියෝ',
+      'ta': 'வரவிருக்கும் வீடியோ',
+    },
     'noVideoConsult': {
       'en':
           'No upcoming video consultation. Book a telehealth session from Doctors. In-person visits appear on Home only.',

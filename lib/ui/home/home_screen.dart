@@ -83,9 +83,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final l = AppLocalizations.of(context);
     final user = context.watch<AuthCubit>().state.user;
     final schedule = context.watch<ScheduleCubit>().state;
-    final nextAppt = schedule.nextDoctor;
+    final nextClinic = schedule.nextClinic;
+    final nextVideo = schedule.nextVideo;
     final nextVaccine = schedule.nextVaccine;
-    final hospitalName = nextAppt == null ? null : doctorHospital(nextAppt);
+    final hospitalName =
+        nextClinic == null ? null : doctorHospital(nextClinic);
     final firstName = user?.name.split(' ').first ?? '';
 
     return SafeArea(
@@ -147,57 +149,86 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 24),
-          Row(
-            children: [
-              Text(
-                l.t('upcoming'),
-                style: const TextStyle(
-                  color: AppColors.slateMuted,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                  letterSpacing: 1.2,
+          if (nextClinic != null && nextClinic.isActiveSlot) ...[
+            Row(
+              children: [
+                Text(
+                  l.t('upcoming'),
+                  style: const TextStyle(
+                    color: AppColors.slateMuted,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    letterSpacing: 1.2,
+                  ),
                 ),
-              ),
-              const Spacer(),
-              Container(
-                width: 7,
-                height: 7,
-                decoration: const BoxDecoration(
-                  color: AppColors.trustBlue,
-                  shape: BoxShape.circle,
+                const Spacer(),
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: const BoxDecoration(
+                    color: AppColors.trustBlue,
+                    shape: BoxShape.circle,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (nextAppt != null && nextAppt.isActiveSlot)
-            _UpcomingAppointmentCard(
-              appointment: nextAppt,
-              hospitalName: hospitalName,
-              upcomingLabel: l.t('upcoming'),
-              detailsLabel: nextAppt.isVideo
-                  ? l.t('openCallSession')
-                  : l.t('viewDetailsMap'),
-              modeLabel: nextAppt.isVideo
-                  ? l.t('onlineVideoConsult')
-                  : l.t('inPerson'),
-              onDetails: () => _openAppointmentDetails(nextAppt),
-            )
-          else
-            SoftCard(
-              child: Text(
-                l.t('noUpcoming'),
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+              ],
             ),
-          if (nextVaccine != null) ...[
             const SizedBox(height: 12),
+            _UpcomingAppointmentCard(
+              appointment: nextClinic,
+              hospitalName: hospitalName,
+              upcomingLabel: l.t('upcomingClinic'),
+              detailsLabel: l.t('viewDetailsMap'),
+              modeLabel: l.t('inPerson'),
+              color: AppColors.trustBlue,
+              headerIcon: Icons.notifications_outlined,
+              onDetails: () => _openAppointmentDetails(nextClinic),
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (nextVideo != null && nextVideo.isActiveSlot) ...[
+            Row(
+              children: [
+                Text(
+                  l.t('upcomingVideoConsult'),
+                  style: const TextStyle(
+                    color: AppColors.slateMuted,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: const BoxDecoration(
+                    color: AppColors.videoPurple,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _UpcomingAppointmentCard(
+              appointment: nextVideo,
+              hospitalName: doctorHospital(nextVideo),
+              upcomingLabel: l.t('upcomingVideoConsult'),
+              detailsLabel: l.t('openCallSession'),
+              modeLabel: l.t('onlineVideoConsult'),
+              color: AppColors.videoPurple,
+              headerIcon: Icons.videocam_outlined,
+              onDetails: () => _openAppointmentDetails(nextVideo),
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (nextVaccine != null) ...[
             _UpcomingVaccineCard(
               booking: nextVaccine,
               onDetails: () => _openVaccineMaps(nextVaccine),
             ),
+            const SizedBox(height: 12),
           ],
-          const SizedBox(height: 14),
+          const SizedBox(height: 2),
           _HealthTipCard(
             title: l.t('healthTipTitle'),
             body: l.t('healthTipBody'),
@@ -315,6 +346,8 @@ class _UpcomingAppointmentCard extends StatelessWidget {
     required this.detailsLabel,
     required this.modeLabel,
     required this.onDetails,
+    required this.color,
+    required this.headerIcon,
     this.hospitalName,
   });
 
@@ -324,6 +357,8 @@ class _UpcomingAppointmentCard extends StatelessWidget {
   final String detailsLabel;
   final String modeLabel;
   final VoidCallback onDetails;
+  final Color color;
+  final IconData headerIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -333,11 +368,11 @@ class _UpcomingAppointmentCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.trustBlue,
+        color: color,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: AppColors.trustBlue.withValues(alpha: 0.35),
+            color: color.withValues(alpha: 0.35),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -373,8 +408,8 @@ class _UpcomingAppointmentCard extends StatelessWidget {
                   color: Colors.white.withValues(alpha: 0.18),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.notifications_outlined,
+                child: Icon(
+                  headerIcon,
                   color: Colors.white,
                   size: 18,
                 ),
@@ -448,7 +483,7 @@ class _UpcomingAppointmentCard extends StatelessWidget {
             child: FilledButton(
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.white,
-                foregroundColor: AppColors.trustBlue,
+                foregroundColor: color,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(28),
                 ),
