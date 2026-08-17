@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/notification/notification_cubit.dart';
+import '../../bloc/schedule/schedule_cubit.dart';
 import '../../bloc/vaccine/vaccine_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/app_notification.dart';
@@ -73,6 +74,10 @@ class _VaccineScreenState extends State<VaccineScreen> {
             SnackBar(content: Text(state.message!)),
           );
           context.read<NotificationCubit>().load();
+          final user = context.read<AuthCubit>().state.user;
+          if (user != null) {
+            context.read<ScheduleCubit>().watch(user.id);
+          }
           if (state.message!.startsWith('Booked') &&
               Navigator.of(context).canPop()) {
             Navigator.of(context).pop();

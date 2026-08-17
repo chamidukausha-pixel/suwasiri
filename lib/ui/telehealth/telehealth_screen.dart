@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/notification/notification_cubit.dart';
+import '../../bloc/schedule/schedule_cubit.dart';
 import '../../bloc/vault/vault_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/catalogs/patient_health_samples.dart';
@@ -77,14 +78,21 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _syncVideoBooking());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(
+        _applyVideo(context.read<ScheduleCubit>().state.nextVideo),
+      );
+    });
   }
 
   @override
   void didUpdateWidget(TelehealthScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isActive && !oldWidget.isActive) {
-      _syncVideoBooking();
+      unawaited(
+        _applyVideo(context.read<ScheduleCubit>().state.nextVideo),
+      );
     }
   }
 
@@ -190,19 +198,13 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   }
 
   /// Load the booked video consult onto Call. In-person visits stay off this tab.
-  Future<void> _syncVideoBooking() async {
-    final user = context.read<AuthCubit>().state.user;
-    if (user == null) return;
-    final appts = await context.read<HealthRepository>().getAppointments(user.id);
-    if (!mounted) return;
-    final upcoming = appts.where((a) => a.isVideo && a.isActiveSlot).toList()
-      ..sort((a, b) => a.timeSlot.compareTo(b.timeSlot));
-    final next = upcoming.isEmpty ? null : upcoming.first;
-    if (next == null) {
+  Future<void> _applyVideo(Appointment? next) async {
+    if (next == null || !next.isActiveSlot) {
       await _teardownSession(clearAppt: true);
       return;
     }
     final changed = _videoAppt?.id != next.id;
+    if (!mounted) return;
     setState(() => _videoAppt = next);
     if (changed || _sessionId == null) {
       await _startSession();
@@ -287,7 +289,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
       final issued =
           await context.read<HealthRepository>().issueTelehealthPrescription(
                 patientId: user.id,
-                doctorName: _doctorName,
+                doctorName: appt.doctorName,
                 sessionId: _sessionId!,
               );
       if (!mounted) return;
@@ -413,11 +415,18 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final patientLabel = _patientLabel(context);
-    final appt = _videoAppt;
+    final appt = context.watch<ScheduleCubit>().state.nextVideo;
     final hasCall = appt != null && appt.isActiveSlot;
     final waiting = hasCall && appt.timeSlot.isAfter(DateTime.now());
 
-    return SafeArea(
+    return BlocListener<ScheduleCubit, ScheduleState>(
+      listenWhen: (prev, next) =>
+          prev.nextVideo?.id != next.nextVideo?.id ||
+          prev.tick != next.tick,
+      listener: (context, state) {
+        unawaited(_applyVideo(state.nextVideo));
+      },
+      child: SafeArea(
       bottom: false,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
@@ -469,7 +478,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
               camera: _camera,
               cameraReady: _cameraReady,
               showAiOverlay: _showAiOverlay,
-              doctorName: _doctorName,
+              doctorName: appt.doctorName,
               onMute: () => setState(() => _muted = !_muted),
               onCam: _toggleCamera,
               onAi: () => setState(() => _showAiOverlay = !_showAiOverlay),
@@ -488,14 +497,15 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
                   : _timerLabel,
               timerCaption:
                   waiting ? l.t('scheduledConsult') : l.t('timeRemaining'),
-              doctorName: _doctorName,
+              doctorName: appt.doctorName,
             ),
             const SizedBox(height: 14),
             _EPrescriptionCard(
               medicines: _sessionRx,
               updating: _rxUpdating,
-              doctorName: _doctorName,
-              clinicName: _clinicName,
+              doctorName: appt.doctorName,
+              clinicName: DoctorCatalog.doctorById(appt.doctorId)?.hospital ??
+                  appt.specialty,
               onOpenClinic: (meds, clinic, doctor) => _openClinicPrescription(
                 medicines: meds,
                 clinicName: clinic,
@@ -521,6 +531,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 }

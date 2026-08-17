@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -30,6 +31,7 @@ class DemoHealthRepository implements HealthRepository {
   static const _kSeeded = 'suwasiri_seeded';
 
   List<Prescription> _rxMemory = [];
+  final _apptChanges = StreamController<void>.broadcast();
 
   final _doctors = DoctorCatalog.doctors;
 
@@ -480,6 +482,14 @@ class DemoHealthRepository implements HealthRepository {
   }
 
   @override
+  Stream<List<Appointment>> watchAppointments(String patientId) async* {
+    yield await getAppointments(patientId);
+    await for (final _ in _apptChanges.stream) {
+      yield await getAppointments(patientId);
+    }
+  }
+
+  @override
   Future<Appointment> bookAppointment({
     required String patientId,
     required Doctor doctor,
@@ -504,6 +514,7 @@ class DemoHealthRepository implements HealthRepository {
       _kAppts,
       jsonEncode(all.map((a) => {'id': a.id, ...a.toMap()}).toList()),
     );
+    _apptChanges.add(null);
     await pushNotification(
       AppNotification(
         id: _uuid.v4(),

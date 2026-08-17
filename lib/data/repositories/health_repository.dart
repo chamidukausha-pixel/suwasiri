@@ -50,6 +50,7 @@ abstract class HealthRepository {
 
   Future<List<Doctor>> getDoctors({String query = ''});
   Future<List<Appointment>> getAppointments(String patientId);
+  Stream<List<Appointment>> watchAppointments(String patientId);
   Future<Appointment> bookAppointment({
     required String patientId,
     required Doctor doctor,

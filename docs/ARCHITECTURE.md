@@ -11,7 +11,7 @@ lib/
   core/
     constants/app_constants.dart   # useDemoBackend MUST stay false
     theme/
-  bloc/                     # AuthCubit, LocaleCubit, NotificationCubit, SosCubit, VaccineCubit, VaultCubit
+  bloc/                     # AuthCubit, LocaleCubit, NotificationCubit, SosCubit, VaccineCubit, VaultCubit, ScheduleCubit
   data/
     models/                 # UserProfile, VaultReport, Appointment, …
     repositories/

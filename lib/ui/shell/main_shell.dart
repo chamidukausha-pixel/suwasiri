@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/notification/notification_cubit.dart';
+import '../../bloc/schedule/schedule_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../localization/app_localizations.dart';
 import '../appointments/appointments_screen.dart';
@@ -28,6 +30,10 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     context.read<NotificationCubit>().load();
+    final user = context.read<AuthCubit>().state.user;
+    if (user != null) {
+      context.read<ScheduleCubit>().watch(user.id);
+    }
   }
 
   void _goTo(int index) => setState(() => _index = index);

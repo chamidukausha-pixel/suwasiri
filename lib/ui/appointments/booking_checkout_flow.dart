@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/notification/notification_cubit.dart';
+import '../../bloc/schedule/schedule_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/map_launcher.dart';
 import '../../data/models/appointment.dart';
@@ -287,6 +288,8 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
       );
       if (!mounted) return;
       await context.read<NotificationCubit>().load();
+      if (!mounted) return;
+      await context.read<ScheduleCubit>().watch(user.id);
       if (!mounted) return;
       setState(() => _paying = false);
       Navigator.of(context).pop(

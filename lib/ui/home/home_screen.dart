@@ -3,12 +3,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
+import '../../bloc/schedule/schedule_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/map_launcher.dart';
 import '../../data/catalogs/doctor_catalog.dart';
 import '../../data/models/appointment.dart';
 import '../../data/models/vaccine_models.dart';
-import '../../data/repositories/health_repository.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/suwasiri_brand_header.dart';
@@ -28,58 +28,27 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  Appointment? _nextAppt;
-  String? _nextHospital;
-  VaccineBooking? _nextVaccineBooking;
-
   @override
   void initState() {
     super.initState();
-    _loadHomeData();
+    _syncSchedule();
   }
 
   @override
   void didUpdateWidget(HomeScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isActive && !oldWidget.isActive) {
-      _loadHomeData();
+      _syncSchedule();
     }
   }
 
-  bool _isUpcoming(DateTime slot) => slot.isAfter(DateTime.now());
-
-  Future<void> _loadHomeData() async {
+  void _syncSchedule() {
     final user = context.read<AuthCubit>().state.user;
     if (user == null) return;
-    final health = context.read<HealthRepository>();
-    final appts = await health.getAppointments(user.id);
-    List<VaccineBooking> bookings = const [];
-    try {
-      bookings = await health.getVaccineBookings(user.id);
-    } catch (_) {}
-    if (!mounted) return;
-    setState(() {
-      final upcoming = appts.where((a) => a.isActiveSlot).toList()
-        ..sort((a, b) => a.timeSlot.compareTo(b.timeSlot));
-      _nextAppt = upcoming.isEmpty ? null : upcoming.first;
-      if (_nextAppt != null) {
-        final doc = DoctorCatalog.doctorById(_nextAppt!.doctorId);
-        _nextHospital = doc?.hospital;
-      } else {
-        _nextHospital = null;
-      }
-      final futureBookings = bookings
-          .where((b) => b.status == 'confirmed' && _isUpcoming(b.slot))
-          .toList()
-        ..sort((a, b) => a.slot.compareTo(b.slot));
-      _nextVaccineBooking =
-          futureBookings.isEmpty ? null : futureBookings.first;
-    });
+    context.read<ScheduleCubit>().watch(user.id);
   }
 
-  Future<void> _openAppointmentDetails() async {
-    final appt = _nextAppt;
-    if (appt == null) return;
+  Future<void> _openAppointmentDetails(Appointment appt) async {
     if (appt.isVideo) {
       widget.onNavigate(2);
       return;
@@ -92,19 +61,20 @@ class _HomeScreenState extends State<HomeScreen> {
     await MapLauncher.showPlaceMapChoice(
       context,
       title: appt.doctorName,
-      address: _nextHospital ?? appt.specialty,
+      address: doctorHospital(appt) ?? appt.specialty,
     );
   }
 
-  Future<void> _openVaccineMaps() async {
-    final b = _nextVaccineBooking;
-    if (b == null) return;
+  String? doctorHospital(Appointment appt) =>
+      DoctorCatalog.doctorById(appt.doctorId)?.hospital;
+
+  Future<void> _openVaccineMaps(VaccineBooking booking) async {
     await MapLauncher.showPlaceMapChoice(
       context,
-      title: b.facilityName,
-      address: b.placeLabel,
-      latitude: b.latitude,
-      longitude: b.longitude,
+      title: booking.facilityName,
+      address: booking.placeLabel,
+      latitude: booking.latitude,
+      longitude: booking.longitude,
     );
   }
 
@@ -112,6 +82,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final user = context.watch<AuthCubit>().state.user;
+    final schedule = context.watch<ScheduleCubit>().state;
+    final nextAppt = schedule.nextDoctor;
+    final nextVaccine = schedule.nextVaccine;
+    final hospitalName = nextAppt == null ? null : doctorHospital(nextAppt);
     final firstName = user?.name.split(' ').first ?? '';
 
     return SafeArea(
@@ -196,18 +170,18 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          if (_nextAppt != null && _nextAppt!.isActiveSlot)
+          if (nextAppt != null && nextAppt.isActiveSlot)
             _UpcomingAppointmentCard(
-              appointment: _nextAppt!,
-              hospitalName: _nextHospital,
+              appointment: nextAppt,
+              hospitalName: hospitalName,
               upcomingLabel: l.t('upcoming'),
-              detailsLabel: _nextAppt!.isVideo
+              detailsLabel: nextAppt.isVideo
                   ? l.t('openCallSession')
                   : l.t('viewDetailsMap'),
-              modeLabel: _nextAppt!.isVideo
+              modeLabel: nextAppt.isVideo
                   ? l.t('onlineVideoConsult')
                   : l.t('inPerson'),
-              onDetails: _openAppointmentDetails,
+              onDetails: () => _openAppointmentDetails(nextAppt),
             )
           else
             SoftCard(
@@ -216,12 +190,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
-          if (_nextVaccineBooking != null &&
-              _isUpcoming(_nextVaccineBooking!.slot)) ...[
+          if (nextVaccine != null) ...[
             const SizedBox(height: 12),
             _UpcomingVaccineCard(
-              booking: _nextVaccineBooking!,
-              onDetails: _openVaccineMaps,
+              booking: nextVaccine,
+              onDetails: () => _openVaccineMaps(nextVaccine),
             ),
           ],
           const SizedBox(height: 14),

@@ -347,6 +347,19 @@ class FirebaseHealthRepository implements HealthRepository {
   }
 
   @override
+  Stream<List<Appointment>> watchAppointments(String patientId) {
+    return _appointments
+        .where('patientId', isEqualTo: patientId)
+        .snapshots()
+        .map((snap) {
+      return snap.docs
+          .map((d) => Appointment.fromMap(d.id, d.data()))
+          .toList()
+        ..sort((a, b) => a.timeSlot.compareTo(b.timeSlot));
+    });
+  }
+
+  @override
   Future<Appointment> bookAppointment({
     required String patientId,
     required Doctor doctor,
@@ -369,7 +382,8 @@ class FirebaseHealthRepository implements HealthRepository {
       AppNotification(
         id: _uuid.v4(),
         title: 'Appointment confirmed',
-        body: '${doctor.name} — token ${appt.token}',
+        body:
+            '${consultMode == ConsultMode.video ? 'Video' : 'Clinic'} · ${doctor.name} — token ${appt.token}',
         timestamp: DateTime.now(),
         type: NotificationPayloadType.appointment,
       ),
