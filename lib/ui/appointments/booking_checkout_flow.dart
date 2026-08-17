@@ -291,6 +291,8 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
       if (!mounted) return;
       await context.read<ScheduleCubit>().watch(user.id);
       if (!mounted) return;
+      context.read<ScheduleCubit>().recordBooking(appt);
+      if (!mounted) return;
       setState(() => _paying = false);
       Navigator.of(context).pop(
         _BookingResult(

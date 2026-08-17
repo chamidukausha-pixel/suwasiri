@@ -21,25 +21,26 @@ class ScheduleState extends Equatable {
 
   List<Appointment> get activeDoctors {
     final list = appointments.where((a) => a.isActiveSlot).toList()
-      ..sort((a, b) => a.timeSlot.compareTo(b.timeSlot));
+      ..sort((a, b) => b.bookedStamp.compareTo(a.bookedStamp));
     return list;
   }
 
   Appointment? get nextDoctor =>
       activeDoctors.isEmpty ? null : activeDoctors.first;
 
-  Appointment? get nextClinic {
-    for (final a in activeDoctors) {
-      if (!a.isVideo) return a;
-    }
-    return null;
-  }
+  Appointment? get nextClinic => _latestWhere((a) => !a.isVideo);
 
-  Appointment? get nextVideo {
-    for (final a in activeDoctors) {
-      if (a.isVideo) return a;
+  Appointment? get nextVideo => _latestWhere((a) => a.isVideo);
+
+  Appointment? _latestWhere(bool Function(Appointment) test) {
+    Appointment? best;
+    for (final a in appointments) {
+      if (!a.isActiveSlot || !test(a)) continue;
+      if (best == null || a.bookedStamp.isAfter(best.bookedStamp)) {
+        best = a;
+      }
     }
-    return null;
+    return best;
   }
 
   VaccineBooking? get nextVaccine {
@@ -91,7 +92,11 @@ class ScheduleCubit extends Cubit<ScheduleState> {
         vax = await _health.getVaccineBookings(patientId);
       } catch (_) {}
       if (isClosed) return;
-      emit(state.copyWith(appointments: appts, vaccineBookings: vax));
+      emit(state.copyWith(
+        appointments: _mergePending(appts),
+        vaccineBookings: vax,
+        tick: state.tick + 1,
+      ));
     });
     _expiryTick = Timer.periodic(const Duration(seconds: 20), (_) {
       if (isClosed) return;
@@ -108,7 +113,32 @@ class ScheduleCubit extends Cubit<ScheduleState> {
       vax = await _health.getVaccineBookings(id);
     } catch (_) {}
     if (isClosed) return;
-    emit(state.copyWith(appointments: appts, vaccineBookings: vax));
+    emit(state.copyWith(
+      appointments: _mergePending(appts),
+      vaccineBookings: vax,
+      tick: state.tick + 1,
+    ));
+  }
+
+  /// Keep a booking just written locally if Firestore lag drops it for a moment.
+  List<Appointment> _mergePending(List<Appointment> remote) {
+    final ids = remote.map((a) => a.id).toSet();
+    final extras = state.appointments.where((a) {
+      if (ids.contains(a.id)) return false;
+      final booked = a.bookedAt;
+      if (booked == null) return false;
+      return DateTime.now().difference(booked) < const Duration(seconds: 20);
+    });
+    return [...remote, ...extras];
+  }
+
+  /// Instantly show the booking on Home / Call, then Firestore stream confirms.
+  void recordBooking(Appointment appt) {
+    final others = state.appointments.where((a) => a.id != appt.id).toList();
+    emit(state.copyWith(
+      appointments: [appt, ...others],
+      tick: state.tick + 1,
+    ));
   }
 
   @override

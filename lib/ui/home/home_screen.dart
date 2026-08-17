@@ -65,8 +65,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  String? doctorHospital(Appointment appt) =>
-      DoctorCatalog.doctorById(appt.doctorId)?.hospital;
+  String? doctorHospital(Appointment appt) {
+    final fromCatalog = DoctorCatalog.doctorById(appt.doctorId)?.hospital;
+    if (fromCatalog != null && fromCatalog.isNotEmpty) return fromCatalog;
+    return appt.hospital.isEmpty ? null : appt.hospital;
+  }
 
   Future<void> _openVaccineMaps(VaccineBooking booking) async {
     await MapLauncher.showPlaceMapChoice(

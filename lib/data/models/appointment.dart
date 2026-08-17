@@ -75,6 +75,8 @@ class Appointment extends Equatable {
     required this.status,
     this.token,
     this.consultMode = ConsultMode.clinic,
+    this.hospital = '',
+    this.bookedAt,
   });
 
   final String id;
@@ -86,8 +88,14 @@ class Appointment extends Equatable {
   final AppointmentStatus status;
   final String? token;
   final ConsultMode consultMode;
+  final String hospital;
+  final DateTime? bookedAt;
 
   bool get isVideo => consultMode == ConsultMode.video;
+
+  /// Latest booking wins Home/Call cards. Missing `bookedAt` (legacy docs) sorts last.
+  DateTime get bookedStamp =>
+      bookedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
 
   /// Visible until the booked slot (plus a short consult window).
   bool get isActiveSlot {
@@ -105,6 +113,8 @@ class Appointment extends Equatable {
         'status': status.name,
         'token': token,
         'consultMode': consultMode.name,
+        'hospital': hospital,
+        'bookedAt': (bookedAt ?? DateTime.now()).toIso8601String(),
       };
 
   factory Appointment.fromMap(String id, Map<String, dynamic> map) {
@@ -127,6 +137,8 @@ class Appointment extends Equatable {
       ),
       token: map['token'] as String?,
       consultMode: isVideo ? ConsultMode.video : ConsultMode.clinic,
+      hospital: map['hospital'] as String? ?? '',
+      bookedAt: DateTime.tryParse(map['bookedAt'] as String? ?? ''),
     );
   }
 
@@ -141,5 +153,7 @@ class Appointment extends Equatable {
         status,
         token,
         consultMode,
+        hospital,
+        bookedAt,
       ];
 }

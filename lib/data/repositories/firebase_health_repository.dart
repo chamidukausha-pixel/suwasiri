@@ -376,6 +376,8 @@ class FirebaseHealthRepository implements HealthRepository {
       status: AppointmentStatus.upcoming,
       token: 'TKN-${DateTime.now().millisecondsSinceEpoch % 10000}',
       consultMode: consultMode,
+      hospital: doctor.hospital,
+      bookedAt: DateTime.now(),
     );
     await _appointments.doc(appt.id).set(appt.toMap());
     await pushNotification(

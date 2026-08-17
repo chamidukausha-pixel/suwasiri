@@ -42,8 +42,10 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   String get _clinicName {
     final appt = _videoAppt;
     if (appt == null) return '';
-    final doc = DoctorCatalog.doctorById(appt.doctorId);
-    return doc?.hospital ?? appt.specialty;
+    final fromCatalog = DoctorCatalog.doctorById(appt.doctorId)?.hospital;
+    if (fromCatalog != null && fromCatalog.isNotEmpty) return fromCatalog;
+    if (appt.hospital.isNotEmpty) return appt.hospital;
+    return appt.specialty;
   }
 
   final _noteCtrl = TextEditingController();
@@ -203,7 +205,9 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
       await _teardownSession(clearAppt: true);
       return;
     }
-    final changed = _videoAppt?.id != next.id;
+    final changed = _videoAppt?.id != next.id ||
+        _videoAppt?.doctorId != next.doctorId ||
+        _videoAppt?.timeSlot != next.timeSlot;
     if (!mounted) return;
     setState(() => _videoAppt = next);
     if (changed || _sessionId == null) {
@@ -422,6 +426,9 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     return BlocListener<ScheduleCubit, ScheduleState>(
       listenWhen: (prev, next) =>
           prev.nextVideo?.id != next.nextVideo?.id ||
+          prev.nextVideo?.doctorId != next.nextVideo?.doctorId ||
+          prev.nextVideo?.doctorName != next.nextVideo?.doctorName ||
+          prev.nextVideo?.timeSlot != next.nextVideo?.timeSlot ||
           prev.tick != next.tick,
       listener: (context, state) {
         unawaited(_applyVideo(state.nextVideo));
@@ -505,7 +512,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
               updating: _rxUpdating,
               doctorName: appt.doctorName,
               clinicName: DoctorCatalog.doctorById(appt.doctorId)?.hospital ??
-                  appt.specialty,
+                  (appt.hospital.isEmpty ? appt.specialty : appt.hospital),
               onOpenClinic: (meds, clinic, doctor) => _openClinicPrescription(
                 medicines: meds,
                 clinicName: clinic,

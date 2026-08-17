@@ -507,6 +507,8 @@ class DemoHealthRepository implements HealthRepository {
       status: AppointmentStatus.upcoming,
       token: 'TKN-${DateTime.now().millisecondsSinceEpoch % 10000}',
       consultMode: consultMode,
+      hospital: doctor.hospital,
+      bookedAt: DateTime.now(),
     );
     final existing = await getAppointments(patientId);
     final all = [...existing, appt];

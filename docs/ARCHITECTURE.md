@@ -59,6 +59,10 @@ Never call Firestore/Auth from widgets. Add methods on the repository interface,
 Questionnaire labels are EN / Sinhala / Tamil via `HealthIntakeL10n` (follows app locale).
 Stable `barcodeNumber` is generated once from uid + NIC and shown on Profile Unique Health ID card.
 
+## Home / Call schedule
+
+`ScheduleCubit` holds live appointments. Home **blue** card = latest in-person (`ConsultMode.clinic`) booking; Home **purple** card and Call = latest video (`ConsultMode.video`) booking. Each new checkout replaces that mode’s card via `bookedAt` + `recordBooking`.
+
 ## Localization
 
 `AppLocalizations` + `LocaleCubit` (EN / Sinhala / Tamil). New UI strings go through localization, not hard-coded English-only if user-facing.
