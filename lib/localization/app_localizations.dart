@@ -1676,6 +1676,21 @@ class AppLocalizations {
       'si': 'වාර්තාව ගැන සායනික සහායකයාගෙන් අසන්න...',
       'ta': 'அறிக்கை பற்றி மருத்துவ உதவியாளரிடம் கேளுங்கள்...',
     },
+    'tapDoctorToBook': {
+      'en': 'Tap a doctor name to book a session (same checkout as Doctors).',
+      'si': 'වෛද්‍ය නම තට්ටු කර session එකක් වෙන්කරගන්න (Doctors පිටුවේ මෙන්).',
+      'ta': 'மருத்துவர் பெயரை தொட்டு அமர்வை பதிவு செய்யுங்கள் (Doctors பக்கம் போல).',
+    },
+    'labExplainPrompt': {
+      'en': 'Explain my lab report in English. Cover every biomarker and recommend a doctor.',
+      'si': 'මගේ රසායනාගාර වාර්තාව සිංහලෙන් පැහැදිලි කරන්න. සෑම සලකුණක්ම සාරාංශ කර වෛද්‍යවරයෙකු නිර්දේශ කරන්න.',
+      'ta': 'என் ஆய்வக அறிக்கையை தமிழில் விளக்கு. ஒவ்வொரு குறியையும் சுருக்கி மருத்துவரை பரிந்துரை.',
+    },
+    'labRecommendPrompt': {
+      'en': 'Recommend specialist doctors I can book for this lab report, and explain the report in English.',
+      'si': 'මෙම වාර්තාවට ගැළපෙන විශේෂඥ වෛද්‍යවරුන් නිර්දේශ කර සිංහලෙන් පැහැදිලි කරන්න.',
+      'ta': 'இந்த அறிக்கைக்கு பொருந்தும் சிறப்பு மருத்துவர்களை பரிந்துரைத்து தமிழில் விளக்கு.',
+    },
     'downloadPdfDocument': {
       'en': 'Download PDF Document',
       'si': 'PDF ලේඛනය බාගන්න',

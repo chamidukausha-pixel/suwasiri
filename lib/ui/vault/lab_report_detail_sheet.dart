@@ -3,12 +3,15 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
+import '../../bloc/locale/locale_cubit.dart';
 import '../../bloc/vault/vault_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/vault_report.dart';
+import '../../data/services/lab_assistant_replies.dart';
 import '../../data/services/prescription_export_service.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/sheet_close_bar.dart';
+import 'lab_ai_review_view.dart';
 
 Future<void> showLabReportDetailSheet({
   required BuildContext context,
@@ -36,14 +39,20 @@ class _LabReportDetailBody extends StatefulWidget {
 
 class _LabReportDetailBodyState extends State<_LabReportDetailBody> {
   final _question = TextEditingController();
-  String _language = 'English';
+  String _language = 'en';
 
-  static const _langs = ['English', 'Sinhala', 'Tamil'];
+  static const _langs = [
+    ('en', 'EN'),
+    ('si', 'සිංහල'),
+    ('ta', 'தமிழ்'),
+  ];
 
   @override
   void initState() {
     super.initState();
     context.read<VaultCubit>().selectReport(widget.report);
+    final code = context.read<LocaleCubit>().state.locale.languageCode;
+    _language = (code == 'si' || code == 'ta') ? code : 'en';
   }
 
   @override
@@ -79,10 +88,14 @@ class _LabReportDetailBodyState extends State<_LabReportDetailBody> {
   }
 
   Future<void> _askAi(String prompt) async {
+    final q = prompt.trim();
+    if (q.isEmpty) return;
     await context.read<VaultCubit>().askAi(
-          prompt,
+          q,
           language: _language,
+          patientName: _firstName,
         );
+    _question.clear();
   }
 
   bool get _allNormal =>
@@ -130,16 +143,17 @@ class _LabReportDetailBodyState extends State<_LabReportDetailBody> {
                           languages: _langs,
                           question: _question,
                           loading: state.loading,
-                          aiReply: state.aiReply,
+                          lastQuestion: state.lastAiQuestion,
+                          review: state.aiReview,
                           onLanguage: (lang) =>
                               setState(() => _language = lang),
                           onSummarize: () => _askAi(
-                            'Summarize this lab report. Explain my ranges.',
+                            LabAssistantReplies.explainPrompt(_language),
                           ),
                           onRecommend: () => _askAi(
-                            'Recommend the best doctor specialty for this report.',
+                            LabAssistantReplies.recommendPrompt(_language),
                           ),
-                          onSend: () => _askAi(_question.text.trim()),
+                          onSend: () => _askAi(_question.text),
                         ),
                       ],
                     ),
@@ -529,7 +543,8 @@ class _CopilotCard extends StatelessWidget {
     required this.languages,
     required this.question,
     required this.loading,
-    required this.aiReply,
+    required this.lastQuestion,
+    required this.review,
     required this.onLanguage,
     required this.onSummarize,
     required this.onRecommend,
@@ -539,10 +554,11 @@ class _CopilotCard extends StatelessWidget {
   final VaultReport report;
   final String firstName;
   final String language;
-  final List<String> languages;
+  final List<(String, String)> languages;
   final TextEditingController question;
   final bool loading;
-  final String? aiReply;
+  final String? lastQuestion;
+  final LabAiReview? review;
   final ValueChanged<String> onLanguage;
   final VoidCallback onSummarize;
   final VoidCallback onRecommend;
@@ -620,11 +636,11 @@ class _CopilotCard extends StatelessWidget {
           Wrap(
             spacing: 6,
             children: languages.map((lang) {
-              final selected = language == lang;
+              final selected = language == lang.$1;
               return ChoiceChip(
-                label: Text(lang),
+                label: Text(lang.$2),
                 selected: selected,
-                onSelected: (_) => onLanguage(lang),
+                onSelected: (_) => onLanguage(lang.$1),
                 selectedColor: AppColors.trustBlue,
                 backgroundColor: const Color(0xFF16324F),
                 labelStyle: TextStyle(
@@ -655,28 +671,36 @@ class _CopilotCard extends StatelessWidget {
               ),
             ),
           ),
+          if (lastQuestion != null && lastQuestion!.trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.trustBlue,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  lastQuestion!,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ),
+          ],
           if (loading) ...[
             const SizedBox(height: 10),
             const LinearProgressIndicator(),
           ],
-          if (aiReply != null) ...[
+          if (review != null) ...[
             const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F2A4A),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                aiReply!,
-                style: const TextStyle(
-                  color: Color(0xFFE2E8F0),
-                  fontSize: 13,
-                  height: 1.45,
-                ),
-              ),
-            ),
+            LabAiReviewView(review: review!),
           ],
           const SizedBox(height: 10),
           Wrap(

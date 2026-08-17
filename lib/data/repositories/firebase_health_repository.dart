@@ -412,12 +412,19 @@ class FirebaseHealthRepository implements HealthRepository {
   }
 
   @override
-  Future<String> askReportAssistant({
+  Future<LabAiReview> askReportAssistant({
     required VaultReport report,
     required String question,
+    String language = 'en',
+    String patientName = '',
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 600));
-    return LabAssistantReplies.reply(report: report, question: question);
+    return LabAssistantReplies.review(
+      report: report,
+      question: question,
+      language: language,
+      patientName: patientName,
+    );
   }
 
   @override

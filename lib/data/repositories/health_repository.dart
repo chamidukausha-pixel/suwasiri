@@ -3,6 +3,7 @@ import '../models/appointment.dart';
 import '../models/sos_location.dart';
 import '../models/vaccine_models.dart';
 import '../models/vault_report.dart';
+import '../services/lab_assistant_replies.dart';
 
 abstract class HealthRepository {
   Future<List<VaultReport>> getVaultReports(String patientId);
@@ -62,9 +63,11 @@ abstract class HealthRepository {
   Future<void> markNotificationRead(String id);
   Future<void> pushNotification(AppNotification notification);
 
-  Future<String> askReportAssistant({
+  Future<LabAiReview> askReportAssistant({
     required VaultReport report,
     required String question,
+    String language = 'en',
+    String patientName = '',
   });
 
   /// Publish / update a live Suwasariya dispatcher GPS session.

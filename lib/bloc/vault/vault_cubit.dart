@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../data/catalogs/patient_health_samples.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/repositories/health_repository.dart';
+import '../../data/services/lab_assistant_replies.dart';
 
 enum HealthHistoryTab { medicines, labs, vaccines, certificates, notes }
 
@@ -22,7 +23,8 @@ class VaultState extends Equatable {
     this.syncingGpCare = false,
     this.lankaLabSynced = false,
     this.gpCareSynced = false,
-    this.aiReply,
+    this.aiReview,
+    this.lastAiQuestion,
     this.selectedReport,
     this.filter = VaultFilter.history,
     this.healthTab = HealthHistoryTab.medicines,
@@ -39,7 +41,8 @@ class VaultState extends Equatable {
   final bool syncingGpCare;
   final bool lankaLabSynced;
   final bool gpCareSynced;
-  final String? aiReply;
+  final LabAiReview? aiReview;
+  final String? lastAiQuestion;
   final VaultReport? selectedReport;
   final VaultFilter filter;
   final HealthHistoryTab healthTab;
@@ -65,7 +68,8 @@ class VaultState extends Equatable {
     bool? syncingGpCare,
     bool? lankaLabSynced,
     bool? gpCareSynced,
-    String? aiReply,
+    LabAiReview? aiReview,
+    String? lastAiQuestion,
     VaultReport? selectedReport,
     VaultFilter? filter,
     HealthHistoryTab? healthTab,
@@ -84,7 +88,8 @@ class VaultState extends Equatable {
       syncingGpCare: syncingGpCare ?? this.syncingGpCare,
       lankaLabSynced: lankaLabSynced ?? this.lankaLabSynced,
       gpCareSynced: gpCareSynced ?? this.gpCareSynced,
-      aiReply: clearAi ? null : (aiReply ?? this.aiReply),
+      aiReview: clearAi ? null : (aiReview ?? this.aiReview),
+      lastAiQuestion: clearAi ? null : (lastAiQuestion ?? this.lastAiQuestion),
       selectedReport:
           clearSelected ? null : (selectedReport ?? this.selectedReport),
       filter: filter ?? this.filter,
@@ -105,7 +110,8 @@ class VaultState extends Equatable {
         syncingGpCare,
         lankaLabSynced,
         gpCareSynced,
-        aiReply,
+        aiReview,
+        lastAiQuestion,
         selectedReport,
         filter,
         healthTab,
@@ -225,7 +231,11 @@ class VaultCubit extends Cubit<VaultState> {
     emit(state.copyWith(selectedReport: report, clearAi: true));
   }
 
-  Future<void> askAi(String question, {String? language}) async {
+  Future<void> askAi(
+    String question, {
+    String? language,
+    String? patientName,
+  }) async {
     VaultReport? report = state.selectedReport;
     if (report == null) {
       for (final r in state.labReports) {
@@ -237,17 +247,17 @@ class VaultCubit extends Cubit<VaultState> {
       report ??= state.labReports.isEmpty ? null : state.labReports.first;
     }
     if (report == null) return;
-    emit(state.copyWith(loading: true, selectedReport: report));
-    final lang = (language == null || language.isEmpty)
-        ? 'the patient\'s preferred language (English, Sinhala, or Tamil)'
-        : language;
-    final q = question.isEmpty
-        ? 'Explain this lab report clearly in $lang for a Sri Lankan patient'
-        : '$question\n\nPlease answer in $lang.';
-    final reply = await _health.askReportAssistant(
+    emit(state.copyWith(
+      loading: true,
+      selectedReport: report,
+      lastAiQuestion: question,
+    ));
+    final review = await _health.askReportAssistant(
       report: report,
-      question: q,
+      question: question,
+      language: language ?? 'en',
+      patientName: patientName ?? '',
     );
-    emit(state.copyWith(aiReply: reply, loading: false));
+    emit(state.copyWith(aiReview: review, loading: false));
   }
 }
