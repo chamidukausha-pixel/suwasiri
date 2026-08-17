@@ -12,24 +12,38 @@ import '../../bloc/notification/notification_cubit.dart';
 import '../../bloc/vault/vault_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/catalogs/patient_health_samples.dart';
+import '../../data/catalogs/doctor_catalog.dart';
+import '../../data/models/appointment.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../data/services/clinic_copilot_replies.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/profile_avatar.dart';
 import '../widgets/suwasiri_brand_header.dart';
 import 'prescription_detail_sheet.dart';
 
 class TelehealthScreen extends StatefulWidget {
-  const TelehealthScreen({super.key});
+  const TelehealthScreen({super.key, this.isActive = true});
+
+  final bool isActive;
 
   @override
   State<TelehealthScreen> createState() => _TelehealthScreenState();
 }
 
 class _TelehealthScreenState extends State<TelehealthScreen> {
-  static const _doctorName = 'Dr. Aruni Perera';
-  static const _clinicName = 'Lanka GP Care · Durdans Teleclinic';
+  Appointment? _videoAppt;
+
+  String get _doctorName =>
+      _videoAppt?.doctorName ?? '';
+
+  String get _clinicName {
+    final appt = _videoAppt;
+    if (appt == null) return '';
+    final doc = DoctorCatalog.doctorById(appt.doctorId);
+    return doc?.hospital ?? appt.specialty;
+  }
 
   final _noteCtrl = TextEditingController();
   final _aiCtrl = TextEditingController();
@@ -63,7 +77,15 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startSession());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncVideoBooking());
+  }
+
+  @override
+  void didUpdateWidget(TelehealthScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      _syncVideoBooking();
+    }
   }
 
   @override
@@ -167,10 +189,69 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     }
   }
 
-  /// Always present the live Telehealth layout (matches product mockups).
-  Future<void> _startSession() async {
+  /// Load the booked video consult onto Call. In-person visits stay off this tab.
+  Future<void> _syncVideoBooking() async {
     final user = context.read<AuthCubit>().state.user;
     if (user == null) return;
+    final appts = await context.read<HealthRepository>().getAppointments(user.id);
+    if (!mounted) return;
+    final upcoming = appts.where((a) => a.isVideo && a.isActiveSlot).toList()
+      ..sort((a, b) => a.timeSlot.compareTo(b.timeSlot));
+    final next = upcoming.isEmpty ? null : upcoming.first;
+    if (next == null) {
+      await _teardownSession(clearAppt: true);
+      return;
+    }
+    final changed = _videoAppt?.id != next.id;
+    setState(() => _videoAppt = next);
+    if (changed || _sessionId == null) {
+      await _startSession();
+    } else {
+      _ensureExpiryTimer();
+    }
+  }
+
+  Future<void> _teardownSession({required bool clearAppt}) async {
+    _callTimer?.cancel();
+    _rxTimer?.cancel();
+    await _disposeCamera();
+    if (!mounted) return;
+    setState(() {
+      if (clearAppt) _videoAppt = null;
+      _sessionId = null;
+      _sessionRx = [];
+      _rxUpdating = false;
+      _cameraReady = false;
+    });
+  }
+
+  void _ensureExpiryTimer() {
+    _callTimer?.cancel();
+    _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      final appt = _videoAppt;
+      if (appt == null || !appt.isActiveSlot) {
+        unawaited(_teardownSession(clearAppt: true));
+        return;
+      }
+      setState(() => _remaining = _remainingFor(appt));
+    });
+  }
+
+  Duration _remainingFor(Appointment appt) {
+    final now = DateTime.now();
+    final untilStart = appt.timeSlot.difference(now);
+    if (!untilStart.isNegative) return untilStart;
+    final untilEnd =
+        appt.timeSlot.add(const Duration(minutes: 45)).difference(now);
+    return untilEnd.isNegative ? Duration.zero : untilEnd;
+  }
+
+  /// Live Call layout for the booked telehealth doctor only.
+  Future<void> _startSession() async {
+    final user = context.read<AuthCubit>().state.user;
+    final appt = _videoAppt;
+    if (user == null || appt == null) return;
 
     _callTimer?.cancel();
     _rxTimer?.cancel();
@@ -187,29 +268,20 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
           .map((p) => p.copyWith(updating: true))
           .toList();
       _rxUpdating = true;
-      _remaining = const Duration(minutes: 8, seconds: 18);
+      _remaining = _remainingFor(appt);
       _showAiOverlay = true;
       _muted = false;
-      _camOff = false; // Call starts with camera on; user may switch off.
+      _camOff = false;
       _cameraReady = false;
     });
 
-    // Auto-enable patient camera as soon as the video consult starts.
     unawaited(_initCamera());
 
     await context.read<HealthRepository>().syncGpCare(user.id);
     if (!mounted) return;
 
-    _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      setState(() {
-        if (_remaining.inSeconds > 0) {
-          _remaining -= const Duration(seconds: 1);
-        }
-      });
-    });
+    _ensureExpiryTimer();
 
-    // Persist e-Rx via Lanka GP Care portal sync after a short draft delay.
     _rxTimer = Timer(const Duration(seconds: 5), () async {
       if (!mounted || _sessionId == null) return;
       final issued =
@@ -229,13 +301,12 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   }
 
   void _endCall() {
-    _callTimer?.cancel();
     _rxTimer?.cancel();
     unawaited(_disposeCamera());
+    if (mounted) setState(() => _camOff = true);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(AppLocalizations.of(context).t('callEndedRestart'))),
     );
-    _startSession();
   }
 
   Future<void> _sendToMediLanka({
@@ -342,6 +413,9 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final patientLabel = _patientLabel(context);
+    final appt = _videoAppt;
+    final hasCall = appt != null && appt.isActiveSlot;
+    final waiting = hasCall && appt.timeSlot.isAfter(DateTime.now());
 
     return SafeArea(
       bottom: false,
@@ -368,49 +442,76 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          _VideoStage(
-            muted: _muted,
-            camOff: _camOff,
-            camera: _camera,
-            cameraReady: _cameraReady,
-            showAiOverlay: _showAiOverlay,
-            doctorName: _doctorName,
-            onMute: () => setState(() => _muted = !_muted),
-            onCam: _toggleCamera,
-            onAi: () => setState(() => _showAiOverlay = !_showAiOverlay),
-            onShare: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(l.t('shareSimulated'))),
-              );
-            },
-            onEnd: _endCall,
-          ),
-          const SizedBox(height: 14),
-          _LiveConsultationCard(
-            patientLabel: patientLabel,
-            timerLabel: _timerLabel,
-          ),
-          const SizedBox(height: 14),
-          _EPrescriptionCard(
-            medicines: _sessionRx,
-            updating: _rxUpdating,
-            doctorName: _doctorName,
-            clinicName: _clinicName,
-            onOpenClinic: (meds, clinic, doctor) => _openClinicPrescription(
-              medicines: meds,
-              clinicName: clinic,
-              doctorName: doctor,
+          if (!hasCall)
+            SoftCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l.t('noVideoConsult'),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          height: 1.4,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: () => MainTabScope.go(context, 1),
+                    icon: const Icon(Icons.videocam_outlined),
+                    label: Text(l.t('bookVideoFromDoctors')),
+                  ),
+                ],
+              ),
+            )
+          else ...[
+            _VideoStage(
+              muted: _muted,
+              camOff: _camOff,
+              camera: _camera,
+              cameraReady: _cameraReady,
+              showAiOverlay: _showAiOverlay,
+              doctorName: _doctorName,
+              onMute: () => setState(() => _muted = !_muted),
+              onCam: _toggleCamera,
+              onAi: () => setState(() => _showAiOverlay = !_showAiOverlay),
+              onShare: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(l.t('shareSimulated'))),
+                );
+              },
+              onEnd: _endCall,
             ),
-          ),
-          const SizedBox(height: 14),
-          _QuickNotesCard(
-            notes: _notes,
-            showAll: _showAllTips,
-            controller: _noteCtrl,
-            onAdd: _addNote,
-            onToggleViewAll: () =>
-                setState(() => _showAllTips = !_showAllTips),
-          ),
+            const SizedBox(height: 14),
+            _LiveConsultationCard(
+              patientLabel: patientLabel,
+              timerLabel: waiting
+                  ? DateFormat('MMM d · hh:mm a').format(appt.timeSlot)
+                  : _timerLabel,
+              timerCaption:
+                  waiting ? l.t('scheduledConsult') : l.t('timeRemaining'),
+              doctorName: _doctorName,
+            ),
+            const SizedBox(height: 14),
+            _EPrescriptionCard(
+              medicines: _sessionRx,
+              updating: _rxUpdating,
+              doctorName: _doctorName,
+              clinicName: _clinicName,
+              onOpenClinic: (meds, clinic, doctor) => _openClinicPrescription(
+                medicines: meds,
+                clinicName: clinic,
+                doctorName: doctor,
+              ),
+            ),
+            const SizedBox(height: 14),
+            _QuickNotesCard(
+              notes: _notes,
+              showAll: _showAllTips,
+              controller: _noteCtrl,
+              onAdd: _addNote,
+              onToggleViewAll: () =>
+                  setState(() => _showAllTips = !_showAllTips),
+            ),
+          ],
           const SizedBox(height: 14),
           _AiCopilotCard(
             controller: _aiCtrl,
@@ -757,10 +858,14 @@ class _LiveConsultationCard extends StatelessWidget {
   const _LiveConsultationCard({
     required this.patientLabel,
     required this.timerLabel,
+    required this.timerCaption,
+    required this.doctorName,
   });
 
   final String patientLabel;
   final String timerLabel;
+  final String timerCaption;
+  final String doctorName;
 
   @override
   Widget build(BuildContext context) {
@@ -822,10 +927,18 @@ class _LiveConsultationCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _InfoRow(
+            icon: Icons.medical_services_outlined,
+            iconBg: const Color(0xFFE0F2FE),
+            iconColor: AppColors.trustBlue,
+            label: l.t('onlineVideoConsult'),
+            value: doctorName,
+          ),
+          const SizedBox(height: 12),
+          _InfoRow(
             icon: Icons.schedule,
             iconBg: AppColors.warningSoft,
             iconColor: AppColors.warning,
-            label: l.t('timeRemaining'),
+            label: timerCaption,
             value: timerLabel,
           ),
         ],

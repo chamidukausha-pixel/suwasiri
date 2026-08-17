@@ -54,6 +54,7 @@ abstract class HealthRepository {
     required String patientId,
     required Doctor doctor,
     required DateTime slot,
+    ConsultMode consultMode = ConsultMode.clinic,
   });
 
   Future<List<AppNotification>> getNotifications();

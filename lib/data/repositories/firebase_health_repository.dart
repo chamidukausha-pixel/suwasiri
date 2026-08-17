@@ -351,6 +351,7 @@ class FirebaseHealthRepository implements HealthRepository {
     required String patientId,
     required Doctor doctor,
     required DateTime slot,
+    ConsultMode consultMode = ConsultMode.clinic,
   }) async {
     final appt = Appointment(
       id: _uuid.v4(),
@@ -361,6 +362,7 @@ class FirebaseHealthRepository implements HealthRepository {
       timeSlot: slot,
       status: AppointmentStatus.upcoming,
       token: 'TKN-${DateTime.now().millisecondsSinceEpoch % 10000}',
+      consultMode: consultMode,
     );
     await _appointments.doc(appt.id).set(appt.toMap());
     await pushNotification(

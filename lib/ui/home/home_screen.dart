@@ -59,11 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {}
     if (!mounted) return;
     setState(() {
-      final upcoming = appts
-          .where((a) =>
-              a.status == AppointmentStatus.upcoming &&
-              _isUpcoming(a.timeSlot))
-          .toList()
+      final upcoming = appts.where((a) => a.isActiveSlot).toList()
         ..sort((a, b) => a.timeSlot.compareTo(b.timeSlot));
       _nextAppt = upcoming.isEmpty ? null : upcoming.first;
       if (_nextAppt != null) {
@@ -81,9 +77,13 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> _openAppointmentMaps() async {
+  Future<void> _openAppointmentDetails() async {
     final appt = _nextAppt;
     if (appt == null) return;
+    if (appt.isVideo) {
+      widget.onNavigate(2);
+      return;
+    }
     final doctor = DoctorCatalog.doctorById(appt.doctorId);
     if (doctor != null) {
       await MapLauncher.showMapChoice(context, doctor: doctor);
@@ -196,14 +196,18 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          if (_nextAppt != null && _isUpcoming(_nextAppt!.timeSlot))
+          if (_nextAppt != null && _nextAppt!.isActiveSlot)
             _UpcomingAppointmentCard(
               appointment: _nextAppt!,
               hospitalName: _nextHospital,
               upcomingLabel: l.t('upcoming'),
-              detailsLabel: l.t('viewDetailsMap'),
-              inPersonLabel: l.t('inPerson'),
-              onDetails: _openAppointmentMaps,
+              detailsLabel: _nextAppt!.isVideo
+                  ? l.t('openCallSession')
+                  : l.t('viewDetailsMap'),
+              modeLabel: _nextAppt!.isVideo
+                  ? l.t('onlineVideoConsult')
+                  : l.t('inPerson'),
+              onDetails: _openAppointmentDetails,
             )
           else
             SoftCard(
@@ -336,7 +340,7 @@ class _UpcomingAppointmentCard extends StatelessWidget {
     required this.appointment,
     required this.upcomingLabel,
     required this.detailsLabel,
-    required this.inPersonLabel,
+    required this.modeLabel,
     required this.onDetails,
     this.hospitalName,
   });
@@ -345,7 +349,7 @@ class _UpcomingAppointmentCard extends StatelessWidget {
   final String? hospitalName;
   final String upcomingLabel;
   final String detailsLabel;
-  final String inPersonLabel;
+  final String modeLabel;
   final VoidCallback onDetails;
 
   @override
@@ -453,7 +457,7 @@ class _UpcomingAppointmentCard extends StatelessWidget {
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
-                  '$time ($inPersonLabel)',
+                  '$time ($modeLabel)',
                   textAlign: TextAlign.end,
                   style: const TextStyle(
                     color: Colors.white,

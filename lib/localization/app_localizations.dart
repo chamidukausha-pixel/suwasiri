@@ -142,6 +142,37 @@ class AppLocalizations {
       'si': 'ස්ථානයේ',
       'ta': 'நேரில்',
     },
+    'openCallSession': {
+      'en': 'Open Call',
+      'si': 'ඇමතුම විවෘත කරන්න',
+      'ta': 'அழைப்பைத் திற',
+    },
+    'noVideoConsult': {
+      'en':
+          'No upcoming video consultation. Book a telehealth session from Doctors. In-person visits appear on Home only.',
+      'si':
+          'ඉදිරි වීඩියෝ උපදේශනයක් නැත. Doctors තුළින් telehealth වෙන්කරන්න. ස්ථානීය හමුවීම් Home හි පමණක් පෙනේ.',
+      'ta':
+          'வரவிருக்கும் வீடியோ ஆலோசனை இல்லை. Doctors-இல் telehealth முன்பதிவு செய்யுங்கள். நேரில் சந்திப்புகள் Home-இல் மட்டும் தோன்றும்.',
+    },
+    'bookVideoFromDoctors': {
+      'en': 'Book video consult',
+      'si': 'වීඩියෝ උපදේශනය වෙන්කරන්න',
+      'ta': 'வீடியோ ஆலோசனை முன்பதிவு',
+    },
+    'scheduledConsult': {
+      'en': 'Scheduled',
+      'si': 'කාලසටහන්ගත',
+      'ta': 'திட்டமிடப்பட்டது',
+    },
+    'videoSyncedToCall': {
+      'en':
+          'This video consult is now on the Call tab and on the Home blue card. It disappears after the session time.',
+      'si':
+          'මෙම වීඩියෝ උපදේශනය Call ටැබයේ සහ Home නිල් කාඩ්පතේ පෙනේ. වේලාව ගෙවුණු පසු ඉවත් වේ.',
+      'ta':
+          'இந்த வீடியோ ஆலோசனை Call தாவலிலும் Home நீல அட்டையிலும் தோன்றும். நேரம் முடிந்ததும் மறையும்.',
+    },
     'directoryTitle': {
       'en': 'Specialist Medical Directory',
       'si': 'විශේෂඥ වෛද්‍ය නාමාවලිය',

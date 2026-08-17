@@ -61,6 +61,9 @@ class Doctor extends Equatable {
 
 enum AppointmentStatus { upcoming, completed, cancelled }
 
+/// Clinic visit vs video/telehealth consult.
+enum ConsultMode { clinic, video }
+
 class Appointment extends Equatable {
   const Appointment({
     required this.id,
@@ -71,6 +74,7 @@ class Appointment extends Equatable {
     required this.timeSlot,
     required this.status,
     this.token,
+    this.consultMode = ConsultMode.clinic,
   });
 
   final String id;
@@ -81,6 +85,16 @@ class Appointment extends Equatable {
   final DateTime timeSlot;
   final AppointmentStatus status;
   final String? token;
+  final ConsultMode consultMode;
+
+  bool get isVideo => consultMode == ConsultMode.video;
+
+  /// Visible until the booked slot (plus a short consult window).
+  bool get isActiveSlot {
+    if (status != AppointmentStatus.upcoming) return false;
+    final end = timeSlot.add(const Duration(minutes: 45));
+    return DateTime.now().isBefore(end);
+  }
 
   Map<String, dynamic> toMap() => {
         'patientId': patientId,
@@ -90,9 +104,11 @@ class Appointment extends Equatable {
         'timeSlot': timeSlot.toIso8601String(),
         'status': status.name,
         'token': token,
+        'consultMode': consultMode.name,
       };
 
   factory Appointment.fromMap(String id, Map<String, dynamic> map) {
+    final modeRaw = map['consultMode'] as String? ?? '';
     return Appointment(
       id: id,
       patientId: map['patientId'] as String? ?? '',
@@ -106,10 +122,23 @@ class Appointment extends Equatable {
         orElse: () => AppointmentStatus.upcoming,
       ),
       token: map['token'] as String?,
+      consultMode: ConsultMode.values.firstWhere(
+        (e) => e.name == modeRaw,
+        orElse: () => ConsultMode.clinic,
+      ),
     );
   }
 
   @override
-  List<Object?> get props =>
-      [id, patientId, doctorId, doctorName, specialty, timeSlot, status, token];
+  List<Object?> get props => [
+        id,
+        patientId,
+        doctorId,
+        doctorName,
+        specialty,
+        timeSlot,
+        status,
+        token,
+        consultMode,
+      ];
 }

@@ -14,9 +14,9 @@ import '../../data/models/appointment.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/profile_avatar.dart';
 import '../widgets/sheet_close_bar.dart';
 
-enum _ConsultMode { clinic, video }
 enum _PayChannel { card, bankSlip }
 enum _CheckoutStep { confirm, pay }
 
@@ -26,12 +26,14 @@ class _BookingResult {
     required this.paymentMethod,
     required this.slot,
     required this.doctor,
+    required this.consultMode,
   });
 
   final Appointment appointment;
   final String paymentMethod;
   final DateTime slot;
   final Doctor doctor;
+  final ConsultMode consultMode;
 }
 
 Future<void> showBookingCheckoutFlow(
@@ -51,6 +53,7 @@ Future<void> showBookingCheckoutFlow(
   if (result == null || !context.mounted) return;
 
   final l = AppLocalizations.of(context);
+  final isVideo = result.consultMode == ConsultMode.video;
   await showDialog<void>(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -62,59 +65,71 @@ Future<void> showBookingCheckoutFlow(
           Text(
             '${l.t('consultationToken')}: ${result.appointment.token}\n'
             '${result.doctor.name}\n'
+            '${isVideo ? l.t('onlineVideoConsult') : l.t('clinicConsult')}\n'
             '${DateFormat('EEE d MMM · hh:mm a').format(result.slot)}\n'
             '${result.paymentMethod}',
           ),
           const SizedBox(height: 14),
-          Text(
-            l.t('clinicPlace'),
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              color: AppColors.trustBlueDark,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            result.doctor.placeLabel,
-            style: const TextStyle(color: AppColors.slateMuted, height: 1.35),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            l.t('openClinicInMaps'),
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-              color: AppColors.trustBlueDark,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => MapLauncher.openGoogleMaps(
-                    address: result.doctor.placeLabel,
-                    latitude: result.doctor.latitude,
-                    longitude: result.doctor.longitude,
-                  ),
-                  icon: const Icon(Icons.map_outlined, size: 18),
-                  label: Text(l.t('googleMaps')),
-                ),
+          if (isVideo) ...[
+            Text(
+              l.t('videoSyncedToCall'),
+              style: const TextStyle(
+                color: AppColors.trustBlueDark,
+                height: 1.4,
+                fontWeight: FontWeight.w600,
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => MapLauncher.openAppleMaps(
-                    address: result.doctor.placeLabel,
-                    latitude: result.doctor.latitude,
-                    longitude: result.doctor.longitude,
-                  ),
-                  icon: const Icon(Icons.map, size: 18),
-                  label: Text(l.t('appleMaps')),
-                ),
+            ),
+          ] else ...[
+            Text(
+              l.t('clinicPlace'),
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                color: AppColors.trustBlueDark,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              result.doctor.placeLabel,
+              style: const TextStyle(color: AppColors.slateMuted, height: 1.35),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              l.t('openClinicInMaps'),
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                color: AppColors.trustBlueDark,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => MapLauncher.openGoogleMaps(
+                      address: result.doctor.placeLabel,
+                      latitude: result.doctor.latitude,
+                      longitude: result.doctor.longitude,
+                    ),
+                    icon: const Icon(Icons.map_outlined, size: 18),
+                    label: Text(l.t('googleMaps')),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => MapLauncher.openAppleMaps(
+                      address: result.doctor.placeLabel,
+                      latitude: result.doctor.latitude,
+                      longitude: result.doctor.longitude,
+                    ),
+                    icon: const Icon(Icons.map, size: 18),
+                    label: Text(l.t('appleMaps')),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
       actions: [
@@ -125,6 +140,10 @@ Future<void> showBookingCheckoutFlow(
       ],
     ),
   );
+  if (!context.mounted) return;
+  if (isVideo) {
+    MainTabScope.go(context, 2);
+  }
 }
 
 class _BookingCheckoutSheet extends StatefulWidget {
@@ -138,7 +157,7 @@ class _BookingCheckoutSheet extends StatefulWidget {
 
 class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
   _CheckoutStep _step = _CheckoutStep.confirm;
-  _ConsultMode _mode = _ConsultMode.clinic;
+  ConsultMode _mode = ConsultMode.clinic;
   _PayChannel _channel = _PayChannel.card;
   late DateTime _selectedDate;
   late TimeOfDay _selectedTime;
@@ -264,6 +283,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
         patientId: user.id,
         doctor: widget.doctor,
         slot: _slotDateTime,
+        consultMode: _mode,
       );
       if (!mounted) return;
       await context.read<NotificationCubit>().load();
@@ -275,6 +295,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
           paymentMethod: paymentMethod,
           slot: _slotDateTime,
           doctor: widget.doctor,
+          consultMode: _mode,
         ),
       );
     } catch (e) {
@@ -368,7 +389,7 @@ class _ConfirmStep extends StatelessWidget {
   });
 
   final Doctor doctor;
-  final _ConsultMode mode;
+  final ConsultMode mode;
   final List<DateTime> dates;
   final List<TimeOfDay> times;
   final DateTime selectedDate;
@@ -377,7 +398,7 @@ class _ConfirmStep extends StatelessWidget {
   final int venueFee;
   final int total;
   final VoidCallback onClose;
-  final ValueChanged<_ConsultMode> onMode;
+  final ValueChanged<ConsultMode> onMode;
   final ValueChanged<DateTime> onDate;
   final ValueChanged<TimeOfDay> onTime;
   final VoidCallback onProceed;
@@ -443,19 +464,19 @@ class _ConfirmStep extends StatelessWidget {
           children: [
             Expanded(
               child: _ModeCard(
-                selected: mode == _ConsultMode.clinic,
+                selected: mode == ConsultMode.clinic,
                 icon: Icons.location_on_outlined,
                 label: l.t('clinicConsult'),
-                onTap: () => onMode(_ConsultMode.clinic),
+                onTap: () => onMode(ConsultMode.clinic),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: _ModeCard(
-                selected: mode == _ConsultMode.video,
+                selected: mode == ConsultMode.video,
                 icon: Icons.videocam_outlined,
                 label: l.t('onlineVideoConsult'),
-                onTap: () => onMode(_ConsultMode.video),
+                onTap: () => onMode(ConsultMode.video),
               ),
             ),
           ],

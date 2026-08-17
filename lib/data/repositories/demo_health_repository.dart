@@ -484,6 +484,7 @@ class DemoHealthRepository implements HealthRepository {
     required String patientId,
     required Doctor doctor,
     required DateTime slot,
+    ConsultMode consultMode = ConsultMode.clinic,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 500));
     final appt = Appointment(
@@ -495,6 +496,7 @@ class DemoHealthRepository implements HealthRepository {
       timeSlot: slot,
       status: AppointmentStatus.upcoming,
       token: 'TKN-${DateTime.now().millisecondsSinceEpoch % 10000}',
+      consultMode: consultMode,
     );
     final existing = await getAppointments(patientId);
     final all = [...existing, appt];

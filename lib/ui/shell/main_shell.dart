@@ -38,7 +38,7 @@ class _MainShellState extends State<MainShell> {
     final pages = [
       HomeScreen(onNavigate: _goTo, isActive: _index == 0),
       const AppointmentsScreen(),
-      const TelehealthScreen(),
+      TelehealthScreen(isActive: _index == 2),
       const VaultScreen(),
       const VaccineScreen(),
       const ProfileScreen(),
