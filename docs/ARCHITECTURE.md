@@ -63,6 +63,10 @@ Stable `barcodeNumber` is generated once from uid + NIC and shown on Profile Uni
 
 `ScheduleCubit` holds live appointments. Home **blue** card = latest in-person (`ConsultMode.clinic`) booking; Home **purple** card and Call = latest video (`ConsultMode.video`) booking. Each new checkout replaces that mode’s card via `bookedAt` + `recordBooking`.
 
+## Vault AI Lab
+
+`LabAssistantReplies.review` builds an EN/SI/TA explanation of the open lab report (every biomarker, recommendations, disclaimer). Vault copilot chips + typed phrases (`explain by sinhala language`) pick the language. Recommended catalog doctors are tappable and open `showBookingCheckoutFlow`.
+
 ## Localization
 
 `AppLocalizations` + `LocaleCubit` (EN / Sinhala / Tamil). New UI strings go through localization, not hard-coded English-only if user-facing.

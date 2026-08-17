@@ -41,6 +41,15 @@ abstract final class DoctorCatalog {
     return null;
   }
 
+  static Doctor? doctorByName(String name) {
+    final n = name.trim().toLowerCase();
+    if (n.isEmpty) return null;
+    for (final d in doctors) {
+      if (d.name.toLowerCase() == n) return d;
+    }
+    return null;
+  }
+
   static List<CatalogFacility> facilitiesInDistrict(String? district) {
     if (district == null || district.isEmpty || district == 'All') {
       return List<CatalogFacility>.from(facilities);
@@ -313,6 +322,28 @@ abstract final class DoctorCatalog {
     final list = <Doctor>[];
     var nameIdx = 0;
     var id = 1;
+
+    if (hubs.isNotEmpty) {
+      final home = hubs.first;
+      list.add(
+        Doctor(
+          id: 'd-samantha',
+          name: 'Dr. Samantha Silva',
+          specialty: 'Physician / Consultant Physician',
+          hospital: home.name,
+          address: home.address,
+          region: home.region,
+          latitude: home.latitude,
+          longitude: home.longitude,
+          nextAvailable: home.hours,
+          rating: 4.9,
+          yearsExperience: 16,
+          feeLkr: 3500,
+          bio:
+              'General Medicine specialist providing accredited Sri Lankan hospital care.',
+        ),
+      );
+    }
 
     for (final specialty in specialties) {
       for (var slot = 0; slot < 3; slot++) {

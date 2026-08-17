@@ -241,9 +241,9 @@ abstract final class PatientHealthSamples {
         requestedBy: 'Dr. M. Silva',
         kind: VaultRecordKind.lab,
         metrics: const [
-          MetricReading(name: 'LDL', value: '118 mg/dL', status: 'attention'),
-          MetricReading(name: 'HDL', value: '52 mg/dL', status: 'normal'),
-          MetricReading(name: 'Triglycerides', value: '140 mg/dL', status: 'normal'),
+          MetricReading(name: 'LDL', value: '118 mg/dL', status: 'attention', normalRange: '< 100 mg/dL'),
+          MetricReading(name: 'HDL', value: '52 mg/dL', status: 'normal', normalRange: '> 40 mg/dL'),
+          MetricReading(name: 'Triglycerides', value: '140 mg/dL', status: 'normal', normalRange: '< 150 mg/dL'),
         ],
       ),
       VaultReport(
@@ -257,9 +257,9 @@ abstract final class PatientHealthSamples {
         requestedBy: 'Dr. Nimal Fernando',
         kind: VaultRecordKind.lab,
         metrics: const [
-          MetricReading(name: 'WBC', value: '7.2 ×10⁹/L', status: 'normal'),
-          MetricReading(name: 'Hemoglobin', value: '13.8 g/dL', status: 'normal'),
-          MetricReading(name: 'Platelets', value: '245 ×10⁹/L', status: 'normal'),
+          MetricReading(name: 'WBC', value: '7.2 ×10⁹/L', status: 'normal', normalRange: '4.0 - 11.0 ×10⁹/L'),
+          MetricReading(name: 'Hemoglobin', value: '13.8 g/dL', status: 'normal', normalRange: '13.5 - 17.5 g/dL'),
+          MetricReading(name: 'Platelets', value: '245 ×10⁹/L', status: 'normal', normalRange: '150 - 450 ×10⁹/L'),
         ],
       ),
       VaultReport(
@@ -273,9 +273,9 @@ abstract final class PatientHealthSamples {
         requestedBy: 'Dr. Samanthi Wickramasinghe',
         kind: VaultRecordKind.lab,
         metrics: const [
-          MetricReading(name: 'ALT', value: '32 U/L', status: 'normal'),
-          MetricReading(name: 'AST', value: '28 U/L', status: 'normal'),
-          MetricReading(name: 'Bilirubin', value: '0.8 mg/dL', status: 'normal'),
+          MetricReading(name: 'ALT', value: '32 U/L', status: 'normal', normalRange: '< 40 U/L'),
+          MetricReading(name: 'AST', value: '28 U/L', status: 'normal', normalRange: '< 40 U/L'),
+          MetricReading(name: 'Bilirubin', value: '0.8 mg/dL', status: 'normal', normalRange: '0.1 - 1.2 mg/dL'),
         ],
       ),
       VaultReport(
@@ -289,8 +289,8 @@ abstract final class PatientHealthSamples {
         requestedBy: 'Dr. Malini Silva',
         kind: VaultRecordKind.lab,
         metrics: const [
-          MetricReading(name: 'TSH', value: '2.1 mIU/L', status: 'normal'),
-          MetricReading(name: 'Free T4', value: '1.2 ng/dL', status: 'normal'),
+          MetricReading(name: 'TSH', value: '2.1 mIU/L', status: 'normal', normalRange: '0.4 - 4.0 mIU/L'),
+          MetricReading(name: 'Free T4', value: '1.2 ng/dL', status: 'normal', normalRange: '0.8 - 1.8 ng/dL'),
         ],
       ),
     ];

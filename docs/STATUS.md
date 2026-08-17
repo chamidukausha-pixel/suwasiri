@@ -55,6 +55,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Sub-pages: Close + X to dismiss sheets; Help Desk EN/සිංහල/தமிழ் for all topics; vaccine search covers MOH offices, government and private hospitals in all 25 districts
 - [x] Home: blue card = in-person clinic only; purple card = video consult (also on Call); green = vaccine; expired bookings hide (blank)
 - [x] Home/Call show the latest booked doctor per mode (blue = clinic, purple + Call = video); each new booking replaces the previous card automatically
+- [x] Vault AI Lab: full EN/SI/TA lab explanations (markers, recs, disclaimer); tap recommended doctor name to book via normal checkout
 
 ## In progress / next
 
