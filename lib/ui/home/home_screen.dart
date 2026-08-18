@@ -225,15 +225,11 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 12),
           ],
           if (upcomingVaccines.isNotEmpty) ...[
-            ...upcomingVaccines.map(
-              (booking) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _UpcomingVaccineCard(
-                  booking: booking,
-                  onDetails: () => _openVaccineMaps(booking),
-                ),
-              ),
+            _UpcomingVaccineCard(
+              bookings: upcomingVaccines,
+              onDetails: _openVaccineMaps,
             ),
+            const SizedBox(height: 12),
           ],
           const SizedBox(height: 2),
           _HealthTipCard(
@@ -511,18 +507,18 @@ class _UpcomingAppointmentCard extends StatelessWidget {
 
 class _UpcomingVaccineCard extends StatelessWidget {
   const _UpcomingVaccineCard({
-    required this.booking,
+    required this.bookings,
     required this.onDetails,
   });
 
-  final VaccineBooking booking;
-  final VoidCallback onDetails;
+  final List<VaccineBooking> bookings;
+  final ValueChanged<VaccineBooking> onDetails;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final date = DateFormat('MMM d, y').format(booking.slot);
-    final time = DateFormat('hh:mm a').format(booking.slot);
+    if (bookings.isEmpty) return const SizedBox.shrink();
+    final primary = bookings.first;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -576,64 +572,20 @@ class _UpcomingVaccineCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          Text(
-            booking.vaccineName.isEmpty
-                ? l.t('vaccineBooking')
-                : booking.vaccineName,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 20,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            booking.facilityName,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.95),
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-            ),
-          ),
-          if (booking.address.isNotEmpty) ...[
-            const SizedBox(height: 2),
-            Text(
-              booking.address,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.85),
-                fontSize: 13,
+          for (var i = 0; i < bookings.length; i++) ...[
+            if (i > 0) ...[
+              const SizedBox(height: 12),
+              Divider(
+                color: Colors.white.withValues(alpha: 0.25),
+                height: 1,
               ),
+              const SizedBox(height: 12),
+            ],
+            _VaccineBookingRow(
+              booking: bookings[i],
+              fallback: l.t('vaccineBooking'),
             ),
           ],
-          const SizedBox(height: 14),
-          Divider(color: Colors.white.withValues(alpha: 0.25), height: 1),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              const Icon(Icons.calendar_today_outlined,
-                  color: Colors.white, size: 16),
-              const SizedBox(width: 6),
-              Text(
-                date,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-              const Spacer(),
-              const Icon(Icons.access_time, color: Colors.white, size: 16),
-              const SizedBox(width: 6),
-              Text(
-                time,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -647,7 +599,7 @@ class _UpcomingVaccineCard extends StatelessWidget {
                 ),
                 elevation: 0,
               ),
-              onPressed: onDetails,
+              onPressed: () => onDetails(primary),
               child: Text(
                 l.t('viewDetailsMap'),
                 style: const TextStyle(fontWeight: FontWeight.w700),
@@ -656,6 +608,84 @@ class _UpcomingVaccineCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _VaccineBookingRow extends StatelessWidget {
+  const _VaccineBookingRow({
+    required this.booking,
+    required this.fallback,
+  });
+
+  final VaccineBooking booking;
+  final String fallback;
+
+  @override
+  Widget build(BuildContext context) {
+    final date = DateFormat('MMM d, y').format(booking.slot);
+    final time = DateFormat('hh:mm a').format(booking.slot);
+    final name =
+        booking.vaccineName.isEmpty ? fallback : booking.vaccineName;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          name,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          booking.facilityName,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.95),
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+          ),
+        ),
+        if (booking.address.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text(
+            booking.address,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.85),
+              fontSize: 13,
+            ),
+          ),
+        ],
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            const Icon(Icons.calendar_today_outlined,
+                color: Colors.white, size: 16),
+            const SizedBox(width: 6),
+            Text(
+              date,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+            const Spacer(),
+            const Icon(Icons.access_time, color: Colors.white, size: 16),
+            const SizedBox(width: 6),
+            Text(
+              time,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

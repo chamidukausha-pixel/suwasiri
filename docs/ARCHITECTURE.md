@@ -63,7 +63,7 @@ Stable `barcodeNumber` is generated once from uid + NIC and shown on Profile Uni
 
 `ScheduleCubit` holds live appointments. Home **blue** card = latest in-person (`ConsultMode.clinic`) booking; Home **purple** card and Call = latest video (`ConsultMode.video`) booking. Each new checkout replaces that mode’s card via `bookedAt` + `recordBooking`.
 
-Home **green** cards list **every** confirmed vaccine booking that has not expired (`ScheduleState.upcomingVaccines`). No bookings → the green section is hidden. After checkout, `recordVaccineBooking` updates Home immediately.
+Home **green** card lists **every** confirmed vaccine booking that has not expired (`ScheduleState.upcomingVaccines`) in a **single** section. No bookings → the green section is hidden. After checkout, `recordVaccineBooking` updates Home immediately.
 
 ## Childhood EPI reminders
 
