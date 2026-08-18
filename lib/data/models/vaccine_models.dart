@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import '../../core/utils/booking_expiry.dart';
+
 enum VaccineStatus { pending, scheduled, completed }
 
 class VaccineProtocol extends Equatable {
@@ -116,6 +118,12 @@ class VaccineBooking extends Equatable {
   final double? latitude;
   final double? longitude;
   final DateTime? bookedAt;
+
+  /// Home green card stays until local midnight after the slot date.
+  bool isVisibleOnHome([DateTime? now]) {
+    if (status != 'confirmed') return false;
+    return BookingExpiry.isVisibleOnHome(slot, now);
+  }
 
   String get placeLabel {
     final parts = [

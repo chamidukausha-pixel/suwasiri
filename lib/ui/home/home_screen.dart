@@ -152,7 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 24),
-          if (nextClinic != null && nextClinic.isActiveSlot) ...[
+          if (nextClinic != null && nextClinic.isVisibleOnHome()) ...[
             Row(
               children: [
                 Text(
@@ -188,7 +188,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 12),
           ],
-          if (nextVideo != null && nextVideo.isActiveSlot) ...[
+          if (nextVideo != null && nextVideo.isVisibleOnHome()) ...[
             Row(
               children: [
                 Text(

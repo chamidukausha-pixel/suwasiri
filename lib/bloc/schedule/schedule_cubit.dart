@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../data/models/appointment.dart';
 import '../../data/models/vaccine_models.dart';
 import '../../data/repositories/health_repository.dart';
+import '../../core/utils/booking_expiry.dart';
 
 class ScheduleState extends Equatable {
   const ScheduleState({
@@ -20,7 +21,7 @@ class ScheduleState extends Equatable {
   final int tick;
 
   List<Appointment> get activeDoctors {
-    final list = appointments.where((a) => a.isActiveSlot).toList()
+    final list = appointments.where((a) => a.isVisibleOnHome()).toList()
       ..sort((a, b) => b.bookedStamp.compareTo(a.bookedStamp));
     return list;
   }
@@ -35,7 +36,7 @@ class ScheduleState extends Equatable {
   Appointment? _latestWhere(bool Function(Appointment) test) {
     Appointment? best;
     for (final a in appointments) {
-      if (!a.isActiveSlot || !test(a)) continue;
+      if (!a.isVisibleOnHome() || !test(a)) continue;
       if (best == null || a.bookedStamp.isAfter(best.bookedStamp)) {
         best = a;
       }
@@ -46,12 +47,9 @@ class ScheduleState extends Equatable {
   VaccineBooking? get nextVaccine =>
       upcomingVaccines.isEmpty ? null : upcomingVaccines.first;
 
-  /// All confirmed vaccine sessions that have not expired — Home green cards.
+  /// Confirmed vaccine sessions still visible on Home (until next midnight).
   List<VaccineBooking> get upcomingVaccines {
-    final list = vaccineBookings
-        .where((b) =>
-            b.status == 'confirmed' && b.slot.isAfter(DateTime.now()))
-        .toList()
+    final list = vaccineBookings.where((b) => b.isVisibleOnHome()).toList()
       ..sort((a, b) => a.slot.compareTo(b.slot));
     return list;
   }
@@ -79,6 +77,7 @@ class ScheduleCubit extends Cubit<ScheduleState> {
   final HealthRepository _health;
   StreamSubscription<List<Appointment>>? _sub;
   Timer? _expiryTick;
+  Timer? _midnightTick;
   String? _patientId;
 
   Future<void> watch(String patientId) async {
@@ -101,6 +100,7 @@ class ScheduleCubit extends Cubit<ScheduleState> {
         vaccineBookings: _mergePendingVaccines(vax),
         tick: state.tick + 1,
       ));
+      _armMidnightTick();
     });
     _expiryTick = Timer.periodic(const Duration(seconds: 20), (_) {
       if (isClosed) return;
@@ -122,6 +122,7 @@ class ScheduleCubit extends Cubit<ScheduleState> {
       vaccineBookings: _mergePendingVaccines(vax),
       tick: state.tick + 1,
     ));
+    _armMidnightTick();
   }
 
   /// Keep a booking just written locally if Firestore lag drops it for a moment.
@@ -143,6 +144,7 @@ class ScheduleCubit extends Cubit<ScheduleState> {
       appointments: [appt, ...others],
       tick: state.tick + 1,
     ));
+    _armMidnightTick();
   }
 
   /// Instantly show vaccine sessions on the Home green cards.
@@ -153,6 +155,7 @@ class ScheduleCubit extends Cubit<ScheduleState> {
       vaccineBookings: [booking, ...others],
       tick: state.tick + 1,
     ));
+    _armMidnightTick();
   }
 
   List<VaccineBooking> _mergePendingVaccines(List<VaccineBooking> remote) {
@@ -166,10 +169,37 @@ class ScheduleCubit extends Cubit<ScheduleState> {
     return [...remote, ...extras];
   }
 
+  void _armMidnightTick() {
+    _midnightTick?.cancel();
+    final now = DateTime.now();
+    DateTime? next;
+    void consider(DateTime slot) {
+      final hide = BookingExpiry.hidesAt(slot);
+      if (!hide.isAfter(now)) return;
+      if (next == null || hide.isBefore(next!)) next = hide;
+    }
+
+    for (final a in state.appointments) {
+      if (a.status == AppointmentStatus.upcoming) consider(a.timeSlot);
+    }
+    for (final b in state.vaccineBookings) {
+      if (b.status == 'confirmed') consider(b.slot);
+    }
+    if (next == null) return;
+    var wait = next!.difference(now) + const Duration(milliseconds: 300);
+    if (wait.isNegative) wait = const Duration(milliseconds: 300);
+    _midnightTick = Timer(wait, () {
+      if (isClosed) return;
+      emit(state.copyWith(tick: state.tick + 1));
+      _armMidnightTick();
+    });
+  }
+
   @override
   Future<void> close() {
     _sub?.cancel();
     _expiryTick?.cancel();
+    _midnightTick?.cancel();
     return super.close();
   }
 }

@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import '../../core/utils/booking_expiry.dart';
+
 class Doctor extends Equatable {
   const Doctor({
     required this.id,
@@ -97,11 +99,17 @@ class Appointment extends Equatable {
   DateTime get bookedStamp =>
       bookedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
 
-  /// Visible until the booked slot (plus a short consult window).
+  /// Live Call session window (slot + 45 minutes).
   bool get isActiveSlot {
     if (status != AppointmentStatus.upcoming) return false;
     final end = timeSlot.add(const Duration(minutes: 45));
     return DateTime.now().isBefore(end);
+  }
+
+  /// Home blue / purple cards stay until local midnight after the slot date.
+  bool isVisibleOnHome([DateTime? now]) {
+    if (status != AppointmentStatus.upcoming) return false;
+    return BookingExpiry.isVisibleOnHome(timeSlot, now);
   }
 
   Map<String, dynamic> toMap() => {
