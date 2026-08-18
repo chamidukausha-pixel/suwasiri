@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/appointment.dart';
 import '../../data/services/lab_assistant_replies.dart';
-import '../../localization/app_localizations.dart';
 import '../appointments/booking_checkout_flow.dart';
 
 /// Dark markdown-style lab explanation with tappable doctor names.
@@ -32,7 +31,6 @@ class _LabAiReviewViewState extends State<LabAiReviewView> {
   @override
   Widget build(BuildContext context) {
     final review = widget.review;
-    final l = AppLocalizations.of(context);
     const body = TextStyle(
       color: Color(0xFFE2E8F0),
       fontSize: 13,
@@ -161,16 +159,20 @@ class _LabAiReviewViewState extends State<LabAiReviewView> {
                 ),
               ],
               Text(
-                l.t('tapDoctorToBook'),
+                LabAssistantReplies.bookHint(review.lang),
                 style: muted.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),
               for (final d in review.doctors)
                 _DoctorBookRow(
                   doctor: d,
+                  specialty: LabAssistantReplies.specialtyLabel(
+                    d.specialty,
+                    review.lang,
+                  ),
                   onName: () => _book(context, d),
                   onBook: () => _book(context, d),
-                  bookLabel: l.t('bookSession'),
+                  bookLabel: LabAssistantReplies.bookLabel(review.lang),
                 ),
               const _MdRule(),
               _MdH3(review.adviceTitle),
@@ -227,9 +229,9 @@ class _LabAiReviewViewState extends State<LabAiReviewView> {
   static String _disclaimerLabel(String lang) {
     switch (lang) {
       case 'si':
-        return 'වගකීම් ප්‍රකාශය (Disclaimer)';
+        return 'වගකීම් ප්‍රකාශය';
       case 'ta':
-        return 'பொறுப்புத் துறப்பு (Disclaimer)';
+        return 'பொறுப்புத் துறப்பு';
       default:
         return 'Disclaimer';
     }
@@ -270,12 +272,14 @@ class _MdRule extends StatelessWidget {
 class _DoctorBookRow extends StatelessWidget {
   const _DoctorBookRow({
     required this.doctor,
+    required this.specialty,
     required this.onName,
     required this.onBook,
     required this.bookLabel,
   });
 
   final Doctor doctor;
+  final String specialty;
   final VoidCallback onName;
   final VoidCallback onBook;
   final String bookLabel;
@@ -309,7 +313,7 @@ class _DoctorBookRow extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            '${doctor.specialty} · ${doctor.hospital}',
+            '${specialty} · ${doctor.hospital}',
             style: const TextStyle(
               color: Color(0xFFCBD5E1),
               fontSize: 12,

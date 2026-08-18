@@ -90,17 +90,16 @@ abstract final class LabAssistantReplies {
       summaryHeadline: _summaryHeadline(lang, allNormal),
       languageNote: _languageNote(lang),
       evidenceTitle: _t(lang, {
-        'en': '### 1. SUMMARY OF EVIDENCE (වාර්තා සාරාංශය / அறிக்கை சுருக்கம்)',
-        'si': '### 1. SUMMARY OF EVIDENCE (වාර්තා සාරාංශය)',
-        'ta': '### 1. SUMMARY OF EVIDENCE (அறிக்கை சுருக்கம்)',
+        'en': '### 1. Summary of evidence',
+        'si': '### 1. වාර්තා සාරාංශය',
+        'ta': '### 1. அறிக்கை சுருக்கம்',
       }),
       evidenceLead: _evidenceLead(lang, allNormal),
       metrics: report.metrics.map((m) => _explainMetric(m, lang)).toList(),
       recsTitle: _t(lang, {
-        'en':
-            '### 2. RECOMMENDATIONS (නිර්දේශ සහ විශේෂඥ වෛද්‍යවරුන් / பரிந்துரைகள்)',
-        'si': '### 2. RECOMMENDATIONS (නිර්දේශ සහ විශේෂඥ වෛද්‍යවරුන්)',
-        'ta': '### 2. RECOMMENDATIONS (பரிந்துரைகளும் சிறப்பு மருத்துவர்களும்)',
+        'en': '### 2. Recommendations and specialist doctors',
+        'si': '### 2. නිර්දේශ සහ විශේෂඥ වෛද්‍යවරුන්',
+        'ta': '### 2. பரிந்துரைகளும் சிறப்பு மருத்துவர்களும்',
       }),
       recsIntro: _recsIntro(lang, allNormal),
       recsBeforeDoctor: _recsBeforeDoctor(lang, featured),
@@ -111,12 +110,9 @@ abstract final class LabAssistantReplies {
       ],
       doctors: doctors,
       adviceTitle: _t(lang, {
-        'en':
-            '### 3. CLINICAL ADVICE & DISCLAIMER (සායනික උපදෙස් සහ වගකීම් ප්‍රකාශය)',
-        'si':
-            '### 3. CLINICAL ADVICE & DISCLAIMER (සායනික උපදෙස් සහ වගකීම් ප්‍රකාශය)',
-        'ta':
-            '### 3. CLINICAL ADVICE & DISCLAIMER (மருத்துவ ஆலோசனை மற்றும் பொறுப்புத் துறப்பு)',
+        'en': '### 3. Clinical advice and disclaimer',
+        'si': '### 3. සායනික උපදෙස් සහ වගකීම් ප්‍රකාශය',
+        'ta': '### 3. மருத்துவ ஆலோசனை மற்றும் பொறுப்புத் துறப்பு',
       }),
       habits: _habits(lang),
       disclaimer: _disclaimer(lang),
@@ -169,14 +165,20 @@ abstract final class LabAssistantReplies {
     return buf.toString();
   }
 
-  static String explainPrompt(String lang) => _t(_langCode(lang), {
-        'en':
-            'Explain my lab report in English. Cover every biomarker and recommend a doctor.',
-        'si':
-            'මගේ රසායනාගාර වාර්තාව සිංහලෙන් පැහැදිලි කරන්න. සෑම සලකුණක්ම සාරාංශ කර වෛද්‍යවරයෙකු නිර්දේශ කරන්න.',
-        'ta':
-            'என் ஆய்வக அறிக்கையை தமிழில் விளக்கு. ஒவ்வொரு குறியையும் சுருக்கி மருத்துவரை பரிந்துரை.',
-      });
+  static const commandExplainSi = 'explain by Sinhala Language';
+  static const commandExplainEn = 'explain by English language';
+  static const commandExplainTa = 'explain by Tamil language';
+
+  static String explainPrompt(String lang) {
+    switch (_langCode(lang)) {
+      case 'si':
+        return commandExplainSi;
+      case 'ta':
+        return commandExplainTa;
+      default:
+        return commandExplainEn;
+    }
+  }
 
   static String recommendPrompt(String lang) => _t(_langCode(lang), {
         'en':
@@ -189,23 +191,27 @@ abstract final class LabAssistantReplies {
 
   static String detectLanguage(String question, {String fallback = 'en'}) {
     final q = question.toLowerCase();
-    if (RegExp(r'[\u0D80-\u0DFF]').hasMatch(question) ||
-        q.contains('sinhala') ||
-        q.contains('සිංහල') ||
-        q.contains('in si') ||
-        q.contains('by sinhala')) {
-      return 'si';
-    }
-    if (RegExp(r'[\u0B80-\u0BFF]').hasMatch(question) ||
-        q.contains('tamil') ||
+    if (q.contains('tamil') ||
         q.contains('தமிழ்') ||
-        q.contains('in ta') ||
-        q.contains('by tamil')) {
+        q.contains('by tamil') ||
+        q.contains('in ta')) {
       return 'ta';
     }
-    if (q.contains('english') || q.contains('in en') || q.contains('by english')) {
+    if (q.contains('sinhala') ||
+        q.contains('snhala') ||
+        q.contains('සිංහල') ||
+        q.contains('by sinhala') ||
+        q.contains('by snhala') ||
+        q.contains('in si')) {
+      return 'si';
+    }
+    if (q.contains('english') ||
+        q.contains('by english') ||
+        q.contains('in en')) {
       return 'en';
     }
+    if (RegExp(r'[\u0B80-\u0BFF]').hasMatch(question)) return 'ta';
+    if (RegExp(r'[\u0D80-\u0DFF]').hasMatch(question)) return 'si';
     return fallback;
   }
 
@@ -220,14 +226,77 @@ abstract final class LabAssistantReplies {
   static String _t(String lang, Map<String, String> map) =>
       map[lang] ?? map['en']!;
 
+  static String bookHint(String lang) => _t(lang, {
+        'en': 'Tap a doctor name to book a session.',
+        'si': 'වෛද්‍ය නම තට්ටු කර වාරයක් වෙන්කරගන්න.',
+        'ta': 'மருத்துவர் பெயரை தொட்டு அமர்வை பதிவு செய்யுங்கள்.',
+      });
+
+  static String bookLabel(String lang) => _t(lang, {
+        'en': 'Book session',
+        'si': 'වාරය වෙන්කරන්න',
+        'ta': 'அமர்வை பதிவு செய்',
+      });
+
+  static String specialtyLabel(String specialty, String lang) {
+    final key = specialty.toLowerCase();
+    if (key.contains('cardio')) {
+      return _t(lang, {
+        'en': 'Cardiologist',
+        'si': 'හෘද රෝග විශේෂඥ',
+        'ta': 'இதய மருத்துவர்',
+      });
+    }
+    if (key.contains('hemat') || key.contains('haemat')) {
+      return _t(lang, {
+        'en': 'Haematologist',
+        'si': 'රුධිර රෝග විශේෂඥ',
+        'ta': 'இரத்தவியல் நிபுணர்',
+      });
+    }
+    if (key.contains('gastro')) {
+      return _t(lang, {
+        'en': 'Gastroenterologist',
+        'si': 'අක්මා හා ආහාර මාර්ග විශේෂඥ',
+        'ta': 'கல்லீரல் மருத்துவர்',
+      });
+    }
+    if (key.contains('endo')) {
+      return _t(lang, {
+        'en': 'Endocrinologist',
+        'si': 'හෝමෝන විශේෂඥ',
+        'ta': 'ஹார்மோன் மருத்துவர்',
+      });
+    }
+    if (key.contains('nephro')) {
+      return _t(lang, {
+        'en': 'Nephrologist',
+        'si': 'වකුගඩු විශේෂඥ',
+        'ta': 'சிறுநீரக மருத்துவர்',
+      });
+    }
+    if (key.contains('practitioner')) {
+      return _t(lang, {
+        'en': 'General practitioner',
+        'si': 'පවුලේ වෛද්‍යවරයා',
+        'ta': 'குடும்ப மருத்துவர்',
+      });
+    }
+    return _t(lang, {
+      'en': 'Physician',
+      'si': 'කායික රෝග විශේෂඥ වෛද්‍ය',
+      'ta': 'பொது மருத்துவ நிபுணர்',
+    });
+  }
+
   static String _greeting(String lang, String name) {
     switch (lang) {
       case 'si':
-        return 'ආයුබෝවන් $name! (Hello $name!)';
+        return 'ආයුබෝවන් $name!';
       case 'ta':
-        return 'வணக்கம் $name! (Hello $name!)';
+        return 'வணக்கம் $name!';
       default:
-        return 'Hello $name! (ආයුබෝවන් / வணக்கம்)';
+        return 'Hello $name!';
     }
   }
 
@@ -238,9 +307,30 @@ abstract final class LabAssistantReplies {
         t.contains('fbc') ||
         t.contains('full blood')) {
       return _t(lang, {
-        'en': 'Complete Blood Count (CBC)',
-        'si': 'සම්පූර්ණ රුධිර පරීක්ෂණ වාර්තාව (Complete Blood Count - CBC)',
-        'ta': 'முழு இரத்தப் பரிசோதனை (Complete Blood Count - CBC)',
+        'en': 'complete blood count',
+        'si': 'සම්පූර්ණ රුධිර පරීක්ෂණ වාර්තාව',
+        'ta': 'முழு இரத்தப் பரிசோதனை அறிக்கை',
+      });
+    }
+    if (t.contains('lipid')) {
+      return _t(lang, {
+        'en': 'lipid profile',
+        'si': 'ලිපිඩ පැතිකඩ වාර්තාව',
+        'ta': 'கொழுப்பு அறிக்கை',
+      });
+    }
+    if (t.contains('lft') || t.contains('liver')) {
+      return _t(lang, {
+        'en': 'liver function test',
+        'si': 'අක්මා ක්‍රියාකාරිත්ව පරීක්ෂණය',
+        'ta': 'கல்லீரல் செயல்பாட்டு பரிசோதனை',
+      });
+    }
+    if (t.contains('tsh') || t.contains('thyroid')) {
+      return _t(lang, {
+        'en': 'thyroid hormone test',
+        'si': 'තයිරොයිඩ් හෝමෝන පරීක්ෂණය',
+        'ta': 'தைராய்டு ஹார்மோன் பரிசோதனை',
       });
     }
     return report.title;
@@ -262,9 +352,9 @@ abstract final class LabAssistantReplies {
     if (allNormal) {
       return _t(lang, {
         'en':
-            'Good news: all biomarker values in your blood report are at very normal and healthy levels.',
+            'Good news: all values in your blood report are at very normal and healthy levels.',
         'si':
-            'ශුභ ආරංචියක් තිබෙන්නේ, ඔබගේ රුධිර වාර්තාවේ සියලුම අගයන් (biomarkers) ඉතාමත් සාමාන්‍ය සහ නිරෝගී මට්ටමක පවතී.',
+            'ශුභ ආරංචියක් තිබෙන්නේ, ඔබගේ රුධිර වාර්තාවේ සියලුම අගයන් ඉතාමත් සාමාන්‍ය සහ නිරෝගී මට්ටමක පවතී.',
         'ta':
             'நல்ல செய்தி: உங்கள் இரத்த அறிக்கையில் உள்ள அனைத்து உயிர்குறிகளும் மிக இயல்பான, ஆரோக்கியமான அளவில் உள்ளன.',
       });
@@ -311,16 +401,16 @@ abstract final class LabAssistantReplies {
         'en':
             'Your report is fully within normal ranges, so there is no urgent need to see a specialist for a specific disease. However, for a routine health checkup, or if you feel unwell, you can refer to the medical departments below:',
         'si':
-            'ඔබේ රුධිර වාර්තාව සම්පූර්ණයෙන්ම සාමාන්‍ය අගයන් ගන්නා බැවින් විශේෂිත රෝගී තත්ත්වයක් සඳහා විශේෂඥ වෛද්‍යවරයකු හමුවීමට ක්ෂණික අවශ්‍යතාවයක් නොමැත. කෙසේ වෙතත්, සාමාන්‍ය සෞඛ්‍ය පරීක්ෂාවක් (Routine Health Checkup) සඳහා හෝ ඔබට යම්කිසි අපහසුතාවයක් ඇත්නම් පහත සඳහන් වෛද්‍ය අංශ වෙත යොමු විය හැක:',
+            'ඔබේ රුධිර වාර්තාව සම්පූර්ණයෙන්ම සාමාන්‍ය අගයන් ගන්නා බැවින් විශේෂිත රෝගී තත්ත්වයක් සඳහා විශේෂඥ වෛද්‍යවරයකු හමුවීමට ක්ෂණික අවශ්‍යතාවයක් නොමැත. කෙසේ වෙතත්, සාමාන්‍ය සෞඛ්‍ය පරීක්ෂාවක් සඳහා හෝ ඔබට යම්කිසි අපහසුතාවයක් ඇත්නම් පහත සඳහන් වෛද්‍ය අංශ වෙත යොමු විය හැක:',
         'ta':
-          'உங்கள் அறிக்கை முழுவதும் இயல்பான வரம்பில் உள்ளதால் குறிப்பிட்ட நோய்க்காக அவசரமாக சிறப்பு மருத்துவரை பார்க்க வேண்டியதில்லை. வழக்கமான உடல் பரிசோதனை (Routine Health Checkup) அல்லது அசௌகரியம் இருந்தால் கீழே உள்ள மருத்துவ பிரிவுகளை நாடலாம்:',
+          'உங்கள் அறிக்கை முழுவதும் இயல்பான வரம்பில் உள்ளதால் குறிப்பிட்ட நோய்க்காக அவசரமாக சிறப்பு மருத்துவரை பார்க்க வேண்டியதில்லை. வழக்கமான உடல் பரிசோதனை அல்லது அசௌகரியம் இருந்தால் கீழே உள்ள மருத்துவ பிரிவுகளை நாடலாம்:',
       });
     }
     return _t(lang, {
       'en':
           'Some markers are outside the usual range. Book a matching specialist below for review. Tap a doctor name to start the normal booking flow.',
       'si':
-          'සමහර සලකුණු සාමාන්‍ය පරාසයෙන් බැහැරය. පහත ගැළපෙන විශේෂඥවරයෙකු හමුවී සමාලෝචනය කරන්න. වෛද්‍ය නම තට්ටු කර සාමාන්‍ය booking එක අරඹන්න.',
+          'සමහර සලකුණු සාමාන්‍ය පරාසයෙන් බැහැරය. පහත ගැළපෙන විශේෂඥවරයෙකු හමුවී සමාලෝචනය කරන්න. වෛද්‍ය නම තට්ටු කර වාරයක් වෙන්කරගන්න.',
       'ta':
           'சில குறிகள் வழக்கமான வரம்பிற்கு வெளியே உள்ளன. கீழே பொருந்தும் நிபுணரை பதிவு செய்து பார்வையிடுங்கள். மருத்துவர் பெயரை தொட்டு வழக்கமான முன்பதிவை தொடங்குங்கள்.',
     });
@@ -339,11 +429,11 @@ abstract final class LabAssistantReplies {
     if (doctor == null) return '';
     return _t(lang, {
       'en':
-          ' (General Medicine Specialist) or your family doctor (GP). Tap the name to book the same way as Doctors.',
+          ' (general medicine specialist) or your family doctor. Tap the name to book a session.',
       'si':
-          ' (General Medicine Specialist) හෝ ඔබේ පවුලේ වෛද්‍යවරයා (GP) හමුවන්න. නම තට්ටු කර Doctors පිටුවේ මෙන් session එකක් වෙන්කරගන්න.',
+          ' හෝ ඔබේ පවුලේ වෛද්‍යවරයා හමුවන්න. නම තට්ටු කර වාරයක් වෙන්කරගන්න.',
       'ta':
-          ' (General Medicine Specialist) அல்லது உங்கள் குடும்ப மருத்துவரை (GP) பாருங்கள். பெயரை தொட்டு Doctors பக்கம் போல அமர்வை பதிவு செய்யுங்கள்.',
+          ' அல்லது உங்கள் குடும்ப மருத்துவரை பாருங்கள். பெயரை தொட்டு அமர்வை பதிவு செய்யுங்கள்.',
     });
   }
 
@@ -359,20 +449,20 @@ abstract final class LabAssistantReplies {
       'en':
           'drink enough water daily (adequate hydration), eat balanced meals, rest well, and keep your family doctor informed of new symptoms.',
       'si':
-          'ඔබේ සිරුර නිරෝගීව තබා ගැනීමට දිනකට ප්‍රමාණවත් පරිදි ජලය පානය කරන්න (Adequate hydration), සමබර ආහාර ගන්න, විවේක ගන්න, නව රෝග ලක්ෂණ පවුලේ වෛද්‍යවරයාට දන්වන්න.',
+          'ඔබේ සිරුර නිරෝගීව තබා ගැනීමට දිනකට ප්‍රමාණවත් පරිදි ජලය පානය කරන්න, සමබර ආහාර ගන්න, විවේක ගන්න, නව රෝග ලක්ෂණ පවුලේ වෛද්‍යවරයාට දන්වන්න.',
       'ta':
-          'தினமும் போதிய நீர் குடியுங்கள் (Adequate hydration), சமச்சீர் உணவு, ஓய்வு, புதிய அறிகுறிகளை குடும்ப மருத்துவரிடம் தெரிவியுங்கள்.',
+          'தினமும் போதிய நீர் குடியுங்கள், சமச்சீர் உணவு, ஓய்வு, புதிய அறிகுறிகளை குடும்ப மருத்துவரிடம் தெரிவியுங்கள்.',
     });
   }
 
   static String _disclaimer(String lang) {
     return _t(lang, {
       'en':
-          'This is an explanation by Suwasiri AI only and is not a substitute for professional medical advice. For final medical advice, consult your family doctor (GP) or a registered Sri Lankan doctor.',
+          'This is an explanation by Suwasiri AI only and is not a substitute for professional medical advice. For final medical advice, consult your family doctor or a registered Sri Lankan doctor.',
       'si':
-          'මෙය Suwasiri AI විසින් සපයන පැහැදිලි කිරීමක් පමණි. වෘත්තීය වෛද්‍ය උපදෙස් වෙනුවට මෙය යොදා නොගන්න. අවසාන වෛද්‍ය උපදෙස් සඳහා ඔබේ පවුලේ වෛද්‍යවරයා (GP) හෝ ලියාපදිංචි ශ්‍රී ලාංකික වෛද්‍යවරයෙකු සමඟ සාකච්ඡා කරන්න.',
+          'මෙය සුවසිරි කෘතිම බුද්ධිය විසින් සපයන පැහැදිලි කිරීමක් පමණි. වෘත්තීය වෛද්‍ය උපදෙස් වෙනුවට මෙය යොදා නොගන්න. අවසාන වෛද්‍ය උපදෙස් සඳහා ඔබේ පවුලේ වෛද්‍යවරයා හෝ ලියාපදිංචි ශ්‍රී ලාංකික වෛද්‍යවරයෙකු සමඟ සාකච්ඡා කරන්න.',
       'ta':
-          'இது Suwasiri AI விளக்கம் மட்டுமே; தொழில்முறை மருத்துவ ஆலோசனைக்கு பதிலல்ல. இறுதி ஆலோசனைக்கு உங்கள் குடும்ப மருத்துவர் (GP) அல்லது பதிவுபெற்ற இலங்கை மருத்துவரை அணுகவும்.',
+          'இது சுவசிரி செயற்கை நுண்ணறிவு விளக்கம் மட்டுமே; தொழில்முறை மருத்துவ ஆலோசனைக்கு பதிலல்ல. இறுதி ஆலோசனைக்கு உங்கள் குடும்ப மருத்துவர் அல்லது பதிவுபெற்ற இலங்கை மருத்துவரை அணுகவும்.',
     });
   }
 
@@ -381,11 +471,13 @@ abstract final class LabAssistantReplies {
     late final String title;
     if (info == null) {
       title = '${m.name} — ${m.value}';
-    } else if (lang == 'en') {
-      title = '${info.en} (${info.abbrev}) — ${m.value}';
     } else {
-      final local = lang == 'si' ? info.si : info.ta;
-      title = '${info.en} ($local - ${info.abbrev}) — ${m.value}';
+      final local = lang == 'si'
+          ? info.si
+          : lang == 'ta'
+              ? info.ta
+              : info.en;
+      title = '$local — ${m.value}';
     }
     final range = m.normalRange.isNotEmpty
         ? m.normalRange
@@ -485,9 +577,9 @@ abstract final class LabAssistantReplies {
       case 'cardiology':
         return LabSpecialtyRec(
           heading: _t(lang, {
-            'en': 'Cardiologist (හෘද රෝග විශේෂඥ / இதய மருத்துவர்)',
-            'si': 'හෘද රෝග විශේෂඥ වෛද්‍ය (Cardiologist)',
-            'ta': 'இதய மருத்துவர் (Cardiologist)',
+            'en': 'Cardiologist',
+            'si': 'හෘද රෝග විශේෂඥ වෛද්‍ය',
+            'ta': 'இதய மருத்துவர்',
           }),
           body: _t(lang, {
             'en': allNormal
@@ -504,76 +596,76 @@ abstract final class LabAssistantReplies {
       case 'gastro':
         return LabSpecialtyRec(
           heading: _t(lang, {
-            'en': 'Gastroenterologist (අක්මා/ආහාර මාර්ග විශේෂඥ)',
-            'si': 'අක්මා හා ආහාර මාර්ග විශේෂඥ (Gastroenterologist)',
-            'ta': 'இரைப்பை குடல் / கல்லீரல் மருத்துவர் (Gastroenterologist)',
+            'en': 'Gastroenterologist',
+            'si': 'අක්මා හා ආහාර මාර්ග විශේෂඥ',
+            'ta': 'இரைப்பை குடல் மற்றும் கல்லீரல் மருத்துவர்',
           }),
           body: _t(lang, {
             'en':
                 'Liver enzymes and bilirubin are best interpreted with a gastroenterologist if you have abdominal symptoms, jaundice, or alcohol/medicine exposure.',
             'si':
-                'උදර රෝග ලක්ෂණ, කහිල, හෝ මත්පැන්/ඖෂධ නිරාවරණය ඇත්නම් අක්මා එන්සයිම gastroenterologist කෙනෙකු සමඟ අර්ථකථනය කරන්න.',
+                'උදර රෝග ලක්ෂණ, කහිල, හෝ මත්පැන් හෝ ඖෂධ නිරාවරණය ඇත්නම් අක්මා එන්සයිම අක්මා විශේෂඥවරයෙකු සමඟ අර්ථකථනය කරන්න.',
             'ta':
-                'வயிற்று அறிகுறி, மஞ்சள் காமாலை அல்லது மது/மருந்து பயன்பாடு இருந்தால் கல்லீரல் என்சைம்களை gastroenterologist உடன் பாருங்கள்.',
+                'வயிற்று அறிகுறி, மஞ்சள் காமாலை அல்லது மது அல்லது மருந்து பயன்பாடு இருந்தால் கல்லீரல் என்சைம்களை கல்லீரல் மருத்துவரிடம் பாருங்கள்.',
           }),
         );
       case 'endo':
         return LabSpecialtyRec(
           heading: _t(lang, {
-            'en': 'Endocrinologist (හෝමෝන/දියවැඩියා විශේෂඥ)',
-            'si': 'හෝමෝන හා දියවැඩියා විශේෂඥ (Endocrinologist)',
-            'ta': 'ஹார்மோன் / நீரிழிவு மருத்துவர் (Endocrinologist)',
+            'en': 'Endocrinologist',
+            'si': 'හෝමෝන හා දියවැඩියා විශේෂඥ',
+            'ta': 'ஹார்மோன் மற்றும் நீரிழிவு மருத்துவர்',
           }),
           body: _t(lang, {
             'en':
                 'Thyroid and glucose markers are followed by an endocrinologist when symptoms, family history, or repeat tests need specialist input.',
             'si':
-                'රෝග ලක්ෂණ, පවුල් ඉතිහාසය, හෝ නැවත පරීක්ෂණ සඳහා endocrinologist කෙනෙකු තයිරොයිඩ්/ග්ලූකෝස් සලකුණු අනුගමනය කරයි.',
+                'රෝග ලක්ෂණ, පවුල් ඉතිහාසය, හෝ නැවත පරීක්ෂණ සඳහා හෝමෝන විශේෂඥවරයෙකු තයිරොයිඩ් සහ රුධිර සීනි සලකුණු අනුගමනය කරයි.',
             'ta':
-                'அறிகுறிகள், குடும்ப வரலாறு அல்லது மீண்டும் பரிசோதனை தேவைப்பட்டால் தைராய்டு/குளுக்கோஸ் குறிகளை endocrinologist பார்ப்பார்.',
+                'அறிகுறிகள், குடும்ப வரலாறு அல்லது மீண்டும் பரிசோதனை தேவைப்பட்டால் தைராய்டு மற்றும் சர்க்கரை குறிகளை ஹார்மோன் மருத்துவர் பார்ப்பார்.',
           }),
         );
       case 'nephro':
         return LabSpecialtyRec(
           heading: _t(lang, {
-            'en': 'Nephrologist (වකුගඩු විශේෂඥ)',
-            'si': 'වකුගඩු විශේෂඥ (Nephrologist)',
-            'ta': 'சிறுநீரக மருத்துவர் (Nephrologist)',
+            'en': 'Nephrologist',
+            'si': 'වකුගඩු විශේෂඥ',
+            'ta': 'சிறுநீரக மருத்துவர்',
           }),
           body: _t(lang, {
             'en':
                 'Kidney markers should be reviewed by a nephrologist if they stay abnormal or you have swelling, high blood pressure, or diabetes.',
             'si':
-                'වකුගඩු සලකුණු අසාමාන්‍යව රැඳෙනවා නම් හෝ ඉදිමුම්, ඉහළ රුධිර පීඩනය, දියවැඩියාව ඇත්නම් nephrologist කෙනෙකු හමුවන්න.',
+                'වකුගඩු සලකුණු අසාමාන්‍යව රැඳෙනවා නම් හෝ ඉදිමුම්, ඉහළ රුධිර පීඩනය, දියවැඩියාව ඇත්නම් වකුගඩු විශේෂඥවරයෙකු හමුවන්න.',
             'ta':
-                'சிறுநீரக குறிகள் தொடர்ந்து மாறினால் அல்லது வீக்கம், உயர் அழுத்தம், நீரிழிவு இருந்தால் nephrologist-ஐ அணுகவும்.',
+                'சிறுநீரக குறிகள் தொடர்ந்து மாறினால் அல்லது வீக்கம், உயர் அழுத்தம், நீரிழிவு இருந்தால் சிறுநீரக மருத்துவரை அணுகவும்.',
           }),
         );
       case 'haematology':
         return LabSpecialtyRec(
           heading: _t(lang, {
-            'en': 'Haematologist (රුධිර රෝග විශේෂඥ)',
-            'si': 'රුධිර රෝග විශේෂඥ (Haematologist)',
-            'ta': 'இரத்தவியல் நிபுணர் (Haematologist)',
+            'en': 'Haematologist',
+            'si': 'රුධිර රෝග විශේෂඥ',
+            'ta': 'இரத்தவியல் நிபுணர்',
           }),
           body: _t(lang, {
             'en': allNormal
                 ? 'A haematologist can explain blood-count patterns if you later develop fever, unusual bruising, or fatigue.'
                 : 'A haematologist should interpret this blood count if values stay out of range or you have fever, bruising, or unusual tiredness.',
             'si': allNormal
-                ? 'පසුව උණ, තැලීම්, හෝ මහන්සිය ඇතිවුවහොත් රුධිර ගණන අර්ථකථනයට haematologist කෙනෙකු උපකාරී වේ.'
-                : 'අගයන් පරාසයෙන් බැහැරව රැඳෙනවා නම් හෝ උණ, තැලීම්, අසාමාන්‍ය මහන්සිය ඇත්නම් haematologist කෙනෙකු හමුවන්න.',
+                ? 'පසුව උණ, තැලීම්, හෝ මහන්සිය ඇතිවුවහොත් රුධිර ගණන අර්ථකථනයට රුධිර රෝග විශේෂඥවරයෙකු උපකාරී වේ.'
+                : 'අගයන් පරාසයෙන් බැහැරව රැඳෙනවා නම් හෝ උණ, තැලීම්, අසාමාන්‍ය මහන්සිය ඇත්නම් රුධිර රෝග විශේෂඥවරයෙකු හමුවන්න.',
             'ta': allNormal
-                ? 'பின்னர் காய்ச்சல், சிராய்ப்பு அல்லது சோர்வு வந்தால் இரத்த எண்ணிக்கையை haematologist விளக்கலாம்.'
-                : 'மதிப்புகள் வரம்பிற்கு வெளியே நிற்கிறதென்றால் அல்லது காய்ச்சல், சிராய்ப்பு, அசாதாரண சோர்வு இருந்தால் haematologist-ஐ பாருங்கள்.',
+                ? 'பின்னர் காய்ச்சல், சிராய்ப்பு அல்லது சோர்வு வந்தால் இரத்த எண்ணிக்கையை இரத்தவியல் நிபுணர் விளக்கலாம்.'
+                : 'மதிப்புகள் வரம்பிற்கு வெளியே நிற்கிறதென்றால் அல்லது காய்ச்சல், சிராய்ப்பு, அசாதாரண சோர்வு இருந்தால் இரத்தவியல் நிபுணரை பாருங்கள்.',
           }),
         );
       default:
         return LabSpecialtyRec(
           heading: _t(lang, {
-            'en': 'Physician / General Medicine (කායික රෝග විශේෂඥ වෛද්‍ය)',
-            'si': 'කායික රෝග පිළිබඳ විශේෂඥ වෛද්‍ය (General Medicine)',
-            'ta': 'பொது மருத்துவம் / மருத்துவர் (General Medicine)',
+            'en': 'Physician / general medicine',
+            'si': 'කායික රෝග පිළිබඳ විශේෂඥ වෛද්‍ය',
+            'ta': 'பொது மருத்துவ நிபுணர்',
           }),
           body: _t(lang, {
             'en':
@@ -635,15 +727,15 @@ abstract final class LabAssistantReplies {
       normalEn:
           'Your haemoglobin is in a healthy range. This protein carries oxygen in red cells, so a normal level supports good energy and shows no anaemia on this report.',
       normalSi:
-          'ඔබේ හෙමොග්ලොබින් මට්ටම නිරෝගී පරාසයක ඇත. මෙම ප්‍රෝටීනය රතු රුධිරාණු තුළ ඔක්සිජන් රැගෙන යයි. සාමාන්‍ය මට්ටමකින් ශක්තිය හොඳින් තිබෙන බවත්, මෙම වාර්තාවේ රක්තහීනතාවයක් (anaemia) නොමැති බවත් පෙනේ.',
+          'ඔබේ හෙමොග්ලොබින් මට්ටම නිරෝගී පරාසයක ඇත. මෙම ප්‍රෝටීනය රතු රුධිරාණු තුළ ඔක්සිජන් රැගෙන යයි. සාමාන්‍ය මට්ටමකින් ශක්තිය හොඳින් තිබෙන බවත්, මෙම වාර්තාවේ රක්තහීනතාවයක් නොමැති බවත් පෙනේ.',
       normalTa:
           'உங்கள் ஹீமோகுளோபின் ஆரோக்கியமான வரம்பில் உள்ளது. இது சிவப்பணுக்களில் ஆக்சிஜனை சுமக்கும் புரதம். இயல்பான அளவு நல்ல சக்தியையும் இந்த அறிக்கையில் இரத்தசோகை இல்லை என்பதையும் காட்டுகிறது.',
       attentionEn:
           'Your haemoglobin is outside the usual range. Low levels can mean anaemia; high levels need another cause checked. Please review this with a physician or haematologist.',
       attentionSi:
-          'ඔබේ හෙමොග්ලොබින් සාමාන්‍ය පරාසයෙන් බැහැරය. අඩු මට්ටම් රක්තහීනතාවයට සම්බන්ධ විය හැක. වෛද්‍යවරයෙකු හෝ haematologist කෙනෙකු සමඟ මෙය සමාලෝචනය කරන්න.',
+          'ඔබේ හෙමොග්ලොබින් සාමාන්‍ය පරාසයෙන් බැහැරය. අඩු මට්ටම් රක්තහීනතාවයට සම්බන්ධ විය හැක. වෛද්‍යවරයෙකු හෝ රුධිර රෝග විශේෂඥවරයෙකු සමඟ මෙය සමාලෝචනය කරන්න.',
       attentionTa:
-          'உங்கள் ஹீமோகுளோபின் வழக்கமான வரம்பிற்கு வெளியே உள்ளது. குறைவு இரத்தசோகையை குறிக்கலாம். மருத்துவர் அல்லது haematologist உடன் இதை பாருங்கள்.',
+          'உங்கள் ஹீமோகுளோபின் வழக்கமான வரம்பிற்கு வெளியே உள்ளது. குறைவு இரத்தசோகையை குறிக்கலாம். மருத்துவர் அல்லது இரத்தவியல் நிபுணருடன் இதை பாருங்கள்.',
     ),
     _MetricInfo(
       match: 'white',
@@ -655,7 +747,7 @@ abstract final class LabAssistantReplies {
       normalEn:
           'Your white blood cell count is normal. This means your immune system is working healthily and there is no lab sign of an active infection on this report.',
       normalSi:
-          'ඔබේ ශ්වේත රුධිරාණු ප්‍රමාණය සාමාන්‍ය වේ. මෙයින් පෙනී යන්නේ ඔබේ සිරුරේ ප්‍රතිශක්තිකරණ පද්ධතිය නිරෝගීව ක්‍රියා කරන බවත්, සිරුර තුළ කිසිදු ආසාදනයක් (infection) නොමැති බවත්ය.',
+          'ඔබේ ශ්වේත රුධිරාණු ප්‍රමාණය සාමාන්‍ය වේ. මෙයින් පෙනී යන්නේ ඔබේ සිරුරේ ප්‍රතිශක්තිකරණ පද්ධතිය නිරෝගීව ක්‍රියා කරන බවත්, සිරුර තුළ කිසිදු ආසාදනයක් නොමැති බවත්ය.',
       normalTa:
           'உங்கள் வெள்ளையணு எண்ணிக்கை இயல்பானது. நோயெதிர்ப்பு அமைப்பு ஆரோக்கியமாக செயல்படுகிறது என்றும் இந்த அறிக்கையில் செயல்படும் தொற்று இல்லை என்றும் இது காட்டுகிறது.',
       attentionEn:
@@ -675,7 +767,7 @@ abstract final class LabAssistantReplies {
       normalEn:
           'Your white blood cell count is normal. This means your immune system is working healthily and there is no lab sign of an active infection on this report.',
       normalSi:
-          'ඔබේ ශ්වේත රුධිරාණු ප්‍රමාණය සාමාන්‍ය වේ. මෙයින් පෙනී යන්නේ ඔබේ සිරුරේ ප්‍රතිශක්තිකරණ පද්ධතිය නිරෝගීව ක්‍රියා කරන බවත්, සිරුර තුළ කිසිදු ආසාදනයක් (infection) නොමැති බවත්ය.',
+          'ඔබේ ශ්වේත රුධිරාණු ප්‍රමාණය සාමාන්‍ය වේ. මෙයින් පෙනී යන්නේ ඔබේ සිරුරේ ප්‍රතිශක්තිකරණ පද්ධතිය නිරෝගීව ක්‍රියා කරන බවත්, සිරුර තුළ කිසිදු ආසාදනයක් නොමැති බවත්ය.',
       normalTa:
           'உங்கள் வெள்ளையணு எண்ணிக்கை இயல்பானது. நோயெதிர்ப்பு அமைப்பு ஆரோக்கியமாக செயல்படுகிறது என்றும் இந்த அறிக்கையில் செயல்படும் தொற்று இல்லை என்றும் இது காட்டுகிறது.',
       attentionEn:
@@ -701,9 +793,9 @@ abstract final class LabAssistantReplies {
       attentionEn:
           'Your platelet count is outside the usual range. Low platelets raise bleeding risk; high counts need another cause checked. Please see a haematologist or physician.',
       attentionSi:
-          'ඔබේ පට්ටිකා ගණන සාමාන්‍ය පරාසයෙන් බැහැරය. අඩු අගයන් ලේ ගැලීමේ අවදානම වැඩි කරයි. haematologist හෝ වෛද්‍යවරයෙකු හමුවන්න.',
+          'ඔබේ පට්ටිකා ගණන සාමාන්‍ය පරාසයෙන් බැහැරය. අඩු අගයන් ලේ ගැලීමේ අවදානම වැඩි කරයි. රුධිර රෝග විශේෂඥවරයෙකු හෝ වෛද්‍යවරයෙකු හමුවන්න.',
       attentionTa:
-          'உங்கள் பிளேட்லெட் எண்ணிக்கை வரம்பிற்கு வெளியே உள்ளது. குறைவு இரத்தப்போக்கு அபாயத்தை உயர்த்தும். haematologist அல்லது மருத்துவரை பாருங்கள்.',
+          'உங்கள் பிளேட்லெட் எண்ணிக்கை வரம்பிற்கு வெளியே உள்ளது. குறைவு இரத்தப்போக்கு அபாயத்தை உயர்த்தும். இரத்தவியல் நிபுணர் அல்லது மருத்துவரை பாருங்கள்.',
     ),
     _MetricInfo(
       match: 'red',
@@ -748,8 +840,8 @@ abstract final class LabAssistantReplies {
     _MetricInfo(
       match: 'ldl',
       en: 'LDL Cholesterol',
-      si: 'LDL කොලෙස්ටරෝල්',
-      ta: 'LDL கொழுப்பு',
+      si: 'අහිතකර කොලෙස්ටරෝල්',
+      ta: 'கெட்ட கொழுப்பு',
       abbrev: 'LDL',
       defaultRange: '< 100 mg/dL',
       normalEn:
@@ -768,8 +860,8 @@ abstract final class LabAssistantReplies {
     _MetricInfo(
       match: 'hdl',
       en: 'HDL Cholesterol',
-      si: 'HDL කොලෙස්ටරෝල්',
-      ta: 'HDL கொழுப்பு',
+      si: 'ආරක්ෂිත කොලෙස්ටරෝල්',
+      ta: 'பாதுகாப்பு கொழுப்பு',
       abbrev: 'HDL',
       defaultRange: '> 40 mg/dL',
       normalEn:
@@ -808,8 +900,8 @@ abstract final class LabAssistantReplies {
     _MetricInfo(
       match: 'alt',
       en: 'ALT',
-      si: 'ALT (අක්මා එන්සයිමය)',
-      ta: 'ALT (கல்லீரல் என்சைம்)',
+      si: 'අක්මා එන්සයිමය',
+      ta: 'கல்லீரல் என்சைம்',
       abbrev: 'ALT',
       defaultRange: '< 40 U/L',
       normalEn:
@@ -828,8 +920,8 @@ abstract final class LabAssistantReplies {
     _MetricInfo(
       match: 'ast',
       en: 'AST',
-      si: 'AST (අක්මා එන්සයිමය)',
-      ta: 'AST (கல்லீரல் என்சைம்)',
+      si: 'දෙවන අක්මා එන්සයිමය',
+      ta: 'இரண்டாம் கல்லீரல் என்சைம்',
       abbrev: 'AST',
       defaultRange: '< 40 U/L',
       normalEn:
@@ -867,63 +959,63 @@ abstract final class LabAssistantReplies {
     ),
     _MetricInfo(
       match: 'tsh',
-      en: 'TSH',
-      si: 'TSH (තයිරොයිඩ් හෝමෝනය)',
-      ta: 'TSH (தைராய்டு ஹார்மோன்)',
+      en: 'Thyroid stimulating hormone',
+      si: 'තයිරොයිඩ් උත්තේජක හෝමෝනය',
+      ta: 'தைராய்டு தூண்டல் ஹார்மோன்',
       abbrev: 'TSH',
       defaultRange: '0.4 - 4.0 mIU/L',
       normalEn:
           'Your TSH is in the usual range, which suggests the thyroid-stimulating signal is balanced on this test.',
       normalSi:
-          'ඔබේ TSH සාමාන්‍ය පරාසයේ ඇත. මෙය තයිරොයිඩ් උත්තේජක සංඥාව මෙම පරීක්ෂණයේ සමබර බවට ඉඟි කරයි.',
+          'ඔබේ තයිරොයිඩ් උත්තේජක හෝමෝනය සාමාන්‍ය පරාසයේ ඇත. මෙය තයිරොයිඩ් උත්තේජක සංඥාව මෙම පරීක්ෂණයේ සමබර බවට ඉඟි කරයි.',
       normalTa:
           'உங்கள் TSH வழக்கமான வரம்பில் உள்ளது. இந்த பரிசோதனையில் தைராய்டு தூண்டல் சமிக்ஞை சமநிலையில் உள்ளதை காட்டுகிறது.',
       attentionEn:
           'Your TSH is outside the usual range. An endocrinologist can decide if the thyroid is under- or over-active and whether treatment is needed.',
       attentionSi:
-          'ඔබේ TSH සාමාන්‍ය පරාසයෙන් බැහැරය. තයිරොයිඩය අඩුවෙන් හෝ වැඩිවෙන් ක්‍රියා කරන්නේදැයි endocrinologist කෙනෙකු තීරණය කරයි.',
+          'ඔබේ තයිරොයිඩ් උත්තේජක හෝමෝනය සාමාන්‍ය පරාසයෙන් බැහැරය. තයිරොයිඩය අඩුවෙන් හෝ වැඩිවෙන් ක්‍රියා කරන්නේදැයි හෝමෝන විශේෂඥවරයෙකු තීරණය කරයි.',
       attentionTa:
-          'உங்கள் TSH வரம்பிற்கு வெளியே உள்ளது. தைராய்டு குறைவா அல்லது அதிகமா செயல்படுகிறது என endocrinologist முடிவு செய்வார்.',
+          'உங்கள் தைராய்டு தூண்டல் ஹார்மோன் வரம்பிற்கு வெளியே உள்ளது. தைராய்டு குறைவா அல்லது அதிகமா செயல்படுகிறது என ஹார்மோன் மருத்துவர் முடிவு செய்வார்.',
     ),
     _MetricInfo(
       match: 't4',
-      en: 'Free T4',
-      si: 'Free T4',
-      ta: 'Free T4',
+      en: 'Free thyroid hormone',
+      si: 'නිදහස් තයිරොයිඩ් හෝමෝනය',
+      ta: 'தடையற்ற தைராய்டு ஹார்மோன்',
       abbrev: 'FT4',
       defaultRange: '0.8 - 1.8 ng/dL',
       normalEn:
           'Your free T4 is in the usual range, which supports a balanced thyroid hormone level on this report.',
       normalSi:
-          'ඔබේ Free T4 සාමාන්‍ය පරාසයේ ඇත. මෙය මෙම වාර්තාවේ තයිරොයිඩ් හෝමෝන මට්ටම සමබර බවට සහාය දක්වයි.',
+          'ඔබේ නිදහස් තයිරොයිඩ් හෝමෝනය සාමාන්‍ය පරාසයේ ඇත. මෙය මෙම වාර්තාවේ තයිරොයිඩ් හෝමෝන මට්ටම සමබර බවට සහාය දක්වයි.',
       normalTa:
-          'உங்கள் Free T4 வழக்கமான வரம்பில் உள்ளது. இந்த அறிக்கையில் தைராய்டு ஹார்மோன் சமநிலையில் உள்ளதை காட்டுகிறது.',
+          'உங்கள் தடையற்ற தைராய்டு ஹார்மோன் வழக்கமான வரம்பில் உள்ளது. இந்த அறிக்கையில் தைராய்டு ஹார்மோன் சமநிலையில் உள்ளதை காட்டுகிறது.',
       attentionEn:
-          'Your free T4 is outside the usual range and should be reviewed with TSH by an endocrinologist.',
+          'Your free thyroid hormone is outside the usual range and should be reviewed with thyroid stimulating hormone by an endocrinologist.',
       attentionSi:
-          'ඔබේ Free T4 සාමාන්‍ය පරාසයෙන් බැහැරය. TSH සමඟ endocrinologist කෙනෙකු සමාලෝචනය කළ යුතුය.',
+          'ඔබේ නිදහස් තයිරොයිඩ් හෝමෝනය සාමාන්‍ය පරාසයෙන් බැහැරය. තයිරොයිඩ් උත්තේජක හෝමෝනය සමඟ හෝමෝන විශේෂඥවරයෙකු සමාලෝචනය කළ යුතුය.',
       attentionTa:
-          'உங்கள் Free T4 வரம்பிற்கு வெளியே உள்ளது. TSH உடன் endocrinologist பார்வையிட வேண்டும்.',
+          'உங்கள் தடையற்ற தைராய்டு ஹார்மோன் வரம்பிற்கு வெளியே உள்ளது. தைராய்டு தூண்டல் ஹார்மோனுடன் ஹார்மோன் மருத்துவர் பார்வையிட வேண்டும்.',
     ),
     _MetricInfo(
       match: 'hba1c',
-      en: 'HbA1c',
-      si: 'HbA1c (සාමාන්‍ය රුධිර සීනි)',
-      ta: 'HbA1c (சராசரி இரத்த சர்க்கரை)',
+      en: 'Average blood sugar',
+      si: 'තුන්මසක සාමාන්‍ය රුධිර සීනි',
+      ta: 'மூன்று மாத சராசரி இரத்த சர்க்கரை',
       abbrev: 'HbA1c',
       defaultRange: '< 5.7%',
       normalEn:
           'Your HbA1c is in a non-diabetic range on this report. It reflects average blood sugar over about three months.',
       normalSi:
-          'ඔබේ HbA1c මෙම වාර්තාවේ දියවැඩියා නොවන පරාසයක ඇත. එය මාස තුනක පමණ සාමාන්‍ය රුධිර සීනි පෙන්වයි.',
+          'ඔබේ තුන්මසක සාමාන්‍ය රුධිර සීනි මෙම වාර්තාවේ දියවැඩියා නොවන පරාසයක ඇත. එය මාස තුනක පමණ සාමාන්‍ය රුධිර සීනි පෙන්වයි.',
       normalTa:
-          'உங்கள் HbA1c இந்த அறிக்கையில் நீரிழிவு அல்லாத வரம்பில் உள்ளது. சுமார் மூன்று மாத சராசரி இரத்த சர்க்கரையை காட்டுகிறது.',
+          'உங்கள் மூன்று மாத சராசரி இரத்த சர்க்கரை இந்த அறிக்கையில் நீரிழிவு அல்லாத வரம்பில் உள்ளது.',
       attentionEn:
-          'Your HbA1c is in an attention range (often 5.7–6.4% is prediabetes). Discuss lifestyle and follow-up with a GP or endocrinologist. This is not a diagnosis.',
+          'Your average blood sugar is in an attention range (often 5.7–6.4% is prediabetes). Discuss lifestyle and follow-up with a family doctor or endocrinologist. This is not a diagnosis.',
       attentionSi:
-          'ඔබේ HbA1c අවධානය යොමු කළ යුතු පරාසයක ඇත (බොහෝ විට 5.7–6.4% පෙර-දියවැඩියාවයි). ජීවන රටාව සහ පසු විමසුම GP හෝ endocrinologist සමඟ සාකච්ඡා කරන්න. මෙය රෝග විනිශ්චයක් නොවේ.',
+          'ඔබේ තුන්මසක සාමාන්‍ය රුධිර සීනි අවධානය යොමු කළ යුතු පරාසයක ඇත. බොහෝ විට මෙය පෙර-දියවැඩියා පරාසයයි. ජීවන රටාව සහ පසු විමසුම පවුලේ වෛද්‍යවරයා හෝ හෝමෝන විශේෂඥවරයෙකු සමඟ සාකච්ඡා කරන්න. මෙය රෝග විනිශ්චයක් නොවේ.',
       attentionTa:
-          'உங்கள் HbA1c கவன வரம்பில் உள்ளது (பெரும்பாலும் 5.7–6.4% முன்-நீரிழிவு). வாழ்க்கை முறை மற்றும் பின்தொடர்தலை GP அல்லது endocrinologist உடன் பேசுங்கள். இது நோய் கண்டறிதல் அல்ல.',
+          'உங்கள் மூன்று மாத சராசரி இரத்த சர்க்கரை கவன வரம்பில் உள்ளது. வாழ்க்கை முறை மற்றும் பின்தொடர்தலை குடும்ப மருத்துவர் அல்லது ஹார்மோன் மருத்துவரிடம் பேசுங்கள். இது நோய் கண்டறிதல் அல்ல.',
     ),
   ];
 }

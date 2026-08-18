@@ -147,9 +147,18 @@ class _LabReportDetailBodyState extends State<_LabReportDetailBody> {
                           review: state.aiReview,
                           onLanguage: (lang) =>
                               setState(() => _language = lang),
-                          onSummarize: () => _askAi(
-                            LabAssistantReplies.explainPrompt(_language),
-                          ),
+                          onExplainSi: () {
+                            setState(() => _language = 'si');
+                            _askAi(LabAssistantReplies.commandExplainSi);
+                          },
+                          onExplainEn: () {
+                            setState(() => _language = 'en');
+                            _askAi(LabAssistantReplies.commandExplainEn);
+                          },
+                          onExplainTa: () {
+                            setState(() => _language = 'ta');
+                            _askAi(LabAssistantReplies.commandExplainTa);
+                          },
                           onRecommend: () => _askAi(
                             LabAssistantReplies.recommendPrompt(_language),
                           ),
@@ -546,7 +555,9 @@ class _CopilotCard extends StatelessWidget {
     required this.lastQuestion,
     required this.review,
     required this.onLanguage,
-    required this.onSummarize,
+    required this.onExplainSi,
+    required this.onExplainEn,
+    required this.onExplainTa,
     required this.onRecommend,
     required this.onSend,
   });
@@ -560,7 +571,9 @@ class _CopilotCard extends StatelessWidget {
   final String? lastQuestion;
   final LabAiReview? review;
   final ValueChanged<String> onLanguage;
-  final VoidCallback onSummarize;
+  final VoidCallback onExplainSi;
+  final VoidCallback onExplainEn;
+  final VoidCallback onExplainTa;
   final VoidCallback onRecommend;
   final VoidCallback onSend;
 
@@ -708,8 +721,16 @@ class _CopilotCard extends StatelessWidget {
             runSpacing: 8,
             children: [
               _QuickChip(
-                label: l.t('summarizeReport'),
-                onTap: loading ? null : onSummarize,
+                label: LabAssistantReplies.commandExplainSi,
+                onTap: loading ? null : onExplainSi,
+              ),
+              _QuickChip(
+                label: LabAssistantReplies.commandExplainEn,
+                onTap: loading ? null : onExplainEn,
+              ),
+              _QuickChip(
+                label: LabAssistantReplies.commandExplainTa,
+                onTap: loading ? null : onExplainTa,
               ),
               _QuickChip(
                 label: l.t('recommendSpecialist'),

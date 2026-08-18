@@ -65,7 +65,7 @@ Stable `barcodeNumber` is generated once from uid + NIC and shown on Profile Uni
 
 ## Vault AI Lab
 
-`LabAssistantReplies.review` builds an EN/SI/TA explanation of the open lab report (every biomarker, recommendations, disclaimer). Vault copilot chips + typed phrases (`explain by sinhala language`) pick the language. Recommended catalog doctors are tappable and open `showBookingCheckoutFlow`.
+`LabAssistantReplies.review` builds a **monolingual** explanation of the open lab report (Sinhala only, English only, or Tamil only). Vault chips `explain by Sinhala Language` / `explain by English language` / `explain by Tamil language` pick the language. Recommended catalog doctors are tappable and open `showBookingCheckoutFlow`.
 
 ## Localization
 
