@@ -30,7 +30,10 @@ abstract class HealthRepository {
     required List<Prescription> medicines,
   });
 
-  Future<List<VaccineProtocol>> getVaccineProtocols(String patientId);
+  Future<List<VaccineProtocol>> getVaccineProtocols(
+    String patientId, {
+    DateTime? dateOfBirth,
+  });
   Future<List<ClinicFacility>> getClinics({
     String? district,
     FacilityType type = FacilityType.all,

@@ -216,9 +216,15 @@ class FirebaseHealthRepository implements HealthRepository {
   }
 
   @override
-  Future<List<VaccineProtocol>> getVaccineProtocols(String patientId) async {
-    // Active protocols only (pending + scheduled). Completed live in Vault history.
-    return VaccineCatalog.activeProtocols();
+  Future<List<VaccineProtocol>> getVaccineProtocols(
+    String patientId, {
+    DateTime? dateOfBirth,
+  }) async {
+    final bookings = await getVaccineBookings(patientId);
+    return VaccineCatalog.protocolsFor(
+      dateOfBirth: dateOfBirth,
+      bookings: bookings,
+    );
   }
 
   @override
@@ -275,6 +281,7 @@ class FirebaseHealthRepository implements HealthRepository {
       status: 'confirmed',
       vaccineName: vaccineName,
       address: clinic?.address ?? '',
+      bookedAt: DateTime.now(),
     );
     await _vaccinations.doc(booking.id).set({
       'patientId': patientId,

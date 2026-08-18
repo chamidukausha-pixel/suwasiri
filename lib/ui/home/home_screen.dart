@@ -88,7 +88,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final schedule = context.watch<ScheduleCubit>().state;
     final nextClinic = schedule.nextClinic;
     final nextVideo = schedule.nextVideo;
-    final nextVaccine = schedule.nextVaccine;
+    final upcomingVaccines = schedule.upcomingVaccines;
     final hospitalName =
         nextClinic == null ? null : doctorHospital(nextClinic);
     final firstName = user?.name.split(' ').first ?? '';
@@ -224,12 +224,16 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 12),
           ],
-          if (nextVaccine != null) ...[
-            _UpcomingVaccineCard(
-              booking: nextVaccine,
-              onDetails: () => _openVaccineMaps(nextVaccine),
+          if (upcomingVaccines.isNotEmpty) ...[
+            ...upcomingVaccines.map(
+              (booking) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _UpcomingVaccineCard(
+                  booking: booking,
+                  onDetails: () => _openVaccineMaps(booking),
+                ),
+              ),
             ),
-            const SizedBox(height: 12),
           ],
           const SizedBox(height: 2),
           _HealthTipCard(

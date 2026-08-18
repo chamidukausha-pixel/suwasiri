@@ -32,8 +32,11 @@ class UserProfile extends Equatable {
   final String? barcodeNumber;
   final PatientHealthIntake? healthIntake;
 
+  DateTime? get effectiveDateOfBirth =>
+      dateOfBirth ?? healthIntake?.dateOfBirth;
+
   int? get ageYears {
-    final dob = dateOfBirth ?? healthIntake?.dateOfBirth;
+    final dob = effectiveDateOfBirth;
     if (dob == null) return null;
     final now = DateTime.now();
     var age = now.year - dob.year;

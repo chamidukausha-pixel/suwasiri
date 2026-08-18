@@ -14,14 +14,14 @@ class VaccineState extends Equatable {
     this.district = '',
     this.facilityType = FacilityType.all,
     this.query = '',
-    this.immunizationTarget =
-        'Dengue Prevention (Dose 2) (Qdenga® Tetravalent Vaccine)',
+    this.immunizationTarget = '',
     this.selectedClinic,
     this.selectedDate,
     this.selectedSlot,
     this.bookingStage,
     this.loading = false,
     this.message,
+    this.lastBooking,
   });
 
   final List<VaccineProtocol> protocols;
@@ -38,6 +38,7 @@ class VaccineState extends Equatable {
   final String? bookingStage;
   final bool loading;
   final String? message;
+  final VaccineBooking? lastBooking;
 
   /// Unique calendar days from [slots].
   List<DateTime> get availableDates {
@@ -76,10 +77,12 @@ class VaccineState extends Equatable {
     String? bookingStage,
     bool? loading,
     String? message,
+    VaccineBooking? lastBooking,
     bool clearClinic = false,
     bool clearDate = false,
     bool clearSlot = false,
     bool clearMessage = false,
+    bool clearLastBooking = false,
   }) {
     return VaccineState(
       protocols: protocols ?? this.protocols,
@@ -97,6 +100,8 @@ class VaccineState extends Equatable {
       bookingStage: bookingStage,
       loading: loading ?? this.loading,
       message: clearMessage ? null : (message ?? this.message),
+      lastBooking:
+          clearLastBooking ? null : (lastBooking ?? this.lastBooking),
     );
   }
 
@@ -116,6 +121,7 @@ class VaccineState extends Equatable {
         bookingStage,
         loading,
         message,
+        lastBooking,
       ];
 }
 
@@ -123,11 +129,18 @@ class VaccineCubit extends Cubit<VaccineState> {
   VaccineCubit(this._health) : super(const VaccineState());
 
   final HealthRepository _health;
+  DateTime? _dateOfBirth;
+  String? _patientId;
 
-  Future<void> bootstrap(String patientId) async {
+  Future<void> bootstrap(String patientId, {DateTime? dateOfBirth}) async {
+    _patientId = patientId;
+    _dateOfBirth = dateOfBirth ?? _dateOfBirth;
     emit(state.copyWith(loading: true));
     await _health.syncMoh();
-    final protocols = await _health.getVaccineProtocols(patientId);
+    final protocols = await _health.getVaccineProtocols(
+      patientId,
+      dateOfBirth: _dateOfBirth,
+    );
     final active = protocols
         .where((p) => p.status != VaccineStatus.completed)
         .toList();
@@ -142,7 +155,21 @@ class VaccineCubit extends Cubit<VaccineState> {
       clinics: clinics,
       lastSync: sync,
       loading: false,
+      immunizationTarget: _nextTarget(active, state.immunizationTarget),
     ));
+  }
+
+  String _nextTarget(List<VaccineProtocol> protocols, String current) {
+    if (VaccineCatalog.immunizationTargets.contains(current) &&
+        current.isNotEmpty) {
+      return current;
+    }
+    for (final p in protocols) {
+      if (VaccineCatalog.immunizationTargets.contains(p.name)) {
+        return p.name;
+      }
+    }
+    return VaccineCatalog.immunizationTargets.first;
   }
 
   Future<void> refreshClinics() async {
@@ -231,11 +258,21 @@ class VaccineCubit extends Cubit<VaccineState> {
     emit(state.copyWith(selectedSlot: slot));
   }
 
-  void prepareBookingSheet() {
-    final matched = VaccineCatalog.immunizationTargets.firstWhere(
-      (t) => t.contains('Dengue Prevention (Dose 2)'),
-      orElse: () => VaccineCatalog.immunizationTargets.first,
-    );
+  void prepareBookingSheet({String? immunizationTarget}) {
+    String? preferred = immunizationTarget;
+    if (preferred == null) {
+      for (final p in state.protocols) {
+        if (p.status == VaccineStatus.pending &&
+            VaccineCatalog.immunizationTargets.contains(p.name)) {
+          preferred = p.name;
+          break;
+        }
+      }
+    }
+    final matched = preferred != null &&
+            VaccineCatalog.immunizationTargets.contains(preferred)
+        ? preferred
+        : VaccineCatalog.immunizationTargets.first;
     emit(state.copyWith(
       immunizationTarget: matched,
       district: '',
@@ -245,6 +282,8 @@ class VaccineCubit extends Cubit<VaccineState> {
       clearDate: true,
       clearSlot: true,
       slots: const [],
+      clearLastBooking: true,
+      clearMessage: true,
     ));
     refreshClinics();
   }
@@ -269,9 +308,21 @@ class VaccineCubit extends Cubit<VaccineState> {
       ceylonHealthId: ceylonHealthId,
       vaccineName: state.immunizationTarget,
     );
+    List<VaccineProtocol>? protocols;
+    try {
+      protocols = (await _health.getVaccineProtocols(
+        _patientId ?? patientId,
+        dateOfBirth: _dateOfBirth,
+      ))
+          .where((p) => p.status != VaccineStatus.completed)
+          .toList();
+    } catch (_) {}
+    if (isClosed) return;
     emit(state.copyWith(
       bookingStage: null,
       message: 'Booked ${booking.facilityName}',
+      lastBooking: booking,
+      protocols: protocols,
       clearClinic: true,
       clearDate: true,
       clearSlot: true,

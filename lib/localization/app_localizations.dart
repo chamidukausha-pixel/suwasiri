@@ -1036,6 +1036,19 @@ class AppLocalizations {
       'ta':
           'முழு பாதுகாப்பிற்கு உங்கள் இரண்டாவது டோஸ் (Qdenga) {days} நாட்களில் நிலுவையில் உள்ளது.',
     },
+    'nextVaccineProtocolBody': {
+      'en':
+          '{name} is due on {date} ({days} days). This reminder is from the national immunization schedule.',
+      'si':
+          '{name} {date} ({days} දින) දින නියමිතයි. මෙය ජාතික එන්නත් කාලසටහනේ සිහිපත් කිරීමකි.',
+      'ta':
+          '{name} {date} ({days} நாட்கள்) அன்று நிலுவையில் உள்ளது. இது தேசிய தடுப்பூசி அட்டவணை நினைவூட்டல்.',
+    },
+    'nextVaccineProtocolBodyNoDate': {
+      'en': '{name} is on your immunization reminder list. Schedule a session when ready.',
+      'si': '{name} ඔබේ එන්නත් සිහිපත් කිරීම් ලැයිස්තුවේ ඇත. සූදානම් වූ විට වෙන්කරවා ගන්න.',
+      'ta': '{name} உங்கள் தடுப்பூசி நினைவூட்டல் பட்டியலில் உள்ளது. தயாரானதும் திட்டமிடுங்கள்.',
+    },
     'registryStatusActive': {
       'en': 'Registry Status: Active Secure',
       'si': 'ලේඛන තත්ත්වය: සක්‍රීය ආරක්ෂිත',

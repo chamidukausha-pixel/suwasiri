@@ -46,7 +46,7 @@ class _MainShellState extends State<MainShell> {
       const AppointmentsScreen(),
       TelehealthScreen(isActive: _index == 2),
       const VaultScreen(),
-      const VaccineScreen(),
+      VaccineScreen(isActive: _index == 4),
       const ProfileScreen(),
     ];
 

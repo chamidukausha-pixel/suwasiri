@@ -25,6 +25,30 @@ class VaccineProtocol extends Equatable {
   final String statusDetail;
   final bool booked;
 
+  VaccineProtocol copyWith({
+    String? id,
+    String? name,
+    String? doseLabel,
+    double? progress,
+    DateTime? nextDue,
+    String? productName,
+    VaccineStatus? status,
+    String? statusDetail,
+    bool? booked,
+  }) {
+    return VaccineProtocol(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      doseLabel: doseLabel ?? this.doseLabel,
+      progress: progress ?? this.progress,
+      nextDue: nextDue ?? this.nextDue,
+      productName: productName ?? this.productName,
+      status: status ?? this.status,
+      statusDetail: statusDetail ?? this.statusDetail,
+      booked: booked ?? this.booked,
+    );
+  }
+
   @override
   List<Object?> get props => [
         id,
@@ -78,6 +102,7 @@ class VaccineBooking extends Equatable {
     this.address = '',
     this.latitude,
     this.longitude,
+    this.bookedAt,
   });
 
   final String id;
@@ -90,6 +115,7 @@ class VaccineBooking extends Equatable {
   final String address;
   final double? latitude;
   final double? longitude;
+  final DateTime? bookedAt;
 
   String get placeLabel {
     final parts = [
@@ -109,6 +135,7 @@ class VaccineBooking extends Equatable {
         'address': address,
         'latitude': latitude,
         'longitude': longitude,
+        'bookedAt': (bookedAt ?? DateTime.now()).toIso8601String(),
       };
 
   factory VaccineBooking.fromMap(String id, Map<String, dynamic> map) {
@@ -123,6 +150,7 @@ class VaccineBooking extends Equatable {
       address: map['address'] as String? ?? '',
       latitude: (map['latitude'] as num?)?.toDouble(),
       longitude: (map['longitude'] as num?)?.toDouble(),
+      bookedAt: DateTime.tryParse(map['bookedAt'] as String? ?? ''),
     );
   }
 
@@ -138,5 +166,6 @@ class VaccineBooking extends Equatable {
         address,
         latitude,
         longitude,
+        bookedAt,
       ];
 }

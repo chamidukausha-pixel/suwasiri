@@ -324,8 +324,15 @@ class DemoHealthRepository implements HealthRepository {
   }
 
   @override
-  Future<List<VaccineProtocol>> getVaccineProtocols(String patientId) async {
-    return VaccineCatalog.activeProtocols();
+  Future<List<VaccineProtocol>> getVaccineProtocols(
+    String patientId, {
+    DateTime? dateOfBirth,
+  }) async {
+    final bookings = await getVaccineBookings(patientId);
+    return VaccineCatalog.protocolsFor(
+      dateOfBirth: dateOfBirth,
+      bookings: bookings,
+    );
   }
 
   @override
@@ -386,6 +393,7 @@ class DemoHealthRepository implements HealthRepository {
       status: 'confirmed',
       vaccineName: vaccineName,
       address: clinic?.address ?? '',
+      bookedAt: DateTime.now(),
     );
     final raw = _prefs.getString(_kBookings);
     final list = raw == null

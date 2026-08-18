@@ -43,13 +43,17 @@ class ScheduleState extends Equatable {
     return best;
   }
 
-  VaccineBooking? get nextVaccine {
+  VaccineBooking? get nextVaccine =>
+      upcomingVaccines.isEmpty ? null : upcomingVaccines.first;
+
+  /// All confirmed vaccine sessions that have not expired — Home green cards.
+  List<VaccineBooking> get upcomingVaccines {
     final list = vaccineBookings
         .where((b) =>
             b.status == 'confirmed' && b.slot.isAfter(DateTime.now()))
         .toList()
       ..sort((a, b) => a.slot.compareTo(b.slot));
-    return list.isEmpty ? null : list.first;
+    return list;
   }
 
   ScheduleState copyWith({
@@ -94,7 +98,7 @@ class ScheduleCubit extends Cubit<ScheduleState> {
       if (isClosed) return;
       emit(state.copyWith(
         appointments: _mergePending(appts),
-        vaccineBookings: vax,
+        vaccineBookings: _mergePendingVaccines(vax),
         tick: state.tick + 1,
       ));
     });
@@ -115,7 +119,7 @@ class ScheduleCubit extends Cubit<ScheduleState> {
     if (isClosed) return;
     emit(state.copyWith(
       appointments: _mergePending(appts),
-      vaccineBookings: vax,
+      vaccineBookings: _mergePendingVaccines(vax),
       tick: state.tick + 1,
     ));
   }
@@ -139,6 +143,27 @@ class ScheduleCubit extends Cubit<ScheduleState> {
       appointments: [appt, ...others],
       tick: state.tick + 1,
     ));
+  }
+
+  /// Instantly show vaccine sessions on the Home green cards.
+  void recordVaccineBooking(VaccineBooking booking) {
+    final others =
+        state.vaccineBookings.where((b) => b.id != booking.id).toList();
+    emit(state.copyWith(
+      vaccineBookings: [booking, ...others],
+      tick: state.tick + 1,
+    ));
+  }
+
+  List<VaccineBooking> _mergePendingVaccines(List<VaccineBooking> remote) {
+    final ids = remote.map((b) => b.id).toSet();
+    final extras = state.vaccineBookings.where((b) {
+      if (ids.contains(b.id)) return false;
+      final booked = b.bookedAt;
+      if (booked == null) return false;
+      return DateTime.now().difference(booked) < const Duration(seconds: 20);
+    });
+    return [...remote, ...extras];
   }
 
   @override

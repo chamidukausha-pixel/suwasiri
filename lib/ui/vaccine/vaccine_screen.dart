@@ -15,7 +15,9 @@ import '../widgets/suwasiri_brand_header.dart';
 import 'vaccine_booking_sheet.dart';
 
 class VaccineScreen extends StatefulWidget {
-  const VaccineScreen({super.key});
+  const VaccineScreen({super.key, this.isActive = true});
+
+  final bool isActive;
 
   @override
   State<VaccineScreen> createState() => _VaccineScreenState();
@@ -25,27 +27,42 @@ class _VaccineScreenState extends State<VaccineScreen> {
   @override
   void initState() {
     super.initState();
-    final user = context.read<AuthCubit>().state.user;
-    if (user != null) {
-      context.read<VaccineCubit>().bootstrap(user.id).then((_) {
-        if (!mounted) return;
-        context.read<NotificationCubit>().load();
-        context.read<NotificationCubit>().showToast(
-              AppNotification(
-                id: 'toast-moh-${DateTime.now().millisecondsSinceEpoch}',
-                title: 'MOH Live Synced',
-                body: 'Immunization registry refreshed.',
-                timestamp: DateTime.now(),
-                type: NotificationPayloadType.sync,
-              ),
-            );
-      });
+    _bootstrap(showToast: true);
+  }
+
+  @override
+  void didUpdateWidget(VaccineScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      _bootstrap();
     }
   }
 
-  Future<void> _openBookingSheet() async {
+  void _bootstrap({bool showToast = false}) {
+    final user = context.read<AuthCubit>().state.user;
+    if (user == null) return;
+    context
+        .read<VaccineCubit>()
+        .bootstrap(user.id, dateOfBirth: user.effectiveDateOfBirth)
+        .then((_) {
+      if (!mounted) return;
+      context.read<NotificationCubit>().load();
+      if (!showToast) return;
+      context.read<NotificationCubit>().showToast(
+            AppNotification(
+              id: 'toast-moh-${DateTime.now().millisecondsSinceEpoch}',
+              title: 'MOH Live Synced',
+              body: 'Immunization registry refreshed.',
+              timestamp: DateTime.now(),
+              type: NotificationPayloadType.sync,
+            ),
+          );
+    });
+  }
+
+  Future<void> _openBookingSheet({VaccineProtocol? protocol}) async {
     final cubit = context.read<VaccineCubit>();
-    cubit.prepareBookingSheet();
+    cubit.prepareBookingSheet(immunizationTarget: protocol?.name);
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -68,6 +85,8 @@ class _VaccineScreenState extends State<VaccineScreen> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return BlocConsumer<VaccineCubit, VaccineState>(
+      listenWhen: (prev, curr) =>
+          curr.message != null && curr.message != prev.message,
       listener: (context, state) {
         if (state.message != null) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -76,7 +95,12 @@ class _VaccineScreenState extends State<VaccineScreen> {
           context.read<NotificationCubit>().load();
           final user = context.read<AuthCubit>().state.user;
           if (user != null) {
-            context.read<ScheduleCubit>().watch(user.id);
+            final schedule = context.read<ScheduleCubit>();
+            final booked = state.lastBooking;
+            if (booked != null) {
+              schedule.recordVaccineBooking(booked);
+            }
+            schedule.watch(user.id);
           }
           if (state.message!.startsWith('Booked') &&
               Navigator.of(context).canPop()) {
@@ -88,14 +112,8 @@ class _VaccineScreenState extends State<VaccineScreen> {
         final activeProtocols = state.protocols
             .where((p) => p.status != VaccineStatus.completed)
             .toList();
-        VaccineProtocol? dengue;
-        for (final p in activeProtocols) {
-          if (p.name.toLowerCase().contains('dengue')) {
-            dengue = p;
-            break;
-          }
-        }
-        dengue ??= activeProtocols.isEmpty ? null : activeProtocols.first;
+        final nextProtocol =
+            activeProtocols.isEmpty ? null : activeProtocols.first;
         final syncTime = state.lastSync ?? DateTime.now();
 
         return SafeArea(
@@ -147,7 +165,7 @@ class _VaccineScreenState extends State<VaccineScreen> {
                 },
               ),
               const SizedBox(height: 14),
-              if (dengue != null) _ActiveProtocolCard(protocol: dengue),
+              if (nextProtocol != null) _ActiveProtocolCard(protocol: nextProtocol),
               const SizedBox(height: 18),
               Text(
                 l.t('registeredProtocols'),
@@ -160,7 +178,7 @@ class _VaccineScreenState extends State<VaccineScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Pending & scheduled doses only — completed vaccines are in Vault → Vaccine History.',
+                'Childhood EPI dates are calculated from date of birth. Pending & scheduled doses only — completed vaccines are in Vault → Vaccine History.',
                 style: TextStyle(
                   color: Colors.grey.shade600,
                   fontSize: 12,
@@ -182,7 +200,7 @@ class _VaccineScreenState extends State<VaccineScreen> {
                     child: _ProtocolCard(
                       protocol: p,
                       onSchedule: p.status == VaccineStatus.pending
-                          ? _openBookingSheet
+                          ? () => _openBookingSheet(protocol: p)
                           : null,
                     ),
                   ),
@@ -462,7 +480,7 @@ class _ActiveProtocolCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            l.t('activeDengueProtocol'),
+            protocol.name,
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w800,
@@ -471,7 +489,17 @@ class _ActiveProtocolCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            l.t('activeDengueBody').replaceAll('{days}', '$days'),
+            protocol.nextDue == null
+                ? l.t('nextVaccineProtocolBodyNoDate')
+                    .replaceAll('{name}', protocol.name)
+                : l
+                    .t('nextVaccineProtocolBody')
+                    .replaceAll('{name}', protocol.name)
+                    .replaceAll(
+                      '{date}',
+                      DateFormat('d MMM yyyy').format(protocol.nextDue!),
+                    )
+                    .replaceAll('{days}', '$days'),
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.92),
               fontSize: 13,

@@ -63,6 +63,12 @@ Stable `barcodeNumber` is generated once from uid + NIC and shown on Profile Uni
 
 `ScheduleCubit` holds live appointments. Home **blue** card = latest in-person (`ConsultMode.clinic`) booking; Home **purple** card and Call = latest video (`ConsultMode.video`) booking. Each new checkout replaces that mode’s card via `bookedAt` + `recordBooking`.
 
+Home **green** cards list **every** confirmed vaccine booking that has not expired (`ScheduleState.upcomingVaccines`). No bookings → the green section is hidden. After checkout, `recordVaccineBooking` updates Home immediately.
+
+## Childhood EPI reminders
+
+For patients under 10, `VaccineCatalog.protocolsFor` builds Sri Lanka EPI due dates from `UserProfile.effectiveDateOfBirth` (calendar months from birth). Upcoming and recently overdue doses appear on the Vaccines tab as protocol reminders. Ages 10+ keep the adult/travel protocol list. Booked doses are marked scheduled when the immunization name matches.
+
 ## Vault AI Lab
 
 `LabAssistantReplies.review` builds a **monolingual** explanation of the open lab report (Sinhala only, English only, or Tamil only). Vault chips `explain by Sinhala Language` / `explain by English language` / `explain by Tamil language` pick the language. Recommended catalog doctors are tappable and open `showBookingCheckoutFlow`.
