@@ -7,6 +7,7 @@ import '../../bloc/locale/locale_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../localization/app_localizations.dart';
 import '../../localization/health_intake_l10n.dart';
+import '../../data/models/family_member.dart';
 import '../auth/health_intake_screen.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/profile_avatar.dart';
@@ -96,6 +97,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _openHealthIntake() async {
+    if (!context.read<AuthCubit>().isActiveOwner) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Only the main applicant can edit intake in this prototype.',
+          ),
+        ),
+      );
+      return;
+    }
+
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => const HealthIntakeScreen(editing: true),
@@ -106,6 +118,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _changePhoto() async {
     final l = AppLocalizations.of(context);
+    if (!context.read<AuthCubit>().isActiveOwner) return;
     final user = context.read<AuthCubit>().state.user;
     if (user == null) return;
 
@@ -156,7 +169,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final user = context.watch<AuthCubit>().state.user;
+    final auth = context.watch<AuthCubit>().state;
+    final user = auth.user;
 
     if (user == null) {
       return EmptyHint(l.t('notSignedIn'));
@@ -169,6 +183,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           const SuwasiriBrandHeader(),
           const SizedBox(height: 18),
+          if (auth.familyMembers.isNotEmpty) ...[
+            _FamilyMemberSelector(
+              familyMembers: auth.familyMembers,
+              activeKey:
+                  auth.activeFamilyKey ?? auth.familyMembers.first.key,
+              isOwnerActive: context.read<AuthCubit>().isActiveOwner,
+              onSelect: (key) =>
+                  context.read<AuthCubit>().selectFamilyMember(key),
+              onAdd: () {
+                _showAddFamilyMemberSheet(context);
+              },
+            ),
+            const SizedBox(height: 14),
+          ],
           _IdentityCard(
             userName: user.displayName,
             email: user.email,
@@ -241,6 +269,254 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+}
+
+class _FamilyMemberSelector extends StatelessWidget {
+  const _FamilyMemberSelector({
+    required this.familyMembers,
+    required this.activeKey,
+    required this.isOwnerActive,
+    required this.onSelect,
+    required this.onAdd,
+  });
+
+  final List<FamilyMember> familyMembers;
+  final String activeKey;
+  final bool isOwnerActive;
+  final ValueChanged<String> onSelect;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return SoftCard(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.family_restroom_outlined,
+                    color: AppColors.trustBlue),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Family profiles',
+                    style: const TextStyle(
+                      color: AppColors.trustBlueDark,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: activeKey,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                isDense: true,
+                border: OutlineInputBorder(),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+              items: familyMembers.map((m) {
+                return DropdownMenuItem(
+                  value: m.key,
+                  child: Text('${m.relationLabel} · ${m.profile.displayName}'),
+                );
+              }).toList(),
+              onChanged: (v) {
+                if (v == null) return;
+                onSelect(v);
+              },
+            ),
+            const SizedBox(height: 12),
+            if (isOwnerActive)
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onAdd,
+                  icon: const Icon(Icons.person_add_outlined),
+                  label: const Text('Add Family Member'),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _showAddFamilyMemberSheet(BuildContext context) async {
+  final auth = context.read<AuthCubit>();
+  final owner = auth.state.user;
+  if (owner == null) return;
+
+  DateTime? dob = DateTime(DateTime.now().year - 2, DateTime.now().month, 1);
+  String relation = 'Wife';
+  final nameCtrl = TextEditingController();
+  final nicCtrl = TextEditingController();
+  final bloodCtrl = TextEditingController();
+
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (ctx, setState) {
+          Future<void> pickDob() async {
+            final picked = await showDatePicker(
+              context: ctx,
+              initialDate: dob ?? DateTime(2020, 1, 1),
+              firstDate: DateTime(1900, 1, 1),
+              lastDate: DateTime(2100, 12, 31),
+            );
+            if (picked == null) return;
+            setState(() => dob = picked);
+          }
+
+          String keyForRelation(String r) {
+            return switch (r) {
+              'Wife' => 'wife',
+              'Mother' => 'mother',
+              'Father' => 'father',
+              "Wife's Mother" => 'wife_mother',
+              "Wife's Father" => 'wife_father',
+              'Child' => 'child',
+              _ => 'custom',
+            };
+          }
+
+          Future<void> onSave() async {
+            final name = nameCtrl.text.trim();
+            if (name.isEmpty) return;
+            final key = keyForRelation(relation);
+            final profile = owner
+                .copyWith(
+                  name: name,
+                  dateOfBirth: dob,
+                  nic: nicCtrl.text.trim().isEmpty ? null : nicCtrl.text.trim(),
+                  bloodGroup:
+                      bloodCtrl.text.trim().isEmpty ? null : bloodCtrl.text.trim(),
+                )
+                .withEnsuredBarcode();
+
+            await auth.upsertFamilyMember(
+              key: key,
+              relationLabel: relation,
+              profile: profile,
+              selectAfter: true,
+            );
+            if (!context.mounted) return;
+            Navigator.of(ctx).pop();
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom,
+              left: 16,
+              right: 16,
+              top: 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Add Family Member',
+                    style: Theme.of(ctx).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: relation,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Relation',
+                      isDense: true,
+                    ),
+                    items: const [
+                      'Wife',
+                      'Mother',
+                      'Father',
+                      "Wife's Mother",
+                      "Wife's Father",
+                      'Child',
+                    ].map((r) {
+                      return DropdownMenuItem<String>(
+                        value: r,
+                        child: Text(r),
+                      );
+                    }).toList(),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() => relation = v);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Full name',
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nicCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'NIC (optional)',
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: bloodCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Blood group (optional)',
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: pickDob,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        dob == null
+                            ? 'Select date of birth'
+                            : 'DOB: ${dob!.day}/${dob!.month}/${dob!.year}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.slateMuted,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: onSave,
+                      child: const Text('Save'),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
 }
 
 class _IdentityCard extends StatelessWidget {

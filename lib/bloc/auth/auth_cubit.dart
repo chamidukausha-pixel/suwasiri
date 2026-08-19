@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../data/models/user_profile.dart';
+import '../../data/models/family_member.dart';
 import '../../data/repositories/auth_repository.dart';
 
 enum AuthStatus { unknown, authenticated, unauthenticated }
@@ -12,12 +13,16 @@ class AuthState extends Equatable {
     this.user,
     this.error,
     this.loading = false,
+    this.familyMembers = const [],
+    this.activeFamilyKey,
   });
 
   final AuthStatus status;
   final UserProfile? user;
   final String? error;
   final bool loading;
+  final List<FamilyMember> familyMembers;
+  final String? activeFamilyKey;
 
   AuthState copyWith({
     AuthStatus? status,
@@ -26,38 +31,146 @@ class AuthState extends Equatable {
     bool? loading,
     bool clearUser = false,
     bool clearError = false,
+    List<FamilyMember>? familyMembers,
+    String? activeFamilyKey,
   }) {
     return AuthState(
       status: status ?? this.status,
       user: clearUser ? null : (user ?? this.user),
       error: clearError ? null : (error ?? this.error),
       loading: loading ?? this.loading,
+      familyMembers: familyMembers ?? this.familyMembers,
+      activeFamilyKey: activeFamilyKey ?? this.activeFamilyKey,
     );
   }
 
   @override
-  List<Object?> get props => [status, user, error, loading];
+  List<Object?> get props => [
+        status,
+        user,
+        error,
+        loading,
+        familyMembers,
+        activeFamilyKey,
+      ];
 }
 
 class AuthCubit extends Cubit<AuthState> {
   AuthCubit(this._auth) : super(const AuthState()) {
-    _auth.authStateChanges().listen((user) {
+    _auth.authStateChanges().listen((user) async {
       if (user == null) {
         emit(const AuthState(status: AuthStatus.unauthenticated));
-      } else {
-        emit(AuthState(status: AuthStatus.authenticated, user: user));
+        return;
       }
+
+      await _initFamilyMembers(owner: user);
     });
   }
 
   final AuthRepository _auth;
+
+  // Prototype keys for in-app family member selection.
+  static const String _kOwner = 'owner';
+  static const String _kWife = 'wife';
+  static const String _kChild = 'child';
+
+  Future<void> _initFamilyMembers({required UserProfile owner}) async {
+    // Dummy family data (wife + child) requested by the user.
+    final wife = owner
+        .copyWith(
+          name: 'Sakuni Pathirana',
+          // Keep `id` same for now so existing Firestore security rules pass.
+          // (Family persistence will come later.)
+          dateOfBirth: DateTime(1994, 5, 20),
+          nic: 'WIFE-NIC-0001',
+          bloodGroup: owner.bloodGroup,
+        )
+        .withEnsuredBarcode();
+
+    final child = owner
+        .copyWith(
+          name: 'Denuk Diyon',
+          dateOfBirth: DateTime(2026, 4, 1),
+          nic: 'CH-NIC-0001',
+          bloodGroup: owner.bloodGroup,
+        )
+        .withEnsuredBarcode();
+
+    final members = <FamilyMember>[
+      FamilyMember(
+        key: _kOwner,
+        relationLabel: 'Main Applicant',
+        profile: owner,
+      ),
+      FamilyMember(
+        key: _kWife,
+        relationLabel: 'Wife',
+        profile: wife,
+      ),
+      FamilyMember(
+        key: _kChild,
+        relationLabel: 'Child',
+        profile: child,
+      ),
+    ];
+
+    emit(AuthState(
+      status: AuthStatus.authenticated,
+      user: members.firstWhere((m) => m.key == _kOwner).profile,
+      familyMembers: members,
+      activeFamilyKey: _kOwner,
+    ));
+  }
+
+  bool get _isFamilyOwner =>
+      state.activeFamilyKey == null || state.activeFamilyKey == _kOwner;
+
+  bool get isActiveOwner => _isFamilyOwner;
+
+  Future<void> selectFamilyMember(String key) async {
+    if (state.familyMembers.isEmpty) return;
+    final found = state.familyMembers.where((m) => m.key == key).toList();
+    if (found.isEmpty) return;
+    final member = found.first;
+    emit(state.copyWith(user: member.profile, activeFamilyKey: key));
+  }
+
+  /// Prototype: adds/updates family member inside in-memory list.
+  Future<void> upsertFamilyMember({
+    required String key,
+    required String relationLabel,
+    required UserProfile profile,
+    bool selectAfter = true,
+  }) async {
+    final current = state.familyMembers;
+    final ensured = profile.withEnsuredBarcode();
+    final updated = <FamilyMember>[];
+    var touched = false;
+    for (final m in current) {
+      if (m.key == key) {
+        updated.add(FamilyMember(key: key, relationLabel: relationLabel, profile: ensured));
+        touched = true;
+      } else {
+        updated.add(m);
+      }
+    }
+    if (!touched) {
+      updated.add(FamilyMember(key: key, relationLabel: relationLabel, profile: ensured));
+    }
+
+    emit(state.copyWith(
+      familyMembers: updated,
+      user: selectAfter ? ensured : state.user,
+      activeFamilyKey: selectAfter ? key : state.activeFamilyKey,
+    ));
+  }
 
   Future<void> bootstrap() async {
     final user = await _auth.currentUser();
     if (user == null) {
       emit(const AuthState(status: AuthStatus.unauthenticated));
     } else {
-      emit(AuthState(status: AuthStatus.authenticated, user: user));
+      await _initFamilyMembers(owner: user);
     }
   }
 
@@ -112,7 +225,21 @@ class AuthCubit extends Cubit<AuthState> {
     try {
       final ensured = profile.withEnsuredBarcode();
       await _auth.updateProfile(ensured);
-      emit(AuthState(status: AuthStatus.authenticated, user: ensured));
+      // Keep prototype family in-memory, but update the owner profile values.
+      if (state.familyMembers.isNotEmpty) {
+        final updated = state.familyMembers.map((m) {
+          if (m.key != _kOwner) return m;
+          return FamilyMember(key: _kOwner, relationLabel: m.relationLabel, profile: ensured);
+        }).toList();
+
+        emit(state.copyWith(
+          user: state.activeFamilyKey == _kOwner ? ensured : state.user,
+          familyMembers: updated,
+        ));
+      } else {
+        // Fallback: rebuild family.
+        await _initFamilyMembers(owner: ensured);
+      }
     } catch (e) {
       emit(state.copyWith(loading: false, error: e.toString()));
     }

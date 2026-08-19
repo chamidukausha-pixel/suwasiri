@@ -84,7 +84,15 @@ class _VaccineScreenState extends State<VaccineScreen> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    return BlocConsumer<VaccineCubit, VaccineState>(
+    return BlocListener<AuthCubit, AuthState>(
+      listenWhen: (prev, curr) =>
+          prev.activeFamilyKey != curr.activeFamilyKey ||
+          prev.user?.effectiveDateOfBirth != curr.user?.effectiveDateOfBirth,
+      listener: (context, _) {
+        if (!widget.isActive) return;
+        _bootstrap();
+      },
+      child: BlocConsumer<VaccineCubit, VaccineState>(
       listenWhen: (prev, curr) =>
           curr.message != null && curr.message != prev.message,
       listener: (context, state) {
@@ -229,7 +237,7 @@ class _VaccineScreenState extends State<VaccineScreen> {
           ),
         );
       },
-    );
+    ));
   }
 }
 

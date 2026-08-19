@@ -57,6 +57,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Home/Call show the latest booked doctor per mode (blue = clinic, purple + Call = video); each new booking replaces the previous card automatically
 - [x] Home: booked vaccine sessions all appear on one green card (empty if none); child EPI protocol reminders from date of birth
 - [x] Home bookings (blue clinic / purple video / green vaccine) hide automatically at local midnight after the slot date
+- [x] Profile: family member selector dropdown + dummy wife/child (switches Home/Vault/Vaccines identity)
 
 ## In progress / next
 
