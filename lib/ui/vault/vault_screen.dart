@@ -35,10 +35,23 @@ class _VaultScreenState extends State<VaultScreen> {
     }
   }
 
+  Future<void> _loadForUser() async {
+    final vault = context.read<VaultCubit>();
+    final auth = context.read<AuthCubit>();
+    final user = auth.state.user;
+    if (user != null && vault.state.unlocked) {
+      await vault.load(user.id);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    return BlocBuilder<VaultCubit, VaultState>(
+    return BlocListener<AuthCubit, AuthState>(
+      listenWhen: (prev, curr) =>
+          prev.activeFamilyKey != curr.activeFamilyKey,
+      listener: (context, state) => _loadForUser(),
+      child: BlocBuilder<VaultCubit, VaultState>(
       builder: (context, state) {
         if (!state.unlocked) {
           return SafeArea(
@@ -184,7 +197,8 @@ class _VaultScreenState extends State<VaultScreen> {
           ),
         );
       },
-    );
+      ), // BlocBuilder
+    ); // BlocListener
   }
 }
 

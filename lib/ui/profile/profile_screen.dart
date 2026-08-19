@@ -264,6 +264,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             phone: _prettyPhone(user.mobileNo),
           ),
           const SizedBox(height: 14),
+          _DarkModeCard(),
+          const SizedBox(height: 14),
           _LogoutButton(onTap: _logout),
         ],
       ),
@@ -313,7 +315,8 @@ class _FamilyMemberSelector extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: activeKey,
+              key: ValueKey(activeKey),
+              initialValue: activeKey,
               isExpanded: true,
               decoration: const InputDecoration(
                 isDense: true,
@@ -431,7 +434,8 @@ Future<void> _showAddFamilyMemberSheet(BuildContext context) async {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: relation,
+                    key: ValueKey(relation),
+                    initialValue: relation,
                     isExpanded: true,
                     decoration: const InputDecoration(
                       labelText: 'Relation',
@@ -1006,4 +1010,37 @@ class _DashedRRectPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _DashedRRectPainter oldDelegate) =>
       oldDelegate.color != color || oldDelegate.radius != radius;
+}
+
+class _DarkModeCard extends StatelessWidget {
+  const _DarkModeCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<LocaleCubit, LocaleState>(
+      builder: (context, state) {
+        final isDark = state.themeMode == ThemeMode.dark;
+        return Card(
+          child: SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            secondary: Icon(
+              isDark ? Icons.dark_mode : Icons.light_mode_outlined,
+              color: isDark ? Colors.amber : AppColors.trustBlue,
+            ),
+            title: Text(
+              'Dark Mode',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              isDark ? 'Dark theme is on' : 'Light theme is on',
+              style: const TextStyle(fontSize: 12),
+            ),
+            value: isDark,
+            onChanged: (_) =>
+                context.read<LocaleCubit>().toggleDarkMode(),
+          ),
+        );
+      },
+    );
+  }
 }

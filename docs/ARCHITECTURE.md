@@ -1,8 +1,17 @@
 # Architecture
 
-Flutter app with Cubit/BLoC UI and repository backends.
+This repo holds **two apps** developed in parallel:
 
-## Layout
+| App | Path | Stack |
+|-----|------|--------|
+| **Mobile (Suwasiri)** | repo root (`lib/`, `android/`, `ios/`) | Flutter + Cubit/BLoC |
+| **Web (Sri Lankan GP Care)** | [`web/`](../web/) | React 19 + Vite + Express + Tailwind — **do not change this stack** |
+
+Shared production backend is Firebase (`suwasiri-91824`). The web app currently uses a local JSON store + Gemini; wiring it to Firebase is a later sync step (see [WEB.md](WEB.md)).
+
+Do not change Flutter/mobile code unless explicitly asked.
+
+## Mobile layout
 
 ```
 lib/
@@ -78,3 +87,19 @@ For patients under 10, `VaccineCatalog.protocolsFor` builds Sri Lanka EPI due da
 ## Localization
 
 `AppLocalizations` + `LocaleCubit` (EN / Sinhala / Tamil). New UI strings go through localization, not hard-coded English-only if user-facing.
+
+## Web layout
+
+Exact copy of the GP Care clinic portal. Do not rename packages, swap Vite/React/Express, or rewrite the UI.
+
+```
+web/
+  src/
+    App.tsx                 # clinic dashboard + session (hospital/branch/role)
+    tenancy.ts              # hospitals, branches, role templates, memberships
+    types.ts                # includes Hospital, Branch, RoleDefinition, StaffMembership
+    components/             # hubs, Security & RBAC, Practice Manager, Platform console
+    utils/
+  server.ts                 # Express + Vite + Gemini; patient_store.json + /api/tenancy/*
+  package.json
+```

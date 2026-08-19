@@ -17,6 +17,7 @@
 |----------|--------|-------------|
 | Android | `1:900720308322:android:b8f00a226b5317ed7f613b` | `android/app/google-services.json` |
 | iOS | `1:900720308322:ios:c0ad7813f5c27b387f613b` | `ios/Runner/GoogleService-Info.plist` |
+| Web (GP Care) | `1:900720308322:web:6874ced939987e6d7f613b` | `web/src/firebase.ts` + `VITE_FIREBASE_*` |
 
 Dart options: `lib/firebase_options.dart`
 
@@ -47,6 +48,19 @@ Aligned with `firestore.rules` and `FirebaseHealthRepository` / `FirebaseAuthRep
 | `prescriptions` | `patientId`, `medicine`, `schedule`, `doseBadge`, `sessionId`, `sentToPharmacare` (MediLanka portal flag), `clinicName`, `issuedAt` | `patientId == uid` |
 | `sos_sessions` | `patientId`, lat/lng, `accuracyMeters`, `address`, `shareLiveGps`, `active` | owner write; readable when `shareLiveGps` |
 | `notifications` | `title`, `body`, `timestamp`, `type`, `read` | any signed-in (tighten later) |
+
+## Planned tenancy collections (web RBAC — not deployed yet)
+
+Add these when the GP Care web app is wired to Firebase. Do **not** change the shape of existing `users/{uid}` patient profiles; only add collections and `hospitalId` on clinical docs.
+
+| Collection | Key fields | Rule sketch |
+|------------|------------|-------------|
+| `hospitals/{hospitalId}` | `name`, `status` (`ACTIVE` / `SUSPENDED`) | Platform Super Admin create/suspend; members read |
+| `branches/{branchId}` | `hospitalId`, `name`, `address`, `rooms[]` | Hospital Super Admin of that hospital |
+| `roles/{roleId}` | `hospitalId`, `name`, `isSystem`, `enabled`, 16 permission flags | Hospital Super Admin of that hospital |
+| `memberships/{id}` | `userId`, `hospitalId`, `roleId`, `branchIds[]`, `active` | `hospitalId` must match an active membership of `auth.uid` |
+
+Clinical collections (`appointments`, `prescriptions`, `vault`, `vaccinations`) should gain `hospitalId`. Staff queries: membership contains hospital. Patient mobile app keeps owner rules (`patientId == uid`). Hospital A must not read Hospital B.
 
 ## CLI (Windows)
 

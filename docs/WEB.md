@@ -1,0 +1,70 @@
+# Web — Sri Lankan GP Care
+
+Clinic EMR / GP dashboard that runs **in parallel** with the Flutter mobile app. Source was copied from `Downloads/sri-lankan-gp-care` into [`web/`](../web/). The original Downloads folder is **not** edited.
+
+## Constraints
+
+- Keep the **exact same** stack: React 19, Vite, Express (`server.ts`), Tailwind 4, `@google/genai`.
+- Do not migrate to Next.js, Flutter web, or another framework.
+- Do not change the Flutter/mobile app unless explicitly asked.
+
+## Run
+
+From `web/`:
+
+```powershell
+cd web
+npm install
+copy .env.example .env.local
+# set GEMINI_API_KEY in .env.local
+npm run dev
+```
+
+App URL: `http://localhost:3000` (Express + Vite from `server.ts`).
+
+## Current backend
+
+The web app is **not** on Firebase yet. `server.ts` persists mock clinic data to `patient_store.json` (gitignored) and calls Gemini for AI features.
+
+Mobile already uses Firebase (`suwasiri-91824`) collections in [FIREBASE.md](FIREBASE.md).
+
+## Roles, Super Admin, and hospital isolation
+
+Tenancy lives in `web/src/tenancy.ts` and is stored with the clinical JSON (`hospitals`, `branches`, `roles`, `staffUsers`, `memberships`, `staffDirectory`).
+
+**Isolation:** Hospital is the tenant boundary. PrimeCare (Colombo + Kandy branches) never sees Southern Coast Hospitals charts. Staff (e.g. Dr. Silva) can hold **memberships** in both; they switch hospital in the session bar and only see that hospital’s patients.
+
+**Session bar:** pick a person, then hospital, then branch. Demo people:
+
+- Nimal Fernando — Platform Super Admin (tenant console, no EMR)
+- Ms. Sandamali Jayasekara — Hospital Super Admin (PrimeCare RBAC / branches / staff)
+- Dr. Priyantha Silva — Doctor at PrimeCare (both branches) **and** Southern Coast
+- Mr. Thusitha Perera — Receptionist, Colombo only
+- Ms. Dilani Wickramasinghe — Hospital Super Admin (Southern Coast)
+
+**RBAC:** Security & RBAC matrix is per hospital. Hospital Super Admin can toggle the 16 permission flags, **add** custom roles (clone a template), **disable** system templates, and **remove** custom roles with no staff assigned. Save persists to the store.
+
+**Practice Manager → Locations** is Branch CRUD. Staff directory assigns a role and a list of branches.
+
+## Future Firestore (do not change mobile `users/{uid}` — only add collections)
+
+See [FIREBASE.md](FIREBASE.md) planned tenancy collections. Platform Super Admin is **not** a clinical user. Patient mobile vault stays owner-scoped (`patientId == uid`). GP EMR charts stay hospital-local.
+
+## Sync plan (mobile + web)
+
+Work both apps in this repo. Align on shared data, not a shared UI framework.
+
+1. **Identity** — same Firebase Auth users (`users/{uid}`) so a patient on mobile is the same person a GP sees on web.
+2. **Clinical records** — map web types (`Patient`, `Appointment`, `PrescriptionRecord`, `LabResult`, `VaccineRecord`) onto existing Firestore collections (`users`, `appointments`, `prescriptions`, `vault`, `vaccinations`) or add collections + `firestore.rules`.
+3. **Roles** — Platform Super Admin (tenants) + Hospital Super Admin (RBAC/staff/branches) + hospital template roles. Mobile remains the patient companion. Same Firebase later, different clients.
+4. **Do not** rewrite the web UI to match Flutter widgets, or the Flutter UI to match the clinic dashboard.
+
+Until Firebase Auth is configured on web, treat `web/` as the exact GP Care product and `lib/` as the exact mobile product.
+
+## Firebase Auth (web)
+
+Same project as mobile (`suwasiri-91824`). Login: email/password, register, phone OTP stub `123456`, Google — matching the Flutter app.
+
+Staff EMR access is by **email match** against seeded `staffUsers`. Unmatched accounts only see the Patient Portal. Sign out is on the session bar.
+
+Set `VITE_FIREBASE_APP_ID` in `web/.env.local` after registering a Web app in Console. Remaining work: [NEXT.md](NEXT.md).

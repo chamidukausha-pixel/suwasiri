@@ -219,6 +219,13 @@ class VaultCubit extends Cubit<VaultState> {
     await load(patientId);
   }
 
+  /// Called when the active family member changes.
+  /// Clears loaded records so the next visit to the Vault tab reloads for the
+  /// new patient.
+  void resetForPatient() {
+    emit(VaultState(unlocked: state.unlocked));
+  }
+
   void setFilter(VaultFilter filter) {
     emit(state.copyWith(filter: filter));
   }

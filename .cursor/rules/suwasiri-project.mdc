@@ -5,7 +5,14 @@ alwaysApply: true
 
 # Suwasiri
 
-Sri Lankan digital health Flutter app. **Production backend is Firebase** (`suwasiri-91824`).
+Sri Lankan digital health: **Flutter mobile** (repo root) + **GP Care web** (`web/`). Production backend is Firebase (`suwasiri-91824`).
+
+## Two apps — keep them parallel
+
+- **Mobile:** do not change Flutter/Dart/`lib/`/`android/`/`ios/` unless the user explicitly asks.
+- **Web:** live in `web/`. Keep the **exact** stack (React 19, Vite, Express `server.ts`, Tailwind). Do not rewrite as Flutter web or another framework.
+- Do **not** edit the original copy at `C:\Users\HP\Downloads\sri-lankan-gp-care`.
+- Sync via shared Firebase data, not by merging UI codebases. See `docs/WEB.md`.
 
 ## Before changing code
 
@@ -14,6 +21,7 @@ Read and keep updated:
 - `docs/STATUS.md` — what works / what's next
 - `docs/FIREBASE.md` — project IDs, collections, CLI
 - `docs/ARCHITECTURE.md` — where code lives
+- `docs/WEB.md` — GP Care web app and mobile/web sync
 - `docs/ROADMAP.md` — prioritized work
 
 ## Backend rules

@@ -32,6 +32,15 @@ Prioritized next work. Move items to **Done** in [STATUS.md](STATUS.md) when shi
 4. App Store / Play listing assets
 5. Home empty-state polish when no appointments (currently soft card)
 
+## Parallel web (GP Care)
+
+Keep `web/` as the exact React/Vite/Express clinic portal. Do not change Flutter unless asked.
+
+1. Document mapping of web models → Firestore collections ([WEB.md](WEB.md)) — tenancy collections listed in [FIREBASE.md](FIREBASE.md)
+2. Wire web `server.ts` / client to Firebase Auth + Firestore (`suwasiri-91824`) without changing the UI framework
+3. Shared appointments, prescriptions, vault/labs, vaccinations across mobile patient app and web GP dashboard (`hospitalId` on clinical docs)
+4. Role-aware access: Platform Super Admin, Hospital Super Admin, memberships + branch lists on the same Auth users; mobile stays patient-only
+
 ## Do not regress
 
 - Do not set `AppConstants.useDemoBackend = true` for shipping builds

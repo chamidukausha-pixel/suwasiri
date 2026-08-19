@@ -1,0 +1,6 @@
+{
+  "name": "Sri Lankan GP Care",
+  "description": "General Practice Practitioner Dashboard, EMR clinical management portal with AI Scribe, Document Management, and Patient Portal.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -75,26 +75,34 @@ class AuthCubit extends Cubit<AuthState> {
   static const String _kChild = 'child';
 
   Future<void> _initFamilyMembers({required UserProfile owner}) async {
-    // Dummy family data (wife + child) requested by the user.
-    final wife = owner
-        .copyWith(
-          name: 'Sakuni Pathirana',
-          // Keep `id` same for now so existing Firestore security rules pass.
-          // (Family persistence will come later.)
-          dateOfBirth: DateTime(1994, 5, 20),
-          nic: 'WIFE-NIC-0001',
-          bloodGroup: owner.bloodGroup,
-        )
-        .withEnsuredBarcode();
+    // Each family member gets a unique virtual patientId derived from the
+    // owner uid so the Vault, Schedule, and Vaccine cubits load isolated data.
+    final wifeId = '${owner.id}_wife';
+    final childId = '${owner.id}_child';
 
-    final child = owner
-        .copyWith(
-          name: 'Denuk Diyon',
-          dateOfBirth: DateTime(2026, 4, 1),
-          nic: 'CH-NIC-0001',
-          bloodGroup: owner.bloodGroup,
-        )
-        .withEnsuredBarcode();
+    final wife = UserProfile(
+      id: wifeId,
+      name: 'Sakuni Pathirana',
+      email: owner.email,
+      nic: '199456789V',
+      mobileNo: owner.mobileNo,
+      bloodGroup: 'B+',
+      region: owner.region,
+      dateOfBirth: DateTime(1994, 5, 20),
+      ceylonHealthId: 'CH-WIFE-${wifeId.hashCode.abs() % 1000000}',
+    ).withEnsuredBarcode();
+
+    final child = UserProfile(
+      id: childId,
+      name: 'Denuk Rathnayake',
+      email: owner.email,
+      nic: null,
+      mobileNo: null,
+      bloodGroup: owner.bloodGroup,
+      region: owner.region,
+      dateOfBirth: DateTime(2026, 4, 1),
+      ceylonHealthId: 'CH-CHILD-${childId.hashCode.abs() % 1000000}',
+    ).withEnsuredBarcode();
 
     final members = <FamilyMember>[
       FamilyMember(

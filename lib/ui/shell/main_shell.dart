@@ -4,6 +4,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/notification/notification_cubit.dart';
 import '../../bloc/schedule/schedule_cubit.dart';
+import '../../bloc/vaccine/vaccine_cubit.dart';
+import '../../bloc/vault/vault_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../localization/app_localizations.dart';
 import '../appointments/appointments_screen.dart';
@@ -30,10 +32,23 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     context.read<NotificationCubit>().load();
-    final user = context.read<AuthCubit>().state.user;
+    final authState = context.read<AuthCubit>().state;
+    final user = authState.user;
     if (user != null) {
       context.read<ScheduleCubit>().watch(user.id);
     }
+  }
+
+  void _reloadForMember(AuthState authState) {
+    final user = authState.user;
+    if (user == null) return;
+    context.read<ScheduleCubit>().watch(user.id);
+    context.read<VaccineCubit>().bootstrap(
+          user.id,
+          dateOfBirth: user.effectiveDateOfBirth,
+        );
+    // Reset vault so data reloads when the user navigates to that tab.
+    context.read<VaultCubit>().resetForPatient();
   }
 
   void _goTo(int index) => setState(() => _index = index);
@@ -50,7 +65,10 @@ class _MainShellState extends State<MainShell> {
       const ProfileScreen(),
     ];
 
-    return MainTabScope(
+    return BlocListener<AuthCubit, AuthState>(
+      listenWhen: (prev, curr) => prev.activeFamilyKey != curr.activeFamilyKey,
+      listener: (context, state) => _reloadForMember(state),
+      child: MainTabScope(
       goTo: _goTo,
       child: Scaffold(
         appBar: null,
@@ -125,6 +143,7 @@ class _MainShellState extends State<MainShell> {
           ],
         ),
       ),
-    );
+      ), // MainTabScope
+    ); // BlocListener
   }
 }

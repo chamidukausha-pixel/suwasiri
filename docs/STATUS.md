@@ -58,6 +58,9 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Home: booked vaccine sessions all appear on one green card (empty if none); child EPI protocol reminders from date of birth
 - [x] Home bookings (blue clinic / purple video / green vaccine) hide automatically at local midnight after the slot date
 - [x] Profile: family member selector dropdown + dummy wife/child (switches Home/Vault/Vaccines identity)
+- [x] Web GP Care copied into `web/` (exact React/Vite/Express stack; Downloads source left untouched)
+- [x] Web tenancy: Platform + Hospital Super Admin, multi-hospital isolation, multi-branch staff, RBAC add/remove roles (persisted in `patient_store.json`)
+- [x] Web Firebase Auth login (email / Google / phone OTP stub) on `suwasiri-91824`; staff via email membership match
 
 ## In progress / next
 
@@ -70,6 +73,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [ ] Firebase Storage for vault file uploads (`fileUrl`)
 - [ ] Tighten `notifications` rules to owner-scoped (`userId == auth.uid`)
 - [ ] Telehealth/Call: doctor video still simulated — needs real signaling later; patient camera on/off + e-Rx + PharmaCare handoff are wired
+- [ ] Web + mobile sync: keep `web/` as GP Care; wire shared Firebase later (do not change Flutter unless asked). Tenancy/RBAC is in the web JSON store; Firestore collections are documented, not deployed.
 
 ## Known caveats
 
@@ -85,4 +89,6 @@ Living tracker for implementation. **Update this file when you finish or start a
 | [FIREBASE.md](FIREBASE.md) | Project IDs, collections, CLI commands |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Code layout, where to change things |
 | [ROADMAP.md](ROADMAP.md) | Prioritized upcoming work |
-| [../README.md](../README.md) | How to run the app |
+| [NEXT.md](NEXT.md) | Ordered next implementation (Auth Console, tenancy Firestore, clinical sync) |
+| [WEB.md](WEB.md) | GP Care web app (`web/`), run commands, mobile/web sync |
+| [../README.md](../README.md) | How to run the apps |

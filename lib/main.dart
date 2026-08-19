@@ -54,6 +54,8 @@ class SuwasiriApp extends StatelessWidget {
               title: AppConstants.appName,
               debugShowCheckedModeBanner: false,
               theme: AppTheme.light(),
+              darkTheme: AppTheme.dark(),
+              themeMode: localeState.themeMode,
               locale: localeState.locale,
               supportedLocales: AppLocalizations.supportedLocales,
               localizationsDelegates: const [
