@@ -25,3 +25,16 @@ plugins {
 }
 
 include(":app")
+
+// flutter_webrtc 1.6.0 applies KGP 2.1.0 when android.builtInKotlin=false. That
+// second apply (after this repo already force-applies KGP 2.3.20) leaves
+// FlutterWebRTCPlugin off the app Java compile classpath:
+// GeneratedPluginRegistrant cannot find symbol FlutterWebRTCPlugin.
+// Setting the extra only on that project makes its build.gradle skip the
+// legacy apply; root android/build.gradle.kts then wires KGP 2.3.20 like
+// the other Android library plugins.
+gradle.beforeProject {
+    if (name == "flutter_webrtc") {
+        extra["android.builtInKotlin"] = true
+    }
+}

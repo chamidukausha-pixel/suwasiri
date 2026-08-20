@@ -16,10 +16,11 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 
-// package_info_plus 10.2+ skips applying KGP on AGP 9+ (Built-in Kotlin), but Flutter
-// still sets android.builtInKotlin=false until Firebase plugins migrate. Force KGP onto
-// Android library plugins so their Kotlin sources still compile without the KGP warning
-// from plugins that declare kotlin-android themselves.
+// package_info_plus 10.2+ and flutter_webrtc 1.5+ skip applying KGP on AGP 9+ when
+// they believe built-in Kotlin is active. Flutter still sets android.builtInKotlin=false
+// until Firebase plugins migrate, so force KGP 2.3.20 onto Android library plugins.
+// settings.gradle.kts also sets extra["android.builtInKotlin"]=true on :flutter_webrtc
+// so that plugin does not apply its own KGP 2.1.0 (which breaks app javac).
 subprojects {
     pluginManager.withPlugin("com.android.library") {
         val hasKotlin =
