@@ -20,6 +20,7 @@ class AppointmentsScreen extends StatefulWidget {
 
 class _AppointmentsScreenState extends State<AppointmentsScreen> {
   final _query = TextEditingController();
+  final _clinicQuery = TextEditingController();
   List<Doctor> _doctors = [];
   bool _loading = true;
   String _region = 'All';
@@ -37,7 +38,8 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   Future<void> _refresh() async {
     final health = context.read<HealthRepository>();
     setState(() => _loading = true);
-    final docs = await health.getDoctors(query: _query.text);
+    // Load full directory; clinician + clinic filters are applied client-side.
+    final docs = await health.getDoctors();
     if (!mounted) return;
     setState(() {
       _doctors = docs;
@@ -53,15 +55,21 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     if (_category != 'All') {
       list = list.where((d) => d.specialty == _category);
     }
-    final q = _query.text.trim().toLowerCase();
-    if (q.isNotEmpty) {
+
+    final clinicQ = _clinicQuery.text.trim().toLowerCase();
+    if (clinicQ.isNotEmpty) {
+      // Clinic search: show every clinician registered at matching clinics.
       list = list.where(
         (d) =>
-            d.name.toLowerCase().contains(q) ||
-            d.specialty.toLowerCase().contains(q) ||
-            d.hospital.toLowerCase().contains(q) ||
-            d.address.toLowerCase().contains(q),
+            d.hospital.toLowerCase().contains(clinicQ) ||
+            d.address.toLowerCase().contains(clinicQ),
       );
+    }
+
+    final q = _query.text.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      // Doctor-name search: match clinician name (specialty still via category).
+      list = list.where((d) => d.name.toLowerCase().contains(q));
     }
     return list.toList();
   }
@@ -75,6 +83,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   @override
   void dispose() {
     _query.dispose();
+    _clinicQuery.dispose();
     super.dispose();
   }
 
@@ -106,14 +115,13 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
           const SizedBox(height: 16),
           _SearchOptionsCard(
             queryController: _query,
+            clinicQueryController: _clinicQuery,
             region: _region,
             category: _category,
             regions: _regions,
             categories: _categories,
-            onQueryChanged: (_) {
-              setState(() {});
-              _refresh();
-            },
+            onQueryChanged: (_) => setState(() {}),
+            onClinicQueryChanged: (_) => setState(() {}),
             onRegionChanged: (v) => setState(() => _region = v),
             onCategoryChanged: (v) => setState(() => _category = v),
           ),
@@ -153,21 +161,25 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
 class _SearchOptionsCard extends StatelessWidget {
   const _SearchOptionsCard({
     required this.queryController,
+    required this.clinicQueryController,
     required this.region,
     required this.category,
     required this.regions,
     required this.categories,
     required this.onQueryChanged,
+    required this.onClinicQueryChanged,
     required this.onRegionChanged,
     required this.onCategoryChanged,
   });
 
   final TextEditingController queryController;
+  final TextEditingController clinicQueryController;
   final String region;
   final String category;
   final List<String> regions;
   final List<String> categories;
   final ValueChanged<String> onQueryChanged;
+  final ValueChanged<String> onClinicQueryChanged;
   final ValueChanged<String> onRegionChanged;
   final ValueChanged<String> onCategoryChanged;
 
@@ -228,6 +240,24 @@ class _SearchOptionsCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
+            l.t('searchByClinicName'),
+            style: const TextStyle(
+              color: AppColors.trustBlueDark,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: clinicQueryController,
+            onChanged: onClinicQueryChanged,
+            decoration: InputDecoration(
+              hintText: l.t('clinicNameHint'),
+              prefixIcon: const Icon(Icons.local_hospital_outlined),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
             l.t('filterByRegion'),
             style: const TextStyle(
               color: AppColors.trustBlueDark,
@@ -237,7 +267,7 @@ class _SearchOptionsCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            // Controlled filter â€” keep `value` until FormField API settles.
+            // Controlled filter — keep `value` until FormField API settles.
             // ignore: deprecated_member_use
             value: region,
             decoration: const InputDecoration(),

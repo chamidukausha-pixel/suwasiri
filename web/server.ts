@@ -216,6 +216,7 @@ const INITIAL_STATE = {
     },
     SOUTHERN_DEMO_PATIENT
   ],
+  clinicCalendarSeedAug2026: true,
   appointments: [
     {
       id: "apt-1",
@@ -223,7 +224,9 @@ const INITIAL_STATE = {
       time: "09:15 AM",
       reason: "Persistent Cough (2 weeks)",
       status: "IN EXAM ROOM",
-      date: "2026-06-12"
+      date: "2026-08-20",
+      type: "Standard GP Consult",
+      doctorName: "Dr. Priyantha Silva"
     },
     {
       id: "apt-2",
@@ -231,7 +234,9 @@ const INITIAL_STATE = {
       time: "09:45 AM",
       reason: "Acute Diabetic Review",
       status: "CHECKED IN",
-      date: "2026-06-12"
+      date: "2026-08-20",
+      type: "Care Plan Review",
+      doctorName: "Dr. Priyantha Silva"
     },
     {
       id: "apt-3",
@@ -239,7 +244,9 @@ const INITIAL_STATE = {
       time: "10:00 AM",
       reason: "Post-Op Follow-up",
       status: "SCHEDULED",
-      date: "2026-06-12"
+      date: "2026-08-20",
+      type: "Standard GP Consult",
+      doctorName: "Dr. Priyantha Silva"
     },
     {
       id: "apt-4",
@@ -247,7 +254,119 @@ const INITIAL_STATE = {
       time: "10:15 AM",
       reason: "Hypertension Monitoring",
       status: "SCHEDULED",
-      date: "2026-06-12"
+      date: "2026-08-20",
+      type: "Standard GP Consult",
+      doctorName: "Dr. Priyantha Silva"
+    },
+    {
+      id: "apt-5",
+      patientId: "9942-LK",
+      time: "11:00 AM",
+      reason: "Asthma inhaler technique review",
+      status: "SCHEDULED",
+      date: "2026-08-20",
+      type: "Long Consult (20+ min)",
+      doctorName: "Dr. Priyantha Silva"
+    },
+    {
+      id: "apt-6",
+      patientId: "8821-LK",
+      time: "08:30 AM",
+      reason: "Lower back strain review",
+      status: "SCHEDULED",
+      date: "2026-08-21",
+      type: "Standard GP Consult",
+      doctorName: "Dr. Priyantha Silva"
+    },
+    {
+      id: "apt-7",
+      patientId: "9942-LK",
+      time: "09:00 AM",
+      reason: "Spirometry and asthma action plan",
+      status: "SCHEDULED",
+      date: "2026-08-25",
+      type: "Long Consult (20+ min)",
+      doctorName: "Dr. Priyantha Silva"
+    },
+    {
+      id: "apt-8",
+      patientId: "2198-LK",
+      time: "10:30 AM",
+      reason: "Blood pressure and ECG",
+      status: "SCHEDULED",
+      date: "2026-08-25",
+      type: "Standard GP Consult",
+      doctorName: "Dr. Priyantha Silva"
+    },
+    {
+      id: "apt-30a",
+      patientId: "3210-LK",
+      time: "09:00 AM",
+      reason: "Cough follow-up and chest review",
+      status: "SCHEDULED",
+      date: "2026-08-30",
+      type: "Standard GP Consult",
+      doctorName: "Dr. Priyantha Silva"
+    },
+    {
+      id: "apt-30b",
+      patientId: "9942-LK",
+      time: "09:30 AM",
+      reason: "Asthma plan and inhaler renewal",
+      status: "SCHEDULED",
+      date: "2026-08-30",
+      type: "Care Plan Review",
+      doctorName: "Dr. Priyantha Silva"
+    },
+    {
+      id: "apt-30c",
+      patientId: "1092-LK",
+      time: "10:15 AM",
+      reason: "HbA1c review and medication titration",
+      status: "SCHEDULED",
+      date: "2026-08-30",
+      type: "Care Plan Review",
+      doctorName: "Dr. Priyantha Silva"
+    },
+    {
+      id: "apt-30d",
+      patientId: "2198-LK",
+      time: "11:00 AM",
+      reason: "Hypertension check and ECG",
+      status: "CHECKED IN",
+      date: "2026-08-30",
+      type: "Standard GP Consult",
+      doctorName: "Dr. Priyantha Silva"
+    },
+    {
+      id: "apt-30e",
+      patientId: "4412-LK",
+      time: "02:00 PM",
+      reason: "Post-op wound review",
+      status: "SCHEDULED",
+      date: "2026-08-30",
+      type: "Standard GP Consult",
+      doctorName: "Dr. Priyantha Silva"
+    },
+    {
+      id: "apt-sep-1",
+      patientId: "8821-LK",
+      time: "09:00 AM",
+      reason: "Physiotherapy progress review",
+      status: "SCHEDULED",
+      date: "2026-09-02",
+      type: "Standard GP Consult",
+      doctorName: "Dr. Priyantha Silva"
+    },
+    {
+      id: "apt-sep-2",
+      patientId: "1092-LK",
+      time: "10:00 AM",
+      reason: "Diabetic diet and glucose diary",
+      status: "SCHEDULED",
+      date: "2026-09-03",
+      type: "Care Plan Review",
+      doctorName: "Dr. Priyantha Silva"
     }
   ],
   alerts: [
@@ -456,6 +575,24 @@ function getStore() {
     }
     if (!data.staffDirectory) {
       data.staffDirectory = DEFAULT_STAFF_DIRECTORY;
+      mutated = true;
+    }
+    if (!data.clinicCalendarSeedAug2026) {
+      if (!Array.isArray(data.appointments)) data.appointments = [];
+      const byId = new Map(data.appointments.map((a: any) => [a.id, a]));
+      for (const seed of INITIAL_STATE.appointments) {
+        const existing = byId.get(seed.id);
+        if (!existing) {
+          data.appointments.push(seed);
+        } else if (existing.date === "2026-06-12" || !existing.date) {
+          existing.date = seed.date;
+          existing.time = seed.time;
+          existing.reason = existing.reason || seed.reason;
+          existing.type = existing.type || seed.type;
+          existing.doctorName = existing.doctorName || seed.doctorName;
+        }
+      }
+      data.clinicCalendarSeedAug2026 = true;
       mutated = true;
     }
     if (!data.patients.some((p: any) => p.id === SOUTHERN_DEMO_PATIENT.id)) {

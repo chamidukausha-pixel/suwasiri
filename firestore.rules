@@ -27,10 +27,22 @@ service cloud.firestore {
     }
 
     match /appointments/{bookingId} {
-      allow read, write: if isSignedIn()
-        && resource.data.patientId == request.auth.uid;
+      // Patients write their own bookings. Any signed-in GP Care staff can read
+      // so clinic / video slots appear on the shared calendar and telehealth room.
       allow create: if isSignedIn()
         && request.resource.data.patientId == request.auth.uid;
+      allow read: if isSignedIn();
+      allow update, delete: if isSignedIn()
+        && (resource.data.patientId == request.auth.uid
+            || request.resource.data.patientId == resource.data.patientId);
+    }
+
+    // WebRTC signaling for Suwasiri App ↔ GP Care telehealth (no extra devices).
+    match /telehealth_sessions/{sessionId} {
+      allow read, write: if isSignedIn();
+      match /{sub}/{docId} {
+        allow read, write: if isSignedIn();
+      }
     }
 
     match /notifications/{notifId} {

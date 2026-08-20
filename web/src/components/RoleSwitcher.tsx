@@ -36,10 +36,14 @@ export default function RoleSwitcher({
   onSignOut,
 }: Props) {
   const userMemberships = memberships.filter((m) => m.userId === userId && m.active);
-  const hospitalOptions = hospitals.filter((h) => userMemberships.some((m) => m.hospitalId === h.id));
+  const hospitalOptions = isPlatformSA
+    ? hospitals
+    : hospitals.filter((h) => userMemberships.some((m) => m.hospitalId === h.id));
   const membership = userMemberships.find((m) => m.hospitalId === hospitalId);
   const role = roles.find((r) => r.id === roleId);
-  const assignedBranches = branches.filter((b) => membership?.branchIds.includes(b.id));
+  const assignedBranches = isPlatformSA
+    ? branches.filter((b) => b.hospitalId === hospitalId)
+    : branches.filter((b) => membership?.branchIds.includes(b.id));
 
   return (
     <div className="bg-slate-100 p-2 border-b flex flex-wrap justify-between items-center text-xs px-6 gap-3 print:hidden">
@@ -50,7 +54,7 @@ export default function RoleSwitcher({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 font-sans">
-        {!isPlatformSA && !isPatientOnly && hospitalOptions.length > 0 && (
+        {!isPatientOnly && hospitalOptions.length > 0 && (
           <label className="flex items-center gap-1">
             <Building2 className="w-3.5 h-3.5 text-slate-500" />
             <select
@@ -67,7 +71,7 @@ export default function RoleSwitcher({
           </label>
         )}
 
-        {!isPlatformSA && !isPatientOnly && assignedBranches.length > 0 && (
+        {!isPatientOnly && assignedBranches.length > 0 && (
           <label className="flex items-center gap-1">
             <MapPin className="w-3.5 h-3.5 text-slate-500" />
             <select

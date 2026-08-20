@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../catalogs/doctor_catalog.dart';
+import '../catalogs/gp_care_clinic_map.dart';
 import '../catalogs/patient_health_samples.dart';
 import '../catalogs/vaccine_catalog.dart';
 import '../models/app_notification.dart';
@@ -503,8 +504,13 @@ class DemoHealthRepository implements HealthRepository {
     required Doctor doctor,
     required DateTime slot,
     ConsultMode consultMode = ConsultMode.clinic,
+    String patientName = '',
+    String patientEmail = '',
+    String? patientPhone,
+    String? paymentMethod,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 500));
+    final gp = GpCareClinicMap.resolve(doctor.hospital);
     final appt = Appointment(
       id: _uuid.v4(),
       patientId: patientId,
@@ -517,6 +523,13 @@ class DemoHealthRepository implements HealthRepository {
       consultMode: consultMode,
       hospital: doctor.hospital,
       bookedAt: DateTime.now(),
+      patientName: patientName,
+      patientEmail: patientEmail,
+      patientPhone: patientPhone ?? '',
+      hospitalId: gp.hospitalId,
+      branchId: gp.branchId,
+      paymentMethod: paymentMethod,
+      feeLkr: doctor.feeLkr,
     );
     final existing = await getAppointments(patientId);
     final all = [...existing, appt];

@@ -61,6 +61,12 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Web GP Care copied into `web/` (exact React/Vite/Express stack; Downloads source left untouched)
 - [x] Web tenancy: Platform + Hospital Super Admin, multi-hospital isolation, multi-branch staff, RBAC add/remove roles (persisted in `patient_store.json`)
 - [x] Web Firebase Auth login (email / Google / phone OTP stub) on `suwasiri-91824`; staff via email membership match
+- [x] Platform Super Admin can open Doctor / Reception / Operations modules; committed RBAC hides nav items immediately
+- [x] Doctors: clinic-name search + PrimeCare Medical Centre (Dr. Priyantha Silva cardiology, Dr. Anoja Senanayake dermatology) and more named clinics
+- [x] Web lobby + doctor dashboard month calendar (current month/time, prev/next month, click a date for that day’s appointments and patient details)
+- [x] Suwasiri App bookings sync to GP Care calendar (Firestore `appointments`; clinic + video; patient name/time/doctor on the selected date)
+- [x] Video consults appear in GP Care Telehealth from slot time; doctor + patient join a live WebRTC call (app camera/mic ↔ browser camera/mic)
+- [x] Profile: accounts menu (My Profile, Account Settings, Billing & Plans, Help Center, Dark Mode, Switch Account for family)
 
 ## In progress / next
 
@@ -72,8 +78,8 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [ ] FCM push (`firebase_messaging` is in pubspec, not wired in UI yet)
 - [ ] Firebase Storage for vault file uploads (`fileUrl`)
 - [ ] Tighten `notifications` rules to owner-scoped (`userId == auth.uid`)
-- [ ] Telehealth/Call: doctor video still simulated — needs real signaling later; patient camera on/off + e-Rx + PharmaCare handoff are wired
-- [ ] Web + mobile sync: keep `web/` as GP Care; wire shared Firebase later (do not change Flutter unless asked). Tenancy/RBAC is in the web JSON store; Firestore collections are documented, not deployed.
+- [ ] Telehealth/Call: live WebRTC to GP Care is wired (STUN); a TURN server may be needed on some mobile networks
+- [ ] Web + mobile sync: appointments + telehealth signaling are on shared Firestore; remaining clinical charts still use the web JSON store. Tenancy/RBAC is in the web JSON store; tenancy collections are documented, not deployed.
 
 ## Known caveats
 

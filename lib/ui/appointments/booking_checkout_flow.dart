@@ -285,6 +285,10 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
         doctor: widget.doctor,
         slot: _slotDateTime,
         consultMode: _mode,
+        patientName: user.displayName,
+        patientEmail: user.email,
+        patientPhone: user.mobileNo,
+        paymentMethod: paymentMethod,
       );
       if (!mounted) return;
       await context.read<NotificationCubit>().load();

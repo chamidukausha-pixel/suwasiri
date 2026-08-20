@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Video,
   VideoOff,
@@ -29,11 +29,14 @@ import {
   Sparkles
 } from "lucide-react";
 import { Patient, Appointment } from "../types";
+import { isDueTelehealth } from "../sync/suwasiriAppointments";
+import { startDoctorTelehealthCall, type TelehealthCallHandle, type TelehealthCallStatus } from "../sync/telehealthRtc";
 
 interface Props {
   patients: Patient[];
   appointments: Appointment[];
   activePatient: Patient | null;
+  sessionDoctorName?: string;
   onInvitePatient: (pName: string, phone: string, transport: "WhatsApp" | "SMS", token: string) => void;
   onSaveTelehealthNotes: (patientId: string, notes: string) => void;
   drugsDatabase?: string[];
@@ -45,6 +48,7 @@ export default function TelehealthRoom({
   patients,
   appointments,
   activePatient,
+  sessionDoctorName = "Dr. Priyantha Silva",
   onInvitePatient,
   onSaveTelehealthNotes,
   drugsDatabase = [],
@@ -57,6 +61,12 @@ export default function TelehealthRoom({
   const [recording, setRecording] = useState(false);
   const [inviteToken, setInviteToken] = useState("");
   const [telehealthNotes, setTelehealthNotes] = useState("");
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const [callStatus, setCallStatus] = useState<TelehealthCallStatus>("idle");
+  const [activeCallAptId, setActiveCallAptId] = useState<string | null>(null);
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const callHandleRef = useRef<TelehealthCallHandle | null>(null);
 
   // Real-time prescribing states
   const [telehealthMedsList, setTelehealthMedsList] = useState<Array<{
@@ -146,6 +156,67 @@ export default function TelehealthRoom({
     setSuwasiriSynced(false);
     setDrugHistoryCommitted(false);
   }, [selectedPat]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowTick(Date.now()), 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      callHandleRef.current?.hangup();
+    };
+  }, []);
+
+  const dueVideoAppointments = useMemo(() => {
+    const now = new Date(nowTick);
+    return appointments.filter((a) => isDueTelehealth(a, now));
+  }, [appointments, nowTick]);
+
+  const selectedVideoApt = dueVideoAppointments.find((a) => a.patientId === selectedPat?.id)
+    || appointments.find((a) => a.patientId === selectedPat?.id && (a.isTelehealth || a.type === "Telehealth Video"));
+
+  const hangupLiveCall = async () => {
+    await callHandleRef.current?.hangup();
+    callHandleRef.current = null;
+    setActiveCallAptId(null);
+    setCallStatus("idle");
+  };
+
+  const startLiveCall = async (apt: Appointment) => {
+    const patient = patients.find((p) => p.id === apt.patientId);
+    if (patient) {
+      setSelectedPat(patient);
+      setTelehealthNotes(patient.notes || "");
+    }
+    if (!localVideoRef.current || !remoteVideoRef.current) {
+      alert("Video surfaces are not ready. Try again in a moment.");
+      return;
+    }
+    try {
+      await callHandleRef.current?.hangup();
+      setCallStatus("connecting");
+      setActiveCallAptId(apt.id);
+      const handle = await startDoctorTelehealthCall({
+        appointmentId: apt.id,
+        localVideo: localVideoRef.current,
+        remoteVideo: remoteVideoRef.current,
+        onStatus: (status) => {
+          setCallStatus(status);
+          if (status === "ended") {
+            setActiveCallAptId(null);
+            callHandleRef.current = null;
+          }
+        },
+      });
+      callHandleRef.current = handle;
+      handle.setMuted(isMuted);
+      handle.setCameraOn(isCameraOn);
+    } catch (err: any) {
+      setCallStatus("error");
+      alert("Could not start the video call. Allow camera and microphone in the browser, then try again.\n\n" + (err?.message || err));
+    }
+  };
 
   const handleAddDrugToTelehealth = () => {
     const drugToAdd = drugSearchQuery.trim() || selectedDrugName;
@@ -341,6 +412,50 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
         </div>
       </div>
 
+      {dueVideoAppointments.length > 0 && (
+        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 shadow-xs space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-purple-950">Suwasiri video consults ready now</h3>
+              <p className="text-[11px] text-purple-800">
+                Bookings appear from the scheduled time until you start the call with the patient on the Suwasiri App.
+              </p>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-white border border-purple-200 text-purple-800 px-2 py-1 rounded-full">
+              {dueVideoAppointments.length} waiting
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {dueVideoAppointments.map((apt) => {
+              const p = patients.find((x) => x.id === apt.patientId);
+              const live = activeCallAptId === apt.id && (callStatus === "connecting" || callStatus === "live");
+              return (
+                <div key={apt.id} className="bg-white border border-purple-100 rounded-lg p-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-[#00334f]">{p?.name || apt.patientName || "Patient"}</p>
+                    <p className="text-[11px] text-slate-500">
+                      {apt.time} · {apt.doctorName || sessionDoctorName}
+                      {apt.token ? ` · ${apt.token}` : ""}
+                    </p>
+                    <p className="text-[10px] text-purple-800 font-medium">{apt.reason}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => (live ? hangupLiveCall() : startLiveCall(apt))}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 ${
+                      live ? "bg-rose-600 text-white" : "bg-purple-700 text-white hover:bg-purple-800"
+                    }`}
+                  >
+                    <Video className="w-3.5 h-3.5" />
+                    {live ? (callStatus === "live" ? "End call" : "Connecting…") : "Start video"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Main Grid: Video Room (Left) + Clinical Prescribing & Drug History (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Video Room & Live Stream (7 Cols) */}
@@ -366,50 +481,72 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
             <div className="flex-1 p-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
               {/* Remote Patient Box */}
               <div className="bg-slate-900 rounded-lg overflow-hidden border border-slate-800 relative h-full max-h-[380px] flex flex-col items-center justify-center">
-                <div className="absolute top-2 right-2 bg-black/60 text-white px-2 py-0.5 rounded text-[10px] font-bold">
-                  {selectedPat?.name || "Patient"} (Remote Stream)
+                <div className="absolute top-2 right-2 z-10 bg-black/60 text-white px-2 py-0.5 rounded text-[10px] font-bold">
+                  {selectedPat?.name || "Patient"} (Suwasiri App)
                 </div>
-
-                {selectedPat?.image ? (
-                  <img
-                    src={selectedPat.image}
-                    alt="Patient Stream"
-                    className="w-full h-full object-cover opacity-90"
-                  />
-                ) : (
-                  <div className="w-20 h-20 rounded-full bg-sky-900 text-white font-bold text-2xl flex items-center justify-center animate-pulse">
-                    {selectedPat?.name.split(" ").map((n) => n[0]).join("")}
-                  </div>
+                <video
+                  ref={remoteVideoRef}
+                  autoPlay
+                  playsInline
+                  className={`w-full h-full object-cover ${callStatus === "live" ? "block" : "hidden"}`}
+                />
+                {callStatus !== "live" && (
+                  selectedPat?.image ? (
+                    <img
+                      src={selectedPat.image}
+                      alt="Patient Stream"
+                      className="w-full h-full object-cover opacity-90"
+                    />
+                  ) : (
+                    <div className="text-center px-4">
+                      <div className="w-20 h-20 rounded-full bg-sky-900 text-white font-bold text-2xl flex items-center justify-center mx-auto mb-3">
+                        {(selectedPat?.name || "P").split(" ").map((n) => n[0]).join("")}
+                      </div>
+                      <p className="text-xs text-slate-300">
+                        {callStatus === "connecting"
+                          ? "Waiting for the patient to join from the Suwasiri App…"
+                          : selectedVideoApt
+                            ? `Video consult at ${selectedVideoApt.time}. Start the call when you are ready.`
+                            : "No live Suwasiri video booking in this room yet."}
+                      </p>
+                    </div>
+                  )
                 )}
-
                 <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded text-[9px] text-emerald-400 font-mono">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                  Patient Mic Active
+                  <span className={`w-1.5 h-1.5 rounded-full ${callStatus === "live" ? "bg-emerald-400" : "bg-slate-500"}`}></span>
+                  {callStatus === "live" ? "Patient connected" : "Patient waiting"}
                 </div>
               </div>
 
               {/* Doctor Box */}
               <div className="bg-slate-900 rounded-lg overflow-hidden border border-slate-800 relative h-full max-h-[380px] flex flex-col items-center justify-center">
-                <div className="absolute top-2 right-2 bg-black/60 text-white px-2 py-0.5 rounded text-[10px] font-bold">
-                  Dr. Priyantha Silva (Practitioner)
+                <div className="absolute top-2 right-2 z-10 bg-black/60 text-white px-2 py-0.5 rounded text-[10px] font-bold">
+                  {sessionDoctorName} (Practitioner)
                 </div>
-
-                {isCameraOn ? (
-                  <img
-                    src="https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=600"
-                    alt="Doctor Stream"
-                    className="w-full h-full object-cover scale-x-[-1]"
-                  />
-                ) : (
-                  <div className="text-center text-slate-500">
-                    <VideoOff className="w-10 h-10 mx-auto mb-2 text-slate-600" />
-                    <p className="text-xs">Camera Feed Muted</p>
-                  </div>
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={`w-full h-full object-cover scale-x-[-1] ${isCameraOn && (callStatus === "connecting" || callStatus === "live") ? "block" : "hidden"}`}
+                />
+                {!(isCameraOn && (callStatus === "connecting" || callStatus === "live")) && (
+                  isCameraOn ? (
+                    <img
+                      src="https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=600"
+                      alt="Doctor Stream"
+                      className="w-full h-full object-cover scale-x-[-1]"
+                    />
+                  ) : (
+                    <div className="text-center text-slate-500">
+                      <VideoOff className="w-10 h-10 mx-auto mb-2 text-slate-600" />
+                      <p className="text-xs">Camera Feed Muted</p>
+                    </div>
+                  )
                 )}
-
                 <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded text-[9px] text-sky-300 font-mono">
                   <span className="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
-                  GP Room Cam Active
+                  GP Room Cam {isCameraOn ? "Active" : "Off"}
                 </div>
               </div>
             </div>
@@ -418,7 +555,11 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
             <div className="bg-slate-900 border-t border-slate-800 p-3 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setIsMuted(!isMuted)}
+                  onClick={() => {
+                    const next = !isMuted;
+                    setIsMuted(next);
+                    callHandleRef.current?.setMuted(next);
+                  }}
                   className={`p-2 rounded-lg text-xs font-bold flex items-center gap-1 transition ${
                     isMuted ? "bg-rose-600 text-white" : "bg-slate-800 text-slate-200 hover:bg-slate-700"
                   }`}
@@ -428,7 +569,11 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
                 </button>
 
                 <button
-                  onClick={() => setIsCameraOn(!isCameraOn)}
+                  onClick={() => {
+                    const next = !isCameraOn;
+                    setIsCameraOn(next);
+                    callHandleRef.current?.setCameraOn(next);
+                  }}
                   className={`p-2 rounded-lg text-xs font-bold flex items-center gap-1 transition ${
                     !isCameraOn ? "bg-rose-600 text-white" : "bg-slate-800 text-slate-200 hover:bg-slate-700"
                   }`}
@@ -449,6 +594,24 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
               </div>
 
               <div className="flex items-center gap-2">
+                {selectedVideoApt && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      activeCallAptId === selectedVideoApt.id
+                        ? hangupLiveCall()
+                        : startLiveCall(selectedVideoApt)
+                    }
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 ${
+                      activeCallAptId === selectedVideoApt.id
+                        ? "bg-rose-600 hover:bg-rose-700 text-white"
+                        : "bg-purple-700 hover:bg-purple-800 text-white"
+                    }`}
+                  >
+                    <Video className="w-3.5 h-3.5" />
+                    {activeCallAptId === selectedVideoApt.id ? "End Suwasiri call" : "Start Suwasiri video"}
+                  </button>
+                )}
                 <button
                   onClick={() => handleSendInvite("WhatsApp")}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"

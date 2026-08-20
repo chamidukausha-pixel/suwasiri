@@ -38,8 +38,8 @@ Keep `web/` as the exact React/Vite/Express clinic portal. Do not change Flutter
 
 1. Document mapping of web models → Firestore collections ([WEB.md](WEB.md)) — tenancy collections listed in [FIREBASE.md](FIREBASE.md)
 2. Wire web `server.ts` / client to Firebase Auth + Firestore (`suwasiri-91824`) without changing the UI framework
-3. Shared appointments, prescriptions, vault/labs, vaccinations across mobile patient app and web GP dashboard (`hospitalId` on clinical docs)
-4. Role-aware access: Platform Super Admin, Hospital Super Admin, memberships + branch lists on the same Auth users; mobile stays patient-only
+3. Shared appointments (live) and remaining prescriptions / vault / labs / vaccinations across mobile and web (`hospitalId` on clinical docs)
+4. Role-aware access: Platform Super Admin can open every web module; Hospital Super Admin same within a tenant; committed RBAC hides staff nav. Mobile stays patient-only.
 
 ## Do not regress
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, FormEvent } from "react";
+import React, { useState, useEffect, useMemo, FormEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Activity,
@@ -59,7 +59,9 @@ import {
   Hospital, Branch, RoleDefinition, StaffMembership, StaffUser, StaffProvider
 } from "./types";
 
+import ClinicMonthCalendar from "./components/ClinicMonthCalendar";
 import RoleSwitcher from "./components/RoleSwitcher";
+import { formatDateKey, formatLongDate } from "./utils/clinicCalendar";
 import LoginView from "./components/LoginView";
 import PlatformConsoleView from "./components/PlatformConsoleView";
 import PrintablePrescription from "./components/PrintablePrescription";
@@ -90,6 +92,12 @@ import {
 import { isFirebaseConfigured } from "./firebase";
 import { signOutFirebase, staffForAuthUser, subscribeAuth } from "./firebaseAuth";
 import type { User } from "firebase/auth";
+import {
+  compareAppointmentTime,
+  mergeAppointments,
+  mergePatients,
+  subscribeSuwasiriAppointments,
+} from "./sync/suwasiriAppointments";
 
 export interface DrugFormularyItem {
   name: string;
@@ -425,9 +433,19 @@ export default function App() {
   // Navigation tab routing
   const [activeTab, setActiveTab] = useState<string>("dashboard");
 
-  // Global Sync State
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  // Global Sync State (clinic JSON store + live Suwasiri App Firestore bookings)
+  const [clinicPatients, setPatients] = useState<Patient[]>([]);
+  const [clinicAppointments, setAppointments] = useState<Appointment[]>([]);
+  const [suwasiriAppointments, setSuwasiriAppointments] = useState<Appointment[]>([]);
+  const [suwasiriPatients, setSuwasiriPatients] = useState<Patient[]>([]);
+  const patients = useMemo(
+    () => mergePatients(clinicPatients, suwasiriPatients),
+    [clinicPatients, suwasiriPatients]
+  );
+  const appointments = useMemo(
+    () => mergeAppointments(clinicAppointments, suwasiriAppointments),
+    [clinicAppointments, suwasiriAppointments]
+  );
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [billing, setBilling] = useState<Billing[]>([]);
@@ -439,23 +457,28 @@ export default function App() {
   const [sampleCollections, setSampleCollections] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
-  const sessionUser = staffUsers.find((u) => u.id === sessionUserId);
+  const staffMatch = authUser && !loading ? staffForAuthUser(authUser, staffUsers) : undefined;
+  const sessionUser = staffMatch || staffUsers.find((u) => u.id === sessionUserId);
   const isPlatformSA = sessionUser?.platformRole === "platform_super_admin";
-  const isPatientOnly = Boolean(authUser) && !sessionUser;
+  const isPatientOnly = Boolean(authUser) && !loading && !staffMatch;
+  const resolvedUserId = sessionUserId || staffMatch?.id || "";
   const activeMembership = memberships.find(
-    (m) => m.userId === sessionUserId && m.hospitalId === sessionHospitalId && m.active
+    (m) => m.userId === resolvedUserId && m.hospitalId === sessionHospitalId && m.active
   );
   const activeRole = roleDefs.find((r) => r.id === activeMembership?.roleId);
   const currentRole = isPlatformSA ? "Platform Super Admin" : isPatientOnly ? "Patient" : (activeRole?.name || "Doctor");
   const activeHospital = hospitals.find((h) => h.id === sessionHospitalId);
   const activeBranch = branches.find((b) => b.id === sessionBranchId);
   const canEditRbac = isGovernanceEditor(activeRole, isPlatformSA);
+  const canOpen = (tab: string) => {
+    if (isPatientOnly) return tab === "patientPortal" || tab === "publicBooking";
+    return tabAllowed(tab, activeRole, isPlatformSA);
+  };
 
   const applyUser = (userId: string) => {
     setSessionUserId(userId);
     const user = staffUsers.find((u) => u.id === userId);
     if (user?.platformRole === "platform_super_admin") {
-      setActiveTab("platform");
       return;
     }
     const mems = memberships.filter((m) => m.userId === userId && m.active);
@@ -472,8 +495,13 @@ export default function App() {
     const mem = memberships.find((m) => m.userId === sessionUserId && m.hospitalId === hospitalId && m.active);
     if (mem) {
       setSessionBranchId(mem.branchIds[0] || sessionBranchId);
-      setActiveTab(defaultTabFor(roleDefs.find((r) => r.id === mem.roleId), false));
+      if (!isPlatformSA) {
+        setActiveTab(defaultTabFor(roleDefs.find((r) => r.id === mem.roleId), false));
+      }
+      return;
     }
+    const firstBranch = branches.find((b) => b.hospitalId === hospitalId);
+    if (firstBranch) setSessionBranchId(firstBranch.id);
   };
 
   const requestTab = (tab: string) => {
@@ -591,6 +619,11 @@ export default function App() {
   // Lobby Schedule states
   const [lobbyFilterStatus, setLobbyFilterStatus] = useState<string>("ALL");
   const [lobbySearchQuery, setLobbySearchQuery] = useState<string>("");
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const n = new Date();
+    return { year: n.getFullYear(), month: n.getMonth() };
+  });
+  const [selectedClinicDate, setSelectedClinicDate] = useState(() => formatDateKey(new Date()));
 
   // GP Exam Room Medication Search Bar states
   const [medSearchQuery, setMedSearchQuery] = useState<string>("");
@@ -607,7 +640,7 @@ export default function App() {
   const [newAptTime, setNewAptTime] = useState<string>("09:00 AM");
   const [newAptReason, setNewAptReason] = useState<string>("General Health Checkup");
   const [newAptStatus, setNewAptStatus] = useState<Appointment["status"]>("SCHEDULED");
-  const [newAptDate, setNewAptDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [newAptDate, setNewAptDate] = useState<string>(formatDateKey(new Date()));
 
   // Consultation active desk states
   const [consultNotes, setConsultNotes] = useState<string>("");
@@ -700,6 +733,26 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!authUser || !isFirebaseConfigured()) {
+      setSuwasiriAppointments([]);
+      setSuwasiriPatients([]);
+      return;
+    }
+    return subscribeSuwasiriAppointments((apts, pats) => {
+      setSuwasiriAppointments(apts);
+      setSuwasiriPatients(pats);
+    });
+  }, [authUser?.uid]);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "suwasiri-rbac-rev") fetchState();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  useEffect(() => {
     if (!isFirebaseConfigured()) {
       setAuthReady(true);
       return;
@@ -725,6 +778,19 @@ export default function App() {
     }
   }, [authUser?.uid, authUser?.email, staffUsers, loading]);
 
+  useEffect(() => {
+    if (!authUser || loading) return;
+    if (isPatientOnly) {
+      if (activeTab !== "patientPortal" && activeTab !== "publicBooking") {
+        setActiveTab("patientPortal");
+      }
+      return;
+    }
+    if (!tabAllowed(activeTab, activeRole, isPlatformSA)) {
+      setActiveTab(defaultTabFor(activeRole, isPlatformSA));
+    }
+  }, [roleDefs, activeTab, activeRole, isPlatformSA, isPatientOnly, authUser, loading]);
+
   const handleSyncState = () => {
     fetchState();
   };
@@ -734,9 +800,42 @@ export default function App() {
   const hospitalBranches = branches.filter((b) => b.hospitalId === sessionHospitalId);
   const hospitalPatients = patients.filter((p) => (p.hospitalId || HOSPITAL_PRIMECARE) === sessionHospitalId);
   const tenantAppointments = appointments.filter((a) => {
+    if (a.hospitalId) return a.hospitalId === sessionHospitalId;
     const p = patients.find((pt) => pt.id === a.patientId);
     return !p || (p.hospitalId || HOSPITAL_PRIMECARE) === sessionHospitalId;
   });
+  const todayKey = formatDateKey(new Date());
+  const dayAppointments = tenantAppointments
+    .filter((a) => a.date === selectedClinicDate)
+    .slice()
+    .sort(compareAppointmentTime);
+  const appointmentCountsByDate = tenantAppointments.reduce((acc, a) => {
+    if (!a.date) return acc;
+    acc[a.date] = (acc[a.date] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const jumpToToday = () => {
+    const n = new Date();
+    setCalendarMonth({ year: n.getFullYear(), month: n.getMonth() });
+    setSelectedClinicDate(formatDateKey(n));
+    setNewAptDate(formatDateKey(n));
+  };
+  const selectClinicDate = (dateKey: string) => {
+    setSelectedClinicDate(dateKey);
+    setNewAptDate(dateKey);
+  };
+  const clinicCalendar = (
+    <ClinicMonthCalendar
+      year={calendarMonth.year}
+      month={calendarMonth.month}
+      selectedDate={selectedClinicDate}
+      todayKey={todayKey}
+      countsByDate={appointmentCountsByDate}
+      onSelectDate={selectClinicDate}
+      onChangeMonth={(year, month) => setCalendarMonth({ year, month })}
+      onJumpToToday={jumpToToday}
+    />
+  );
 
   const persistRoles = async (roles: RoleDefinition[]) => {
     const res = await fetch("/api/tenancy/roles", {
@@ -744,11 +843,19 @@ export default function App() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ hospitalId: sessionHospitalId, roles }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || "Could not save RBAC policy.");
+    }
     if (data.roles) {
       setRoleDefs((prev) => [...prev.filter((r) => r.hospitalId !== sessionHospitalId), ...data.roles]);
     } else {
       fetchState();
+    }
+    try {
+      localStorage.setItem("suwasiri-rbac-rev", String(Date.now()));
+    } catch {
+      /* ignore quota / private mode */
     }
   };
 
@@ -967,66 +1074,66 @@ export default function App() {
   // Move Appointment Position (Change Patient Place in Queue)
   const handleMoveAppointment = async (id: string, direction: "up" | "down" | "top") => {
     try {
-      const currentIndex = appointments.findIndex(a => a.id === id);
+      const dayList = appointments.filter((a) => a.date === selectedClinicDate);
+      const currentIndex = dayList.findIndex((a) => a.id === id);
       if (currentIndex === -1) return;
 
-      const updated = [...appointments];
-      const [movedItem] = updated.splice(currentIndex, 1);
-
+      const reorderedDay = [...dayList];
+      const [movedItem] = reorderedDay.splice(currentIndex, 1);
       if (direction === "top") {
-        updated.unshift(movedItem);
+        reorderedDay.unshift(movedItem);
       } else if (direction === "up") {
-        const newIdx = Math.max(0, currentIndex - 1);
-        updated.splice(newIdx, 0, movedItem);
-      } else if (direction === "down") {
-        const newIdx = Math.min(updated.length, currentIndex + 1);
-        updated.splice(newIdx, 0, movedItem);
+        reorderedDay.splice(Math.max(0, currentIndex - 1), 0, movedItem);
+      } else {
+        reorderedDay.splice(Math.min(reorderedDay.length, currentIndex + 1), 0, movedItem);
       }
 
-      // Immediate optimistic local state update
+      let dayCursor = 0;
+      const updated = appointments.map((a) =>
+        a.date === selectedClinicDate ? reorderedDay[dayCursor++] : a
+      );
       setAppointments(updated);
 
-      const res = await fetch(`/api/appointments/${id}/move`, {
-        method: "PATCH",
+      const res = await fetch("/api/appointments/reorder", {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ direction })
+        body: JSON.stringify({ appointments: updated }),
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.appointments) {
-          setAppointments(data.appointments);
-        }
+        if (data.appointments) setAppointments(data.appointments);
       }
     } catch (err) {
       console.error("Failed to move appointment place:", err);
     }
   };
 
-  // Change Patient Queue Place to specific index
   const handleChangeAppointmentPlace = async (id: string, targetPlaceNum: number) => {
     try {
-      const currentIndex = appointments.findIndex(a => a.id === id);
+      const dayList = appointments.filter((a) => a.date === selectedClinicDate);
+      const currentIndex = dayList.findIndex((a) => a.id === id);
       if (currentIndex === -1) return;
-      const targetIndex = Math.max(0, Math.min(appointments.length - 1, targetPlaceNum - 1));
+      const targetIndex = Math.max(0, Math.min(dayList.length - 1, targetPlaceNum - 1));
       if (currentIndex === targetIndex) return;
 
-      const updated = [...appointments];
-      const [movedItem] = updated.splice(currentIndex, 1);
-      updated.splice(targetIndex, 0, movedItem);
+      const reorderedDay = [...dayList];
+      const [movedItem] = reorderedDay.splice(currentIndex, 1);
+      reorderedDay.splice(targetIndex, 0, movedItem);
 
-      // Immediate optimistic update
+      let dayCursor = 0;
+      const updated = appointments.map((a) =>
+        a.date === selectedClinicDate ? reorderedDay[dayCursor++] : a
+      );
       setAppointments(updated);
 
-      const res = await fetch(`/api/appointments/${id}/move`, {
-        method: "PATCH",
+      const res = await fetch("/api/appointments/reorder", {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetIndex })
+        body: JSON.stringify({ appointments: updated }),
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.appointments) {
-          setAppointments(data.appointments);
-        }
+        if (data.appointments) setAppointments(data.appointments);
       }
     } catch (err) {
       console.error("Failed to reorder appointment place:", err);
@@ -1558,9 +1665,8 @@ export default function App() {
 
   // Filter list registries based on multi-field search
   const filteredPatients = patients.filter(p => {
-    if (isPlatformSA) return false;
     if ((p.hospitalId || HOSPITAL_PRIMECARE) !== sessionHospitalId) return false;
-    if (!canViewHospitalWideCharts(activeRole) && (p.branchId || BRANCH_COLOMBO) !== sessionBranchId) return false;
+    if (!isPlatformSA && !canViewHospitalWideCharts(activeRole) && (p.branchId || BRANCH_COLOMBO) !== sessionBranchId) return false;
     if (!searchQuery.trim()) return true;
     return getSearchMatchDetails(p, searchQuery) !== null;
   });
@@ -1644,7 +1750,7 @@ export default function App() {
           <div className="mt-2.5 flex items-center gap-1.5 bg-emerald-50 text-emerald-800 border border-emerald-200/50 p-1.5 px-2 rounded-md">
             <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shrink-0"></span>
             <span className="text-[9px] font-mono font-black uppercase tracking-wider">
-              {isPlatformSA ? "Suwasiri Platform" : (activeBranch?.name || activeHospital?.name || "No branch")}
+              {activeBranch?.name || activeHospital?.name || (isPlatformSA ? "Suwasiri Platform" : "No branch")}
             </span>
           </div>
         </div>
@@ -1652,11 +1758,13 @@ export default function App() {
         <nav className="flex-1 px-4 mt-4 space-y-1 overflow-y-auto">
           {!isPatientOnly && (
           <>
-          {/* SECTION 1: CLINICAL CORE (DOCTOR PORTAL) */}
+          {(canOpen("dashboard") || canOpen("clinical") || canOpen("pathology") || canOpen("documents") || canOpen("ai_features") || canOpen("calculators") || canOpen("recalls") || canOpen("patients") || canOpen("telehealth")) && (
           <div className="pb-1">
             <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider px-2">Clinical Core (Doctor Portal)</span>
           </div>
+          )}
 
+          {canOpen("dashboard") && (
           <button
             onClick={() => requestTab("dashboard")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1668,7 +1776,9 @@ export default function App() {
             <Activity className="w-4 h-4 mr-3 text-[#00334f]" />
             <span className="text-[13px] font-medium">Doctor Dashboard</span>
           </button>
+          )}
 
+          {canOpen("clinical") && (
           <button
             onClick={() => requestTab("clinical")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1680,7 +1790,9 @@ export default function App() {
             <Stethoscope className="w-4 h-4 mr-3 text-sky-700" />
             <span className="text-[13px] font-medium">GP Exam Room</span>
           </button>
+          )}
 
+          {canOpen("pathology") && (
           <button
             onClick={() => requestTab("pathology")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1692,7 +1804,9 @@ export default function App() {
             <FlaskConical className="w-4 h-4 mr-3 text-emerald-600" />
             <span className="text-[13px] font-medium">Pathology & Diagnostics</span>
           </button>
+          )}
 
+          {canOpen("documents") && (
           <button
             onClick={() => requestTab("documents")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1704,7 +1818,9 @@ export default function App() {
             <FileText className="w-4 h-4 mr-3 text-sky-600" />
             <span className="text-[13px] font-medium">Document Management</span>
           </button>
+          )}
 
+          {canOpen("ai_features") && (
           <button
             onClick={() => requestTab("ai_features")}
             className={`flex items-center justify-between w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1721,7 +1837,9 @@ export default function App() {
               AI Scribe
             </span>
           </button>
+          )}
 
+          {canOpen("calculators") && (
           <button
             onClick={() => requestTab("calculators")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1733,7 +1851,9 @@ export default function App() {
             <BrainCircuit className="w-4 h-4 mr-3 text-sky-600" />
             <span className="text-[13px] font-medium">Clinical Calculators</span>
           </button>
+          )}
 
+          {canOpen("recalls") && (
           <button
             onClick={() => requestTab("recalls")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1745,7 +1865,9 @@ export default function App() {
             <Bell className="w-4 h-4 mr-3 text-red-500" />
             <span className="text-[13px] font-medium">Recalls & Reminders</span>
           </button>
+          )}
 
+          {canOpen("patients") && (
           <button
             onClick={() => requestTab("patients")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1757,7 +1879,9 @@ export default function App() {
             <Users className="w-4 h-4 mr-3" />
             <span className="text-[13px] font-medium">Patient Clinical Records</span>
           </button>
+          )}
 
+          {canOpen("telehealth") && (
           <button
             onClick={() => requestTab("telehealth")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1769,12 +1893,15 @@ export default function App() {
             <Video className="w-4 h-4 mr-3" />
             <span className="text-[13px] font-medium">Telehealth Room</span>
           </button>
+          )}
 
-          {/* SECTION 2: RECEPTIONIST AREA */}
+          {(canOpen("calendar") || canOpen("billing") || canOpen("sampleCollection") || canOpen("chat")) && (
           <div className="pt-2 pb-1 border-t border-slate-100">
             <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider px-2">Receptionist & Front Desk</span>
           </div>
+          )}
 
+          {canOpen("calendar") && (
           <button
             onClick={() => requestTab("calendar")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1786,7 +1913,9 @@ export default function App() {
             <CalendarIcon className="w-4 h-4 mr-3 text-sky-700" />
             <span className="text-[13px] font-medium">Lobby Schedule & Queue</span>
           </button>
+          )}
 
+          {canOpen("billing") && (
           <button
             onClick={() => requestTab("billing")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1798,7 +1927,9 @@ export default function App() {
             <CreditCard className="w-4 h-4 mr-3 text-emerald-600" />
             <span className="text-[13px] font-medium">Receipts and Invoices</span>
           </button>
+          )}
 
+          {canOpen("sampleCollection") && (
           <button
             onClick={() => requestTab("sampleCollection")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1810,7 +1941,9 @@ export default function App() {
             <FlaskConical className="w-4 h-4 mr-3 text-rose-500" />
             <span className="text-[13px] font-medium">Sample Dispatch Hub</span>
           </button>
+          )}
 
+          {canOpen("chat") && (
           <button
             onClick={() => requestTab("chat")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1822,13 +1955,15 @@ export default function App() {
             <MessageSquare className="w-4 h-4 mr-3 text-purple-600" />
             <span className="text-[13px] font-medium">Team Secure Chat</span>
           </button>
+          )}
 
-          {/* SECTION 3: OPERATIONS & GOVERNANCE */}
+          {(canOpen("platform") || canOpen("practiceManager") || canOpen("security") || canOpen("audit_logs") || canOpen("reports")) && (
           <div className="pt-2 pb-1 border-t border-slate-100">
             <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider px-2">Operations & Governance</span>
           </div>
+          )}
 
-          {isPlatformSA && (
+          {canOpen("platform") && (
             <button
               onClick={() => requestTab("platform")}
               className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1842,6 +1977,7 @@ export default function App() {
             </button>
           )}
 
+          {canOpen("practiceManager") && (
           <button
             onClick={() => requestTab("practiceManager")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1853,7 +1989,9 @@ export default function App() {
             <SlidersHorizontal className="w-4 h-4 mr-3 text-purple-600" />
             <span className="text-[13px] font-medium">Practice Manager</span>
           </button>
+          )}
 
+          {canOpen("security") && (
           <button
             onClick={() => requestTab("security")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1865,7 +2003,9 @@ export default function App() {
             <ShieldCheck className="w-4 h-4 mr-3 text-emerald-600" />
             <span className="text-[13px] font-medium">Security & RBAC</span>
           </button>
+          )}
 
+          {canOpen("audit_logs") && (
           <button
             onClick={() => requestTab("audit_logs")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1877,7 +2017,9 @@ export default function App() {
             <Clock className="w-4 h-4 mr-3 text-slate-700" />
             <span className="text-[13px] font-medium">Clinical Audit Trail</span>
           </button>
+          )}
 
+          {canOpen("reports") && (
           <button
             onClick={() => requestTab("reports")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1889,14 +2031,17 @@ export default function App() {
             <TrendingUp className="w-4 h-4 mr-3 text-sky-600" />
             <span className="text-[13px] font-medium">Reports & Analytics</span>
           </button>
+          )}
           </>
           )}
 
-          {/* SECTION 4: PATIENT FACING PORTAL */}
+          {(canOpen("patientPortal") || canOpen("publicBooking")) && (
           <div className="pt-2 pb-1 border-t border-slate-100">
             <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider px-2">Patient Facing Portal</span>
           </div>
+          )}
 
+          {canOpen("patientPortal") && (
           <button
             onClick={() => requestTab("patientPortal")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1908,7 +2053,9 @@ export default function App() {
             <HeartPulse className="w-4 h-4 mr-3 text-emerald-600" />
             <span className="text-[13px] font-bold">Patient Portal</span>
           </button>
+          )}
 
+          {canOpen("publicBooking") && (
           <button
             onClick={() => requestTab("publicBooking")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
@@ -1920,16 +2067,18 @@ export default function App() {
             <Globe className="w-4 h-4 mr-3 text-sky-600" />
             <span className="text-[13px] font-medium">Online Public Booking</span>
           </button>
+          )}
         </nav>
 
         {/* Sidebar bottom */}
         <div className="p-4 border-t border-[#c1c7cf] space-y-2">
-            {!isPatientOnly && (
+            {!isPatientOnly && (canOpen("calendar") || canOpen("clinical")) && (
             <button
             onClick={() => {
               if (patients.length > 0) {
                 setNewAptPatientId(patients[0].id);
               }
+              setNewAptDate(selectedClinicDate);
               setShowAptModal(true);
             }}
             className="w-full bg-[#00334f] text-white py-2.5 px-3 font-bold text-xs rounded shadow hover:bg-[#0c4a6e] transition-all flex items-center justify-center cursor-pointer active:scale-95"
@@ -1951,7 +2100,7 @@ export default function App() {
           branches={branches}
           roles={roleDefs}
           memberships={memberships}
-          userId={sessionUserId}
+          userId={resolvedUserId}
           hospitalId={sessionHospitalId}
           branchId={sessionBranchId}
           roleId={activeMembership?.roleId || ""}
@@ -2113,7 +2262,7 @@ export default function App() {
                   {sessionUser?.name || currentRole}
                 </p>
                 <p className="text-[9px] font-extrabold uppercase text-slate-400">
-                  {currentRole} · {isPlatformSA ? "Platform" : activeHospital?.name || "Hospital"}
+                  {currentRole} · {activeHospital?.name || (isPlatformSA ? "Platform" : "Hospital")}
                 </p>
               </div>
             </div>
@@ -2161,11 +2310,13 @@ export default function App() {
                         <div className="flex items-center gap-2">
                           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
                           <h2 className="text-sm font-black text-[#00334f] tracking-tight uppercase">
-                            Doctor Dashboard • Today's Clinical Summary
+                            Doctor Dashboard • {formatLongDate(selectedClinicDate)}
                           </h2>
                         </div>
                         <p className="text-xs text-slate-500 mt-0.5">
-                          Practitioner: <strong className="text-slate-800">Dr. Priyantha Silva (FRACGP, MBBS)</strong> • Session ID: #GP-88219 • Colombo Central Clinic
+                          Practitioner: <strong className="text-slate-800">{sessionUser?.name || "Dr. Priyantha Silva"}</strong>
+                          {activeHospital ? <> • {activeHospital.name}{activeBranch ? ` · ${activeBranch.name}` : ""}</> : null}
+                          {selectedClinicDate === todayKey ? " • Live session" : ""}
                         </p>
                       </div>
 
@@ -2204,8 +2355,10 @@ export default function App() {
                           <span className="text-[10px] uppercase font-bold tracking-wider">Appointments</span>
                           <CalendarIcon className="w-4 h-4 text-sky-600 group-hover:scale-110 transition-transform" />
                         </div>
-                        <div className="text-2xl font-black text-[#00334f]">18</div>
-                        <p className="text-[10px] text-sky-700/80 mt-0.5">8 booked • 10 walk-in</p>
+                        <div className="text-2xl font-black text-[#00334f]">{dayAppointments.length}</div>
+                        <p className="text-[10px] text-sky-700/80 mt-0.5">
+                          {dayAppointments.filter((a) => a.status === "SCHEDULED").length} scheduled • {dayAppointments.filter((a) => a.status === "CHECKED IN" || a.status === "IN EXAM ROOM").length} in clinic
+                        </p>
                       </div>
 
                       {/* 2. Waiting 4 */}
@@ -2218,7 +2371,7 @@ export default function App() {
                           <span className="text-[10px] uppercase font-bold tracking-wider">Waiting</span>
                           <Clock className="w-4 h-4 text-amber-600 group-hover:scale-110 transition-transform" />
                         </div>
-                        <div className="text-2xl font-black text-amber-900">4</div>
+                        <div className="text-2xl font-black text-amber-900">{dayAppointments.filter((a) => a.status === "CHECKED IN").length}</div>
                         <p className="text-[10px] text-amber-700 mt-0.5">In lobby queue</p>
                       </div>
 
@@ -2232,7 +2385,7 @@ export default function App() {
                           <span className="text-[10px] uppercase font-bold tracking-wider">Telehealth</span>
                           <Video className="w-4 h-4 text-purple-600 group-hover:scale-110 transition-transform" />
                         </div>
-                        <div className="text-2xl font-black text-purple-900">3</div>
+                        <div className="text-2xl font-black text-purple-900">{dayAppointments.filter((a) => a.isTelehealth || a.type === "Telehealth Video").length}</div>
                         <p className="text-[10px] text-purple-700 mt-0.5">Remote consults</p>
                       </div>
 
@@ -2289,7 +2442,7 @@ export default function App() {
                         </div>
                         <div>
                           <p className="text-[#72787f] font-bold text-[10px] uppercase">Completed Consultations</p>
-                          <p className="font-bold text-lg text-[#00334f]">{tenantAppointments.filter(a => a.status === "COMPLETED").length} finished today</p>
+                          <p className="font-bold text-lg text-[#00334f]">{dayAppointments.filter(a => a.status === "COMPLETED").length} finished this date</p>
                         </div>
                       </div>
                       <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
@@ -2304,7 +2457,7 @@ export default function App() {
                         </div>
                         <div>
                           <p className="text-[#72787f] font-bold text-[10px] uppercase">Lobby Active Queue</p>
-                          <p className="font-bold text-lg text-amber-900">{tenantAppointments.filter(a => a.status === "CHECKED IN").length} checked-in</p>
+                          <p className="font-bold text-lg text-amber-900">{dayAppointments.filter(a => a.status === "CHECKED IN").length} checked-in</p>
                         </div>
                       </div>
                       <button
@@ -2356,16 +2509,16 @@ export default function App() {
                             <Clock className="w-5 h-5 text-[#00334f]" />
                             <div>
                               <h2 className="font-bold text-slate-800 text-sm">
-                                Today's Appointment Schedule & Live Lobby Queue
+                                {formatLongDate(selectedClinicDate)} — Appointments & Lobby Queue
                               </h2>
                               <p className="text-[11px] text-slate-500">
-                                Click patient name to automatically launch consultation in <strong>GP Exam Room</strong>
+                                Click a date on the side calendar, then open a patient to launch the <strong>GP Exam Room</strong>
                               </p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-slate-600 font-semibold bg-white px-2.5 py-1 rounded-md border">
-                              {appointments.length} Patients Scheduled
+                              {dayAppointments.length} Patients Scheduled
                             </span>
                             <button
                               onClick={() => setActiveTab("calendar")}
@@ -2390,10 +2543,16 @@ export default function App() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                              {tenantAppointments.map((apt, index) => {
+                              {dayAppointments.length === 0 ? (
+                                <tr>
+                                  <td colSpan={6} className="p-8 text-center text-slate-400 italic">
+                                    No appointments booked for {formatLongDate(selectedClinicDate)}. Use the calendar to pick another date, or book a new appointment.
+                                  </td>
+                                </tr>
+                              ) : dayAppointments.map((apt, index) => {
                                 const p = patients.find(pat => pat.id === apt.patientId);
                                 const isFirst = index === 0;
-                                const isLast = index === appointments.length - 1;
+                                const isLast = index === dayAppointments.length - 1;
                                 return (
                                   <tr key={apt.id} className="hover:bg-sky-50/50 transition-colors group">
                                     {/* Queue Place Number & Reorder Controls */}
@@ -2454,12 +2613,24 @@ export default function App() {
                                         }}
                                         title="Click patient name to launch GP Exam Room"
                                       >
-                                        <span>{p?.name || "Unregistered Patient"}</span>
+                                        <span>{p?.name || apt.patientName || "Unregistered Patient"}</span>
                                         <Stethoscope className="w-3.5 h-3.5 text-sky-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                                       </div>
-                                      <div className="text-[10px] text-slate-500 flex items-center gap-2 mt-0.5">
+                                      <div className="text-[10px] text-slate-500 flex items-center gap-2 mt-0.5 flex-wrap">
                                         <span className="font-mono bg-slate-100 px-1 rounded">ID: {apt.patientId}</span>
-                                        {p && <span>{p.gender}, {p.age} yrs</span>}
+                                        {apt.source === "suwasiri_app" && (
+                                          <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                            Suwasiri App
+                                          </span>
+                                        )}
+                                        {(apt.isTelehealth || apt.type === "Telehealth Video") && (
+                                          <span className="text-[9px] font-bold uppercase tracking-wide text-purple-800 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
+                                            Video
+                                          </span>
+                                        )}
+                                        {p && p.age > 0 && <span>{p.gender}, {p.age} yrs • {p.bloodType}</span>}
+                                        {(p?.phone || apt.patientPhone) && <span>{p?.phone || apt.patientPhone}</span>}
+                                        {apt.doctorName && <span>{apt.doctorName}</span>}
                                         {p?.allergies && p.allergies !== "NKDA" && p.allergies !== "None" && (
                                           <span className="text-[9px] font-bold text-rose-700 bg-rose-50 px-1 rounded border border-rose-200">
                                             {p.allergies}
@@ -2549,8 +2720,9 @@ export default function App() {
                       </section>
                     </div>
 
-                    {/* Right Column Alerts & Checklist tasks (Col Span 4) */}
+                    {/* Right Column: month calendar + alerts */}
                     <div className="lg:col-span-4 space-y-6">
+                      {clinicCalendar}
                       
                       {/* Clinical checklist tasks */}
                       <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-3 shadow-xs">
@@ -2678,7 +2850,7 @@ export default function App() {
                             Lobby Schedule & Patient Queue Order
                           </h2>
                           <p className="text-xs text-slate-500">
-                            Reorder patient places, adjust triage sequence, fast-track emergency priority, and manage consultation workflow.
+                            {formatLongDate(selectedClinicDate)} — reorder the queue, check patients in, and open charts. Use the side calendar to change date.
                           </p>
                         </div>
                       </div>
@@ -2688,6 +2860,7 @@ export default function App() {
                       <button
                         onClick={() => {
                           if (patients.length > 0) setNewAptPatientId(patients[0].id);
+                          setNewAptDate(selectedClinicDate);
                           setShowAptModal(true);
                         }}
                         className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3.5 py-2 text-xs font-bold rounded flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
@@ -2711,11 +2884,11 @@ export default function App() {
                     {/* Status filter tabs */}
                     <div className="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-lg border">
                       {[
-                        { id: "ALL", label: "All Patients", count: appointments.length },
-                        { id: "CHECKED IN", label: "Waiting in Lobby", count: tenantAppointments.filter(a => a.status === "CHECKED IN").length },
-                        { id: "IN EXAM ROOM", label: "In Exam Room", count: tenantAppointments.filter(a => a.status === "IN EXAM ROOM").length },
-                        { id: "SCHEDULED", label: "Upcoming Scheduled", count: tenantAppointments.filter(a => a.status === "SCHEDULED").length },
-                        { id: "COMPLETED", label: "Completed", count: tenantAppointments.filter(a => a.status === "COMPLETED").length }
+                        { id: "ALL", label: "All Patients", count: dayAppointments.length },
+                        { id: "CHECKED IN", label: "Waiting in Lobby", count: dayAppointments.filter(a => a.status === "CHECKED IN").length },
+                        { id: "IN EXAM ROOM", label: "In Exam Room", count: dayAppointments.filter(a => a.status === "IN EXAM ROOM").length },
+                        { id: "SCHEDULED", label: "Upcoming Scheduled", count: dayAppointments.filter(a => a.status === "SCHEDULED").length },
+                        { id: "COMPLETED", label: "Completed", count: dayAppointments.filter(a => a.status === "COMPLETED").length }
                       ].map(tab => (
                         <button
                           key={tab.id}
@@ -2751,13 +2924,15 @@ export default function App() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                <div className="lg:col-span-8">
                 {/* Patient Queue Reordering Table / Live Board */}
                 <div className="bg-white border rounded-lg shadow-xs overflow-hidden">
                   <div className="px-5 py-3.5 bg-[#f0f3ff] border-b flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping"></span>
                       <h3 className="font-bold text-sm text-[#00334f]">
-                        Live Patient Place Order & Triage Sequence
+                        {formatLongDate(selectedClinicDate)} — Patient queue
                       </h3>
                     </div>
                     <p className="text-[11px] text-slate-500 font-medium">
@@ -2779,23 +2954,26 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {appointments
+                        {dayAppointments
                           .map((apt, actualIdx) => ({ apt, actualIdx }))
                           .filter(({ apt }) => {
                             if (lobbyFilterStatus !== "ALL" && apt.status !== lobbyFilterStatus) return false;
                             if (lobbySearchQuery) {
                               const p = patients.find(pat => pat.id === apt.patientId);
-                              const matchName = p?.name.toLowerCase().includes(lobbySearchQuery.toLowerCase());
-                              const matchReason = apt.reason.toLowerCase().includes(lobbySearchQuery.toLowerCase());
-                              const matchId = apt.patientId.toLowerCase().includes(lobbySearchQuery.toLowerCase());
-                              return matchName || matchReason || matchId;
+                              const q = lobbySearchQuery.toLowerCase();
+                              const matchName = (p?.name || apt.patientName || "").toLowerCase().includes(q);
+                              const matchReason = apt.reason.toLowerCase().includes(q);
+                              const matchId = apt.patientId.toLowerCase().includes(q);
+                              const matchPhone = (p?.phone || apt.patientPhone || "").toLowerCase().includes(q);
+                              const matchDoctor = (apt.doctorName || "").toLowerCase().includes(q);
+                              return matchName || matchReason || matchId || matchPhone || matchDoctor;
                             }
                             return true;
                           })
                           .map(({ apt, actualIdx }) => {
                             const p = patients.find(pat => pat.id === apt.patientId);
                             const isFirst = actualIdx === 0;
-                            const isLast = actualIdx === appointments.length - 1;
+                            const isLast = actualIdx === dayAppointments.length - 1;
                             const estWaitMins = actualIdx * 15;
 
                             return (
@@ -2831,7 +3009,7 @@ export default function App() {
                                         onChange={(e) => handleChangeAppointmentPlace(apt.id, Number(e.target.value))}
                                         className="bg-white border rounded text-[10px] font-bold px-1.5 py-0.5 text-slate-700 outline-none hover:border-[#00334f]"
                                       >
-                                        {appointments.map((_, pNum) => (
+                                        {dayAppointments.map((_, pNum) => (
                                           <option key={pNum} value={pNum + 1}>
                                             #{pNum + 1} {pNum === 0 ? "(Next)" : ""}
                                           </option>
@@ -2914,15 +3092,27 @@ export default function App() {
                                     onClick={() => p && setActiveHubPatient(p)}
                                   >
                                     <div className="w-8 h-8 rounded-full bg-[#dee8ff] text-[#00334f] font-bold text-xs flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                                      {p?.name ? p.name.split(" ").map(n => n[0]).join("") : "P"}
+                                      {(p?.name || apt.patientName || "P").split(" ").map(n => n[0]).join("").slice(0, 2)}
                                     </div>
                                     <div>
                                       <p className="font-serif font-bold text-slate-900 group-hover:text-[#00334f] group-hover:underline">
-                                        {p?.name || "Unregistered Patient"}
+                                        {p?.name || apt.patientName || "Unregistered Patient"}
                                       </p>
                                       <p className="text-[10px] text-slate-400">
-                                        <span className="font-mono font-bold text-slate-500">[{apt.patientId}]</span> • {p?.gender}, {p?.age} yrs • Blood: {p?.bloodType || "N/A"}
+                                        <span className="font-mono font-bold text-slate-500">[{apt.patientId}]</span>
+                                        {apt.source === "suwasiri_app" && (
+                                          <span className="ml-1 text-[9px] font-bold uppercase text-emerald-800 bg-emerald-50 border border-emerald-200 px-1 rounded">Suwasiri App</span>
+                                        )}
+                                        {(apt.isTelehealth || apt.type === "Telehealth Video") && (
+                                          <span className="ml-1 text-[9px] font-bold uppercase text-purple-800 bg-purple-50 border border-purple-200 px-1 rounded">Video</span>
+                                        )}
                                       </p>
+                                      {(p?.phone || apt.patientPhone) && (
+                                        <p className="text-[10px] text-slate-500">{p?.phone || apt.patientPhone}{(p?.email || apt.patientEmail) ? ` • ${p?.email || apt.patientEmail}` : ""}</p>
+                                      )}
+                                      {apt.doctorName && (
+                                        <p className="text-[10px] text-slate-500">{apt.doctorName}{apt.room ? ` • ${apt.room}` : ""}</p>
+                                      )}
                                       {p?.allergies && p.allergies !== "None declared" && (
                                         <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1 rounded inline-block mt-0.5">
                                           ⚠️ Allergy: {p.allergies}
@@ -3012,10 +3202,10 @@ export default function App() {
                             );
                           })}
 
-                        {appointments.length === 0 && (
+                        {dayAppointments.length === 0 && (
                           <tr>
                             <td colSpan={7} className="p-8 text-center text-slate-400 italic">
-                              No patients currently booked in the lobby schedule queue.
+                              No patients booked for {formatLongDate(selectedClinicDate)}. Click another date on the calendar, or book an appointment for this day.
                             </td>
                           </tr>
                         )}
@@ -3023,45 +3213,11 @@ export default function App() {
                     </table>
                   </div>
                 </div>
+                </div>
 
-                {/* Calendar simulation grid */}
-                <div className="bg-white p-6 border rounded-lg shadow-xs space-y-4">
-                  <div className="border-b pb-2 flex justify-between items-center">
-                    <div>
-                      <h3 className="font-serif font-bold text-base text-[#00334f]">
-                        Weekly Practice Calendar Slots
-                      </h3>
-                      <p className="text-xs text-slate-500">Scheduled consultations overview across current calendar week.</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-7 gap-2.5">
-                    {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, dIdx) => (
-                      <div key={day} className="bg-slate-50 border rounded-lg p-3 min-h-[140px] space-y-2">
-                        <div className="font-bold text-xs text-slate-600 border-b pb-1 flex justify-between">
-                          <span>{day}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">June {11 + dIdx}</span>
-                        </div>
-
-                        {/* Display scheduled items on this slot */}
-                        <div className="space-y-1.5">
-                          {tenantAppointments.map((apt, aIdx) => {
-                            const pObj = patients.find(p => p.id === apt.patientId);
-                            return (
-                              <div key={apt.id} className="p-1.5 bg-sky-50 border border-sky-200 text-[10px] leading-tight rounded-md">
-                                <div className="flex justify-between items-center font-bold text-[#00334f]">
-                                  <span>{apt.time}</span>
-                                  <span className="text-[9px] bg-sky-200/70 text-sky-900 px-1 rounded font-mono">#{aIdx + 1}</span>
-                                </div>
-                                <p className="text-slate-700 truncate font-semibold mt-0.5">{pObj?.name || "Patient"}</p>
-                                <p className="text-[9px] text-slate-500 truncate italic">"{apt.reason}"</p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                <div className="lg:col-span-4">
+                  {clinicCalendar}
+                </div>
                 </div>
 
               </div>
@@ -3778,9 +3934,10 @@ export default function App() {
             {/* TAB: SECURE TELEHEALTH VIDEO ROOM */}
             {activeTab === "telehealth" && (
               <TelehealthRoom
-                patients={patients}
-                appointments={appointments}
+                patients={hospitalPatients}
+                appointments={tenantAppointments}
                 activePatient={null}
+                sessionDoctorName={sessionUser?.name || "Dr. Priyantha Silva"}
                 drugsDatabase={drugs}
                 onTelehealthSyncSuccess={fetchState}
                 onUpdatePatientMedications={(patId, newMedications) => {

@@ -58,9 +58,9 @@ Move GP EMR charts off the Express JSON store:
 ## 5. Then product functions (web EMR, still this stack)
 
 1. Persist RBAC/custom roles in Firestore (already in the UI)
-2. Live appointments / queue per branch
+2. Live appointments / queue per branch — **Suwasiri App bookings already sync** to the GP Care calendar and Telehealth room
 3. e-Rx + vault/labs shared with the mobile patient
-4. Telehealth signaling (today the room is simulated)
+4. Telehealth: in-app / in-browser WebRTC is wired (TURN if calls fail behind strict NAT)
 5. Billing isolation per hospital/branch
 6. Firebase Storage for documents / lab PDFs
 7. FCM for recalls and appointment reminders
@@ -69,4 +69,3 @@ Move GP EMR charts off the Express JSON store:
 
 - Do not rewrite web as Flutter web or Next.js
 - Do not merge the two UIs
-- Do not give Platform Super Admin routine clinical chart access

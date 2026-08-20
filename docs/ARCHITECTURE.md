@@ -7,7 +7,7 @@ This repo holds **two apps** developed in parallel:
 | **Mobile (Suwasiri)** | repo root (`lib/`, `android/`, `ios/`) | Flutter + Cubit/BLoC |
 | **Web (Sri Lankan GP Care)** | [`web/`](../web/) | React 19 + Vite + Express + Tailwind — **do not change this stack** |
 
-Shared production backend is Firebase (`suwasiri-91824`). The web app currently uses a local JSON store + Gemini; wiring it to Firebase is a later sync step (see [WEB.md](WEB.md)).
+The web app currently uses a local JSON store + Gemini for most EMR charts. **Appointments booked in the Suwasiri app** and **telehealth signaling** now use the same Firebase project (`suwasiri-91824`). See [WEB.md](WEB.md).
 
 Do not change Flutter/mobile code unless explicitly asked.
 

@@ -5,14 +5,14 @@ import 'package:image_picker/image_picker.dart';
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/locale/locale_cubit.dart';
 import '../../core/theme/app_colors.dart';
+import '../../data/models/user_profile.dart';
 import '../../localization/app_localizations.dart';
 import '../../localization/health_intake_l10n.dart';
-import '../../data/models/family_member.dart';
 import '../auth/health_intake_screen.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/suwasiri_brand_header.dart';
-import 'unique_health_id_card.dart';
+import 'accounts_menu.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -166,85 +166,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final auth = context.watch<AuthCubit>().state;
-    final user = auth.user;
-
-    if (user == null) {
-      return EmptyHint(l.t('notSignedIn'));
-    }
-
-    return SafeArea(
-      bottom: false,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-        children: [
-          const SuwasiriBrandHeader(),
-          const SizedBox(height: 18),
-          if (auth.familyMembers.isNotEmpty) ...[
-            _FamilyMemberSelector(
-              familyMembers: auth.familyMembers,
-              activeKey:
-                  auth.activeFamilyKey ?? auth.familyMembers.first.key,
-              isOwnerActive: context.read<AuthCubit>().isActiveOwner,
-              onSelect: (key) =>
-                  context.read<AuthCubit>().selectFamilyMember(key),
-              onAdd: () {
-                _showAddFamilyMemberSheet(context);
-              },
-            ),
-            const SizedBox(height: 14),
-          ],
-          _IdentityCard(
+  void _openMyProfile() {
+    final user = context.read<AuthCubit>().state.user;
+    if (user == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MyProfilePage(
+          user: user,
+          onChangePhoto: _changePhoto,
+          onEditIntake: _openHealthIntake,
+          identityCard: _IdentityCard(
             userName: user.displayName,
             email: user.email,
             onChangePhoto: _changePhoto,
             onEditIntake: _openHealthIntake,
           ),
-          const SizedBox(height: 14),
-          UniqueHealthIdCard(
-            user: user,
-            onEdit: _openHealthIntake,
-          ),
-          const SizedBox(height: 14),
-          SoftCard(
-            onTap: _openHealthIntake,
-            child: Row(
-              children: [
-                const Icon(Icons.medical_information_outlined,
-                    color: AppColors.trustBlue),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        HealthIntakeL10n.t(context, 'editIntake'),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.trustBlueDark,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        HealthIntakeL10n.t(context, 'intakeSubtitle'),
-                        style: const TextStyle(
-                          color: AppColors.slateMuted,
-                          fontSize: 12,
-                          height: 1.3,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.chevron_right, color: AppColors.slateMuted),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          _CommunicationCard(
+        ),
+      ),
+    );
+  }
+
+  void _openAccountSettings() {
+    final user = context.read<AuthCubit>().state.user;
+    if (user == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AccountSettingsPage(
+          communicationCard: _CommunicationCard(
             sms: _sms,
             whatsapp: _whatsapp,
             emailReports: _emailReports,
@@ -258,95 +206,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onOffset: (v) => setState(() => _reminderOffset = v),
             onSave: _saveSettings,
           ),
-          const SizedBox(height: 14),
-          _SecurityCard(
+          securityCard: _SecurityCard(
             email: user.email,
             phone: _prettyPhone(user.mobileNo),
           ),
-          const SizedBox(height: 14),
-          _DarkModeCard(),
-          const SizedBox(height: 14),
-          _LogoutButton(onTap: _logout),
-        ],
+        ),
       ),
     );
   }
-}
 
-class _FamilyMemberSelector extends StatelessWidget {
-  const _FamilyMemberSelector({
-    required this.familyMembers,
-    required this.activeKey,
-    required this.isOwnerActive,
-    required this.onSelect,
-    required this.onAdd,
-  });
-
-  final List<FamilyMember> familyMembers;
-  final String activeKey;
-  final bool isOwnerActive;
-  final ValueChanged<String> onSelect;
-  final VoidCallback onAdd;
+  void _openBilling() {
+    final user = context.read<AuthCubit>().state.user;
+    if (user == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BillingPlansPage(patientId: user.id),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return SoftCard(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.family_restroom_outlined,
-                    color: AppColors.trustBlue),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Family profiles',
-                    style: const TextStyle(
-                      color: AppColors.trustBlueDark,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              key: ValueKey(activeKey),
-              initialValue: activeKey,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                isDense: true,
-                border: OutlineInputBorder(),
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              ),
-              items: familyMembers.map((m) {
-                return DropdownMenuItem(
-                  value: m.key,
-                  child: Text('${m.relationLabel} · ${m.profile.displayName}'),
-                );
-              }).toList(),
-              onChanged: (v) {
-                if (v == null) return;
-                onSelect(v);
-              },
-            ),
-            const SizedBox(height: 12),
-            if (isOwnerActive)
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: onAdd,
-                  icon: const Icon(Icons.person_add_outlined),
-                  label: const Text('Add Family Member'),
-                ),
-              ),
-          ],
-        ),
+    final l = AppLocalizations.of(context);
+    final auth = context.watch<AuthCubit>().state;
+    final user = auth.user;
+
+    if (user == null) {
+      return EmptyHint(l.t('notSignedIn'));
+    }
+
+    final members = auth.familyMembers;
+    final activeKey = auth.activeFamilyKey ??
+        (members.isNotEmpty ? members.first.key : null);
+
+    return SafeArea(
+      bottom: false,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+        children: [
+          const SuwasiriBrandHeader(),
+          const SizedBox(height: 18),
+          AccountsMenuCard(
+            onMyProfile: _openMyProfile,
+            onAccountSettings: _openAccountSettings,
+            onBilling: _openBilling,
+            familyMembers: members,
+            activeKey: activeKey,
+            isOwnerActive: context.read<AuthCubit>().isActiveOwner,
+            onSelectMember: (key) =>
+                context.read<AuthCubit>().selectFamilyMember(key),
+            onAddMember: () => _showAddFamilyMemberSheet(context),
+            onSignOut: _logout,
+          ),
+        ],
       ),
     );
   }
@@ -397,8 +309,16 @@ Future<void> _showAddFamilyMemberSheet(BuildContext context) async {
             final name = nameCtrl.text.trim();
             if (name.isEmpty) return;
             final key = keyForRelation(relation);
+            // Unique virtual patient id so Home/Vault/Billing stay isolated.
+            final owners = auth.state.familyMembers
+                .where((m) => m.key == 'owner')
+                .toList();
+            final ownerId = owners.isNotEmpty
+                ? owners.first.profile.id
+                : owner.id.split('_').first;
             final profile = owner
                 .copyWith(
+                  // Force a distinct id via a new profile object below.
                   name: name,
                   dateOfBirth: dob,
                   nic: nicCtrl.text.trim().isEmpty ? null : nicCtrl.text.trim(),
@@ -407,10 +327,26 @@ Future<void> _showAddFamilyMemberSheet(BuildContext context) async {
                 )
                 .withEnsuredBarcode();
 
+            final distinct = UserProfile(
+              id: '${ownerId}_$key',
+              name: profile.name,
+              email: profile.email,
+              nic: profile.nic,
+              mobileNo: profile.mobileNo,
+              bloodGroup: profile.bloodGroup,
+              region: profile.region,
+              dateOfBirth: profile.dateOfBirth,
+              emergencyContacts: profile.emergencyContacts,
+              ceylonHealthId:
+                  'CH-${key.toUpperCase()}-${('${ownerId}_$key'.hashCode.abs() % 1000000)}',
+              barcodeNumber: profile.barcodeNumber,
+              healthIntake: profile.healthIntake,
+            ).withEnsuredBarcode();
+
             await auth.upsertFamilyMember(
               key: key,
               relationLabel: relation,
-              profile: profile,
+              profile: distinct,
               selectAfter: true,
             );
             if (!context.mounted) return;
@@ -931,116 +867,3 @@ class _SecurityCard extends StatelessWidget {
   }
 }
 
-class _LogoutButton extends StatelessWidget {
-  const _LogoutButton({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-
-    return MinTap(
-      onTap: onTap,
-      child: CustomPaint(
-        painter: _DashedRRectPainter(
-          color: AppColors.emergencyRed.withValues(alpha: 0.55),
-          radius: 16,
-        ),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            color: AppColors.emergencyRedSoft.withValues(alpha: 0.45),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.logout, color: AppColors.emergencyRed),
-              const SizedBox(width: 8),
-              Text(
-                l.t('logoutSession'),
-                style: const TextStyle(
-                  color: AppColors.emergencyRed,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DashedRRectPainter extends CustomPainter {
-  _DashedRRectPainter({required this.color, required this.radius});
-
-  final Color color;
-  final double radius;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4;
-    final rrect = RRect.fromRectAndRadius(
-      Offset.zero & size,
-      Radius.circular(radius),
-    );
-    final path = Path()..addRRect(rrect);
-    for (final metric in path.computeMetrics()) {
-      var distance = 0.0;
-      const dash = 6.0;
-      const gap = 4.0;
-      while (distance < metric.length) {
-        final next = distance + dash;
-        canvas.drawPath(
-          metric.extractPath(distance, next.clamp(0, metric.length)),
-          paint,
-        );
-        distance = next + gap;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DashedRRectPainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.radius != radius;
-}
-
-class _DarkModeCard extends StatelessWidget {
-  const _DarkModeCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<LocaleCubit, LocaleState>(
-      builder: (context, state) {
-        final isDark = state.themeMode == ThemeMode.dark;
-        return Card(
-          child: SwitchListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            secondary: Icon(
-              isDark ? Icons.dark_mode : Icons.light_mode_outlined,
-              color: isDark ? Colors.amber : AppColors.trustBlue,
-            ),
-            title: Text(
-              'Dark Mode',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            subtitle: Text(
-              isDark ? 'Dark theme is on' : 'Light theme is on',
-              style: const TextStyle(fontSize: 12),
-            ),
-            value: isDark,
-            onChanged: (_) =>
-                context.read<LocaleCubit>().toggleDarkMode(),
-          ),
-        );
-      },
-    );
-  }
-}

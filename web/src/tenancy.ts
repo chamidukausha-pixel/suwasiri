@@ -474,6 +474,7 @@ export const EMPTY_PERMISSIONS: PermissionFlags = { ...DENIED };
 
 export function canViewHospitalWideCharts(role: RoleDefinition | undefined): boolean {
   if (!role) return false;
+  if (role.name === "Hospital Super Admin") return true;
   return role.canAccessDoctorDashboard || role.canEditClinicalNotes;
 }
 
@@ -484,8 +485,9 @@ export function isGovernanceEditor(role: RoleDefinition | undefined, isPlatformS
 }
 
 export function tabAllowed(tab: string, role: RoleDefinition | undefined, isPlatformSA: boolean): boolean {
-  if (isPlatformSA) {
-    return tab === "platform" || tab === "security";
+  if (isPlatformSA) return true;
+  if (role?.name === "Hospital Super Admin" && role.enabled) {
+    return tab !== "platform";
   }
   if (!role || !role.enabled) return false;
   switch (tab) {
@@ -496,7 +498,7 @@ export function tabAllowed(tab: string, role: RoleDefinition | undefined, isPlat
     case "clinical":
       return role.canEditClinicalNotes;
     case "pathology":
-      return role.canOrderDiagnosticsAndLabs || role.canViewClinicalNotes;
+      return role.canOrderDiagnosticsAndLabs;
     case "documents":
       return role.canViewClinicalNotes;
     case "ai_features":
@@ -510,13 +512,13 @@ export function tabAllowed(tab: string, role: RoleDefinition | undefined, isPlat
     case "telehealth":
       return role.canAccessTelehealthSuite;
     case "calendar":
-      return true;
+      return role.canManageCashierAndInvoicing || role.canAccessDoctorDashboard;
     case "billing":
       return role.canViewBilling;
     case "sampleCollection":
       return role.canDispatchSampleCourier;
     case "chat":
-      return true;
+      return role.canAccessDoctorDashboard || role.canManageUsers || role.canEditClinicalNotes;
     case "practiceManager":
       return role.canManageUsers || role.name === "Practice Manager" || role.name === "Hospital Super Admin";
     case "security":
@@ -529,17 +531,24 @@ export function tabAllowed(tab: string, role: RoleDefinition | undefined, isPlat
       return role.canManageUsers;
     case "patientPortal":
     case "publicBooking":
-      return true;
+      return role.canAccessDoctorDashboard || role.canManageCashierAndInvoicing || role.name === "Patient";
     default:
-      return true;
+      return false;
   }
 }
 
 export function defaultTabFor(role: RoleDefinition | undefined, isPlatformSA: boolean): string {
   if (isPlatformSA) return "platform";
-  if (!role) return "calendar";
-  if (role.canAccessDoctorDashboard) return "dashboard";
-  if (role.canConfigureSystemSecurity || role.name === "Hospital Super Admin") return "security";
-  if (role.canViewBilling || role.canManageCashierAndInvoicing) return "calendar";
-  return "calendar";
+  if (!role) return "billing";
+  const order = [
+    "dashboard",
+    "patients",
+    "billing",
+    "calendar",
+    "security",
+    "clinical",
+    "practiceManager",
+  ];
+  const found = order.find((tab) => tabAllowed(tab, role, false));
+  return found || "billing";
 }

@@ -47,7 +47,7 @@ interface Props {
   isPlatformSA?: boolean;
   onTriggerBackup?: () => void;
   onRecordBreakGlass?: (event: BreakGlassEvent) => void;
-  onSaveRoles?: (roles: RoleDefinition[]) => void;
+  onSaveRoles?: (roles: RoleDefinition[]) => void | Promise<void>;
   onAddRole?: (name: string, cloneFromRoleId: string) => void;
   onRemoveRole?: (roleId: string) => void;
 }
@@ -170,21 +170,29 @@ export default function SecurityModuleView({
     }));
   };
 
-  const handleSaveRbac = () => {
+  const handleSaveRbac = async () => {
     if (!isAdmin) return;
-    if (onSaveRoles) onSaveRoles(permissions);
-    setRbacSaveSuccess("Role-Based Access Control matrix saved for this hospital and committed to the security audit ledger.");
-    setTimeout(() => setRbacSaveSuccess(null), 3500);
+    try {
+      if (onSaveRoles) await onSaveRoles(permissions);
+      setRbacSaveSuccess("RBAC policy committed. Navigation and module access now follow this matrix for this hospital.");
+      setTimeout(() => setRbacSaveSuccess(null), 4000);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not save RBAC policy.");
+    }
   };
 
-  const handleResetRbacDefaults = () => {
+  const handleResetRbacDefaults = async () => {
     if (!isAdmin) return;
     const hid = hospitalId || permissions[0]?.hospitalId || "hosp-primecare";
     const restored = cloneHospitalRoles(hid);
     setPermissions(restored);
-    if (onSaveRoles) onSaveRoles(restored);
-    setRbacSaveSuccess("RBAC Matrix reset to hospital template defaults.");
-    setTimeout(() => setRbacSaveSuccess(null), 3500);
+    try {
+      if (onSaveRoles) await onSaveRoles(restored);
+      setRbacSaveSuccess("RBAC matrix reset to hospital template defaults and committed.");
+      setTimeout(() => setRbacSaveSuccess(null), 3500);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not reset RBAC policy.");
+    }
   };
 
   const handleToggleEnabled = (roleId: string) => {
@@ -304,7 +312,7 @@ export default function SecurityModuleView({
               </h1>
               <p className="text-xs text-slate-500">
                 MFA, encryption, Role-Based Access Control, and break-glass — scoped to{" "}
-                <strong>{hospitalName || "this hospital"}</strong>. Platform Super Admin edits global templates only; Hospital Super Admin edits this tenant.
+                <strong>{hospitalName || "this hospital"}</strong>. Toggle flags, then Commit & Save so staff nav and module access update immediately.
               </p>
             </div>
           </div>
@@ -1016,7 +1024,10 @@ export default function SecurityModuleView({
           </div>
 
           {isAdmin && (
-            <div className="flex justify-end pt-3 border-t">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-2 pt-3 border-t">
+              <p className="text-[10px] text-slate-500 sm:mr-auto">
+                Commit writes this hospital’s matrix now. Restricted roles (e.g. Nurse with only View Clinical Notes + View Billing) keep only those modules in the sidebar.
+              </p>
               <button
                 type="button"
                 onClick={handleSaveRbac}

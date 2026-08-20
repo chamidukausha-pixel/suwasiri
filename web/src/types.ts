@@ -271,6 +271,7 @@ export interface Patient {
   suwasiriBarcode?: string;
   hospitalId?: string;
   branchId?: string;
+  currentMedications?: string[];
 }
 
 export interface SampleCollection {
@@ -367,6 +368,18 @@ export interface Appointment {
   feeAmount?: number;
   rebateAmount?: number;
   consultationActivity?: DoctorConsultationActivity;
+  source?: "suwasiri_app" | "gp_care";
+  hospitalId?: string;
+  branchId?: string;
+  specialty?: string;
+  token?: string;
+  consultMode?: "clinic" | "video";
+  patientName?: string;
+  patientPhone?: string;
+  patientEmail?: string;
+  clinicName?: string;
+  timeSlot?: string;
+  paymentMethod?: string;
 }
 
 export interface Alert {

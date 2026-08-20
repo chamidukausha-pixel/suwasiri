@@ -60,6 +60,10 @@ abstract class HealthRepository {
     required Doctor doctor,
     required DateTime slot,
     ConsultMode consultMode = ConsultMode.clinic,
+    String patientName = '',
+    String patientEmail = '',
+    String? patientPhone,
+    String? paymentMethod,
   });
 
   Future<List<AppNotification>> getNotifications();

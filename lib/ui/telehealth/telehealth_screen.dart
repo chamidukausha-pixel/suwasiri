@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
@@ -18,6 +19,7 @@ import '../../data/models/appointment.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../data/services/clinic_copilot_replies.dart';
+import '../../data/services/telehealth_call_session.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/profile_avatar.dart';
@@ -76,6 +78,10 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   CameraController? _camera;
   bool _cameraReady = false;
   bool _cameraBusy = false;
+  TelehealthCallSession? _liveCall;
+  bool _liveConnected = false;
+  bool _joiningLive = false;
+  String _liveStatus = '';
 
   @override
   void initState() {
@@ -104,6 +110,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     _aiCtrl.dispose();
     _callTimer?.cancel();
     _rxTimer?.cancel();
+    unawaited(_hangupLiveCall());
     _disposeCamera();
     super.dispose();
   }
@@ -173,6 +180,13 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   }
 
   Future<void> _toggleCamera() async {
+    final live = _liveCall;
+    if (live != null) {
+      final next = !_camOff;
+      await live.setCameraOff(next);
+      if (mounted) setState(() => _camOff = next);
+      return;
+    }
     if (_cameraBusy) return;
     if (_camera == null || !_cameraReady) {
       await _initCamera();
@@ -220,6 +234,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   Future<void> _teardownSession({required bool clearAppt}) async {
     _callTimer?.cancel();
     _rxTimer?.cancel();
+    await _hangupLiveCall();
     await _disposeCamera();
     if (!mounted) return;
     setState(() {
@@ -248,8 +263,9 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     final now = DateTime.now();
     final untilStart = appt.timeSlot.difference(now);
     if (!untilStart.isNegative) return untilStart;
-    final untilEnd =
-        appt.timeSlot.add(const Duration(minutes: 45)).difference(now);
+    final untilEnd = appt.timeSlot
+        .add(Duration(hours: appt.isVideo ? 3 : 0, minutes: appt.isVideo ? 0 : 45))
+        .difference(now);
     return untilEnd.isNegative ? Duration.zero : untilEnd;
   }
 
@@ -308,11 +324,72 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
 
   void _endCall() {
     _rxTimer?.cancel();
+    unawaited(_hangupLiveCall());
     unawaited(_disposeCamera());
     if (mounted) setState(() => _camOff = true);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(AppLocalizations.of(context).t('callEndedRestart'))),
     );
+  }
+
+  Future<void> _hangupLiveCall() async {
+    final live = _liveCall;
+    _liveCall = null;
+    if (live != null) {
+      try {
+        await live.hangup();
+      } catch (_) {}
+    }
+    if (mounted) {
+      setState(() {
+        _liveConnected = false;
+        _joiningLive = false;
+        _liveStatus = '';
+      });
+    }
+  }
+
+  Future<void> _joinGpCareCall() async {
+    final appt = _videoAppt;
+    if (appt == null || !appt.canJoinGpCareCall || _joiningLive) return;
+    setState(() {
+      _joiningLive = true;
+      _liveStatus = 'waiting';
+    });
+    await _disposeCamera();
+    final session = TelehealthCallSession(
+      appointmentId: appt.id,
+      role: TelehealthRole.patient,
+    );
+    _liveCall = session;
+    try {
+      await session.start(
+        onRemote: () {
+          if (!mounted) return;
+          setState(() {
+            _liveConnected = true;
+            _liveStatus = 'live';
+          });
+        },
+        onStatus: (status) {
+          if (!mounted) return;
+          if (status == 'ended') {
+            unawaited(_hangupLiveCall());
+            return;
+          }
+          setState(() {
+            _liveStatus = status;
+            if (status == 'live') _liveConnected = true;
+          });
+        },
+      );
+      if (_muted) await session.setMuted(true);
+      if (_camOff) await session.setCameraOff(true);
+    } catch (e) {
+      await _hangupLiveCall();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
   }
 
   Future<void> _sendToMediLanka({
@@ -484,9 +561,20 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
               camOff: _camOff,
               camera: _camera,
               cameraReady: _cameraReady,
-              showAiOverlay: _showAiOverlay,
+              showAiOverlay: _showAiOverlay && !_liveConnected,
               doctorName: appt.doctorName,
-              onMute: () => setState(() => _muted = !_muted),
+              liveConnected: _liveConnected,
+              joiningLive: _joiningLive,
+              canJoinLive: appt.canJoinGpCareCall,
+              liveStatus: _liveStatus,
+              localRenderer: _liveCall?.localRenderer,
+              remoteRenderer: _liveCall?.remoteRenderer,
+              onMute: () {
+                final next = !_muted;
+                setState(() => _muted = next);
+                final live = _liveCall;
+                if (live != null) unawaited(live.setMuted(next));
+              },
               onCam: _toggleCamera,
               onAi: () => setState(() => _showAiOverlay = !_showAiOverlay),
               onShare: () {
@@ -495,6 +583,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
                 );
               },
               onEnd: _endCall,
+              onJoinLive: _joinGpCareCall,
             ),
             const SizedBox(height: 14),
             _LiveConsultationCard(
@@ -551,11 +640,18 @@ class _VideoStage extends StatelessWidget {
     required this.cameraReady,
     required this.showAiOverlay,
     required this.doctorName,
+    required this.liveConnected,
+    required this.joiningLive,
+    required this.canJoinLive,
+    required this.liveStatus,
+    required this.localRenderer,
+    required this.remoteRenderer,
     required this.onMute,
     required this.onCam,
     required this.onAi,
     required this.onShare,
     required this.onEnd,
+    required this.onJoinLive,
   });
 
   final bool muted;
@@ -564,11 +660,18 @@ class _VideoStage extends StatelessWidget {
   final bool cameraReady;
   final bool showAiOverlay;
   final String doctorName;
+  final bool liveConnected;
+  final bool joiningLive;
+  final bool canJoinLive;
+  final String liveStatus;
+  final RTCVideoRenderer? localRenderer;
+  final RTCVideoRenderer? remoteRenderer;
   final VoidCallback onMute;
   final VoidCallback onCam;
   final VoidCallback onAi;
   final VoidCallback onShare;
   final VoidCallback onEnd;
+  final VoidCallback onJoinLive;
 
   @override
   Widget build(BuildContext context) {
@@ -590,8 +693,14 @@ class _VideoStage extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Simulated doctor video feed
-          DecoratedBox(
+          // Doctor / remote GP Care video
+          if (liveConnected && remoteRenderer != null)
+            RTCVideoView(
+              remoteRenderer!,
+              objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+            )
+          else
+            DecoratedBox(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
@@ -637,7 +746,12 @@ class _VideoStage extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  l.t('gpCareLive'),
+                  joiningLive || liveStatus == 'waiting'
+                      ? l.t('waitingForGpCare')
+                      : liveConnected
+                          ? l.t('gpCareConnected')
+                          : l.t('gpCareLive'),
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.75),
                     fontSize: 12,
@@ -684,6 +798,14 @@ class _VideoStage extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   if (!camOff &&
+                      localRenderer != null &&
+                      (joiningLive || liveConnected))
+                    RTCVideoView(
+                      localRenderer!,
+                      mirror: true,
+                      objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                    )
+                  else if (!camOff &&
                       cameraReady &&
                       camera != null &&
                       camera!.value.isInitialized)
@@ -739,6 +861,38 @@ class _VideoStage extends StatelessWidget {
               ),
             ),
           ),
+          if (canJoinLive && !liveConnected)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 78,
+              child: FilledButton.icon(
+                onPressed: joiningLive ? null : onJoinLive,
+                icon: Icon(joiningLive ? Icons.hourglass_top : Icons.videocam),
+                label: Text(
+                  joiningLive ? l.t('waitingForGpCare') : l.t('joinGpCareVideo'),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.trustBlueDark,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            )
+          else if (!canJoinLive && !liveConnected)
+            Positioned(
+              left: 16,
+              right: 110,
+              bottom: 78,
+              child: Text(
+                l.t('videoCallOpensAt'),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           if (showAiOverlay)
             Positioned(
               left: 14,

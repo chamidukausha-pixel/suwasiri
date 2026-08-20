@@ -207,14 +207,24 @@ class AppLocalizations {
       'ta': '1. மருத்துவர் பெயரால் தேடுங்கள்',
     },
     'clinicianHint': {
-      'en': 'e.g. Dr. Perera, Dr',
-      'si': 'උදා. Dr. Perera',
-      'ta': 'எ.கா. Dr. Perera',
+      'en': 'e.g. Dr. Priyantha Silva',
+      'si': 'උදා. Dr. Priyantha Silva',
+      'ta': 'எ.கா. Dr. Priyantha Silva',
+    },
+    'searchByClinicName': {
+      'en': '2. Search by Clinic / Hospital Name',
+      'si': '2. සායන / රෝහල් නමින් සොයන්න',
+      'ta': '2. மருத்துவமனை / கிளினிக் பெயரால் தேடுங்கள்',
+    },
+    'clinicNameHint': {
+      'en': 'e.g. PrimeCare Medical Centre',
+      'si': 'උදා. PrimeCare Medical Centre',
+      'ta': 'எ.கா. PrimeCare Medical Centre',
     },
     'filterByRegion': {
-      'en': '2. Filter by Area / Region Wise',
-      'si': '2. ප්‍රදේශය අනුව පෙරහන් කරන්න',
-      'ta': '2. பகுதி / மாவட்டம் வடிகட்டி',
+      'en': '3. Filter by Area / Region Wise',
+      'si': '3. ප්‍රදේශය අනුව පෙරහන් කරන්න',
+      'ta': '3. பகுதி / மாவட்டம் வடிகட்டி',
     },
     'allRegions': {
       'en': 'All Sri Lanka Regions',
@@ -222,9 +232,9 @@ class AppLocalizations {
       'ta': 'அனைத்து பகுதிகளும்',
     },
     'browseSpecialties': {
-      'en': '3. Browse by Specialties & Categories',
-      'si': '3. විශේෂතා අනුව බලන්න',
-      'ta': '3. சிறப்புப் பிரிவுகளால் உலாவுங்கள்',
+      'en': '4. Browse by Specialties & Categories',
+      'si': '4. විශේෂතා අනුව බලන්න',
+      'ta': '4. சிறப்புப் பிரிவுகளால் உலாவுங்கள்',
     },
     'allCategories': {
       'en': 'All Categories',
@@ -446,6 +456,31 @@ class AppLocalizations {
       'en': 'Camera permission is required for video consult. Enable it in settings.',
       'si': 'වීඩියෝ උපදේශනයට කැමරා අවසරය අවශ්‍යයි. සැකසුම්වලින් සක්‍රිය කරන්න.',
       'ta': 'வீடியோ ஆலோசனைக்கு கேமரா அனுமதி தேவை. அமைப்புகளில் இயக்கவும்.',
+    },
+    'joinGpCareVideo': {
+      'en': 'Join GP Care video',
+      'si': 'GP Care වීඩියෝවට එක්වන්න',
+      'ta': 'GP Care வீடியோவில் சேரவும்',
+    },
+    'waitingForGpCare': {
+      'en': 'Waiting for the doctor to join from Sri Lankan GP Care…',
+      'si': 'ශ්‍රී ලංකා GP Care හි වෛද්‍යවරයා එකතු වන තෙක් රැඳී සිටින්න…',
+      'ta': 'இலங்கை GP Care மருத்துவர் இணையும் வரை காத்திருக்கவும்…',
+    },
+    'gpCareConnected': {
+      'en': 'Connected to Sri Lankan GP Care',
+      'si': 'ශ්‍රී ලංකා GP Care සමඟ සම්බන්ධයි',
+      'ta': 'இலங்கை GP Care உடன் இணைக்கப்பட்டது',
+    },
+    'videoCallOpensAt': {
+      'en': 'Video consult opens at the booked time. Join from 15 minutes before until the doctor answers.',
+      'si': 'වීඩියෝ උපදේශනය වෙන්කළ වේලාවේ විවෘත වේ. වෛද්‍යවරයා පිළිතුරු දෙන තෙක් මිනිත්තු 15කට පෙර සිට එක්වන්න.',
+      'ta': 'வீடியோ ஆலோசனை முன்பதிவு நேரத்தில் திறக்கும். மருத்துவர் பதிலளிக்கும் வரை 15 நிமிடம் முன் இணையலாம்.',
+    },
+    'endGpCareCall': {
+      'en': 'Leave call',
+      'si': 'ඇමතුමෙන් ඉවත් වන්න',
+      'ta': 'அழைப்பை விடவும்',
     },
     'sampleRxTitle': {
       'en': 'Sample e-prescriptions (reference)',

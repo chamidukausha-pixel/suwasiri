@@ -30,9 +30,9 @@ abstract final class DoctorCatalog {
     'Radiologist',
   ];
 
-  static final List<Doctor> doctors = _buildDoctors();
-
   static final List<CatalogFacility> facilities = _buildFacilities();
+
+  static final List<Doctor> doctors = _buildDoctors();
 
   static Doctor? doctorById(String id) {
     for (final d in doctors) {
@@ -233,6 +233,43 @@ abstract final class DoctorCatalog {
     ),
   ];
 
+  /// Named medical centres searchable by clinic name.
+  static const _featuredClinics =
+      <(String, String, String, double, double, String)>[
+    (
+      'PrimeCare Medical Centre - Colombo Central',
+      '42 Ward Place, Colombo 07',
+      'Colombo',
+      6.9142,
+      79.8631,
+      'Mon–Sat · 08:30–18:00',
+    ),
+    (
+      'CityHealth Polyclinic - Nugegoda',
+      '128 High Level Road, Nugegoda',
+      'Colombo',
+      6.8649,
+      79.8997,
+      'Mon–Sat · 09:00–17:00',
+    ),
+    (
+      'LankaCare Specialist Centre - Dehiwala',
+      '55 Galle Road, Dehiwala',
+      'Colombo',
+      6.8560,
+      79.8650,
+      'Tue–Sun · 09:00–16:30',
+    ),
+    (
+      'GreenLeaf Family Clinic - Battaramulla',
+      '12 Robert Gunawardena Mawatha, Battaramulla',
+      'Colombo',
+      6.8980,
+      79.9180,
+      'Mon–Fri · 08:00–16:00',
+    ),
+  ];
+
   static List<CatalogFacility> _buildFacilities() {
     final list = <CatalogFacility>[];
     var i = 0;
@@ -250,6 +287,23 @@ abstract final class DoctorCatalog {
         ),
       );
       i++;
+    }
+
+    var c = 0;
+    for (final clinic in _featuredClinics) {
+      list.add(
+        CatalogFacility(
+          id: 'fac-clinic-$c',
+          name: clinic.$1,
+          address: clinic.$2,
+          region: clinic.$3,
+          latitude: clinic.$4,
+          longitude: clinic.$5,
+          hours: clinic.$6,
+          type: FacilityKind.clinic,
+        ),
+      );
+      c++;
     }
 
     // District-registered MOH clinics + general hospitals for every district.
@@ -314,6 +368,40 @@ abstract final class DoctorCatalog {
     return list.where((f) => seen.add(f.name)).toList();
   }
 
+  static CatalogFacility? _facilityByName(String name) {
+    for (final f in facilities) {
+      if (f.name == name) return f;
+    }
+    return null;
+  }
+
+  static Doctor _doctorAt({
+    required String id,
+    required String name,
+    required String specialty,
+    required CatalogFacility facility,
+    required double rating,
+    required int yearsExperience,
+    required int feeLkr,
+    required String bio,
+  }) {
+    return Doctor(
+      id: id,
+      name: name,
+      specialty: specialty,
+      hospital: facility.name,
+      address: facility.address,
+      region: facility.region,
+      latitude: facility.latitude,
+      longitude: facility.longitude,
+      nextAvailable: facility.hours,
+      rating: rating,
+      yearsExperience: yearsExperience,
+      feeLkr: feeLkr,
+      bio: bio,
+    );
+  }
+
   static List<Doctor> _buildDoctors() {
     final specialties = categories.where((c) => c != 'All').toList();
     final hubs = facilities
@@ -341,6 +429,116 @@ abstract final class DoctorCatalog {
           feeLkr: 3500,
           bio:
               'General Medicine specialist providing accredited Sri Lankan hospital care.',
+        ),
+      );
+    }
+
+    // Featured clinic clinicians (searchable by clinic name).
+    final primeCare =
+        _facilityByName('PrimeCare Medical Centre - Colombo Central');
+    if (primeCare != null) {
+      list.addAll([
+        _doctorAt(
+          id: 'd-priyantha-silva',
+          name: 'Dr. Priyantha Silva',
+          specialty: 'Cardiologist',
+          facility: primeCare,
+          rating: 4.9,
+          yearsExperience: 18,
+          feeLkr: 4500,
+          bio:
+              'Consultant cardiologist at PrimeCare Medical Centre — Colombo Central.',
+        ),
+        _doctorAt(
+          id: 'd-anoja-senanayake',
+          name: 'Dr. Anoja Senanayake',
+          specialty: 'Dermatologist',
+          facility: primeCare,
+          rating: 4.8,
+          yearsExperience: 14,
+          feeLkr: 4000,
+          bio:
+              'Consultant dermatologist at PrimeCare Medical Centre — Colombo Central.',
+        ),
+        _doctorAt(
+          id: 'd-primecare-gp',
+          name: 'Dr. Malsha Jayawardena',
+          specialty: 'General Practitioner',
+          facility: primeCare,
+          rating: 4.7,
+          yearsExperience: 11,
+          feeLkr: 2500,
+          bio: 'Family physician at PrimeCare Medical Centre — Colombo Central.',
+        ),
+      ]);
+    }
+
+    final cityHealth = _facilityByName('CityHealth Polyclinic - Nugegoda');
+    if (cityHealth != null) {
+      list.addAll([
+        _doctorAt(
+          id: 'd-cityhealth-pedia',
+          name: 'Dr. Ruwanthi Perera',
+          specialty: 'Pediatrician',
+          facility: cityHealth,
+          rating: 4.8,
+          yearsExperience: 12,
+          feeLkr: 3200,
+          bio: 'Pediatric consultant at CityHealth Polyclinic — Nugegoda.',
+        ),
+        _doctorAt(
+          id: 'd-cityhealth-ent',
+          name: 'Dr. Suresh Mendis',
+          specialty: 'ENT Surgeon',
+          facility: cityHealth,
+          rating: 4.7,
+          yearsExperience: 15,
+          feeLkr: 3800,
+          bio: 'ENT surgeon at CityHealth Polyclinic — Nugegoda.',
+        ),
+      ]);
+    }
+
+    final lankaCare =
+        _facilityByName('LankaCare Specialist Centre - Dehiwala');
+    if (lankaCare != null) {
+      list.addAll([
+        _doctorAt(
+          id: 'd-lankacare-endo',
+          name: 'Dr. Nimali Fernando',
+          specialty: 'Endocrinologist',
+          facility: lankaCare,
+          rating: 4.8,
+          yearsExperience: 16,
+          feeLkr: 4200,
+          bio: 'Endocrinology consultant at LankaCare Specialist Centre.',
+        ),
+        _doctorAt(
+          id: 'd-lankacare-ortho',
+          name: 'Dr. Kasun Abeysekera',
+          specialty: 'Orthopedic Surgeon',
+          facility: lankaCare,
+          rating: 4.7,
+          yearsExperience: 13,
+          feeLkr: 4800,
+          bio: 'Orthopedic surgeon at LankaCare Specialist Centre — Dehiwala.',
+        ),
+      ]);
+    }
+
+    final greenLeaf =
+        _facilityByName('GreenLeaf Family Clinic - Battaramulla');
+    if (greenLeaf != null) {
+      list.add(
+        _doctorAt(
+          id: 'd-greenleaf-gp',
+          name: 'Dr. Tharaka Wickramasinghe',
+          specialty: 'General Practitioner',
+          facility: greenLeaf,
+          rating: 4.6,
+          yearsExperience: 9,
+          feeLkr: 2200,
+          bio: 'Family doctor at GreenLeaf Family Clinic — Battaramulla.',
         ),
       );
     }
