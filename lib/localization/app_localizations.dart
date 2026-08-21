@@ -762,11 +762,11 @@ class AppLocalizations {
     },
     'vaultERxHint': {
       'en':
-          'Pending e-prescriptions only. Tap the clinic name to view the formal script, email, MediLanka sync, or PDF.',
+          'Pending e-prescriptions from Sri Lankan GP Care (exam room or video). Tap the clinic name to view the formal script, email, MediLanka sync, or PDF.',
       'si':
-          'අපේක්ෂිත ඊ-වට්ටෝරු පමණි. නිල පෝරමය, ඊමේල්, MediLanka හෝ PDF සඳහා සායන නම තට්ටු කරන්න.',
+          'GP Care සායනයෙන් හෝ වීඩියෝවෙන් අපේක්ෂිත ඊ-වට්ටෝරු. නිල පෝරමය, ඊමේල්, MediLanka හෝ PDF සඳහා සායන නම තට්ටු කරන්න.',
       'ta':
-          'நிலுவை மின் மருந்துச்சீட்டுகள் மட்டும். முறையான படிவம், மின்னஞ்சல், MediLanka அல்லது PDFக்கு கிளினிக் பெயரைத் தட்டவும்.',
+          'GP Care பரிசோதனை அறை அல்லது வீடியோவிலிருந்து நிலுவை மின் மருந்துச்சீட்டுகள். முறையான படிவம், மின்னஞ்சல், MediLanka அல்லது PDFக்கு கிளினிக் பெயரைத் தட்டவும்.',
     },
     'noTreatmentNotes': {
       'en': 'No doctor treatment notes yet.',
@@ -919,15 +919,17 @@ class AppLocalizations {
       'ta': 'Lanka GP Care',
     },
     'practitionerPrescriptions': {
-      'en': 'Practitioner Prescriptions',
-      'si': 'වෛද්‍ය බෙහෙත් වට්ටෝරු',
-      'ta': 'மருத்துவர் மருந்துச்சீட்டுகள்',
+      'en': 'Vaccine history to clinic',
+      'si': 'සායනයට එන්නත් ඉතිහාසය',
+      'ta': 'கிளினிக்குக்கு தடுப்பூசி வரலாறு',
     },
     'lankaGpBody': {
       'en':
-          'Pulls active medicine lists & doctor e-prescriptions dynamically.',
-      'si': 'ක්‍රියාකාරී බෙහෙත් සහ ඊ-වට්ටෝරු ගතිකව ලබා ගනී.',
-      'ta': 'செயலில் உள்ள மருந்துகள் மற்றும் மின் மருந்துச்சீட்டுகளை இழுக்கும்.',
+          'Sends vaccine history only to Sri Lankan GP Care. Doctor-issued medicines appear above in E-Prescription.',
+      'si':
+          'එන්නත් ඉතිහාසය පමණක් GP Care වෙත යවයි. වෛද්‍ය බෙහෙත් ඉහත E-Prescription හි පෙනේ.',
+      'ta':
+          'தடுப்பூசி வரலாறு மட்டும் GP Care-க்கு அனுப்பப்படும். மருத்துவர் மருந்துகள் மேலே E-Prescription-இல் தோன்றும்.',
     },
     'syncLankaGp': {
       'en': 'Sync Lanka GP Care',
@@ -1652,19 +1654,19 @@ class AppLocalizations {
       'ta': 'வழங்கிய மருத்துவர்',
     },
     'doctorCertificates': {
-      'en': 'Doctor certificates',
+      'en': 'Medical certificates',
       'si': 'වෛද්‍ය සහතික',
-      'ta': 'மருத்துவர் சான்றிதழ்கள்',
+      'ta': 'மருத்துவ சான்றிதழ்கள்',
     },
     'noCertificates': {
-      'en': 'No doctor certificates yet.',
+      'en': 'No medical certificates yet.',
       'si': 'වෛද්‍ය සහතික නැත.',
-      'ta': 'மருத்துவர் சான்றிதழ்கள் இல்லை.',
+      'ta': 'மருத்துவ சான்றிதழ்கள் இல்லை.',
     },
     'certificateDetail': {
-      'en': 'Doctor certificate',
+      'en': 'Medical certificate',
       'si': 'වෛද්‍ය සහතිකය',
-      'ta': 'மருத்துவர் சான்றிதழ்',
+      'ta': 'மருத்துவ சான்றிதழ்',
     },
     'downloadCertificate': {
       'en': 'Download',
@@ -1675,6 +1677,11 @@ class AppLocalizations {
       'en': 'Send by email',
       'si': 'ඊමේල් කරන්න',
       'ta': 'மின்னஞ்சல் அனுப்பு',
+    },
+    'tapToViewCert': {
+      'en': 'Tap to view, download or email',
+      'si': 'බැලීමට, බාගැනීමට හෝ ඊමේල් කිරීමට තට්ටු කරන්න',
+      'ta': 'காண, பதிவிறக்க அல்லது மின்னஞ்சல் செய்ய தட்டவும்',
     },
     'certReady': {
       'en': 'Certificate ready to save / share.',
@@ -1803,6 +1810,11 @@ class AppLocalizations {
       'en': 'Certificate No.',
       'si': 'සහතික අංකය',
       'ta': 'சான்றிதழ் எண்',
+    },
+    'slmcReg': {
+      'en': 'SLMC Reg.',
+      'si': 'SLMC ලියාපදිංචිය',
+      'ta': 'SLMC பதிவு',
     },
     'patientName': {
       'en': 'Patient',

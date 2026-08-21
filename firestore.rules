@@ -70,6 +70,16 @@ service cloud.firestore {
             || request.resource.data.patientId == resource.data.patientId);
     }
 
+    match /medical_certificates/{certId} {
+      // GP Care staff issue; the named Suwasiri patient (household id) reads
+      // their own certificates in Vault.
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn()
+        && (isHouseholdPatient(resource.data.patientId)
+            || request.resource.data.patientId == resource.data.patientId);
+    }
+
     // Live Suwasariya dispatcher GPS — owner writes; signed-in can read active sessions.
     match /sos_sessions/{sessionId} {
       allow create: if isSignedIn()

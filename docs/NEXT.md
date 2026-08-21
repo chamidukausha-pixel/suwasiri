@@ -59,8 +59,8 @@ Move GP EMR charts off the Express JSON store:
 
 1. Persist RBAC/custom roles in Firestore (already in the UI)
 2. Live appointments / queue per branch — **Suwasiri App bookings already sync** to the GP Care calendar and Telehealth room
-3. e-Rx + vault/labs shared with the mobile patient
-4. Telehealth: in-app / in-browser WebRTC is wired (TURN if calls fail behind strict NAT)
+3. e-Rx is live on Firestore (GP Care → Vault E-Prescription). Vault **Sync Lanka GP Care** publishes vaccine history only. Other EMR notes still use the web JSON store
+4. Telehealth: in-app / in-browser WebRTC is live (TURN if calls fail behind strict NAT)
 5. Billing isolation per hospital/branch
 6. Firebase Storage for documents / lab PDFs
 7. FCM for recalls and appointment reminders

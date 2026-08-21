@@ -1,9 +1,10 @@
 import React, { useState, FormEvent, useEffect } from "react";
 import { 
   FileText, Syringe, FlaskConical, Plus, Clipboard, Loader2, Play, Check, Trash2, Printer, AlertCircle, Sparkles,
-  Mail, RefreshCw, Calendar, ShieldCheck, CheckCircle, Activity, Heart
+  Mail, Calendar, ShieldCheck, CheckCircle, Activity, Heart
 } from "lucide-react";
-import { Patient, VaccineRecord, LabResult, PrescriptionRecord, LabOrder, SampleCollection } from "../types";
+import { Patient, VaccineRecord, LabResult, PrescriptionRecord, LabOrder, SampleCollection, MedicalCertificateRecord } from "../types";
+import { issueMedicalCertificateToSuwasiri } from "../sync/suwasiriCertificates";
 
 interface Props {
   patient: Patient;
@@ -18,6 +19,7 @@ interface Props {
   onRenderPrescription: (rx: PrescriptionRecord) => void;
   onStateUpdate?: (updatedState: any) => void;
   onWalkInCheckIn?: (patient: Patient) => void;
+  onIssueMedicalCertificate?: (patientId: string, cert: MedicalCertificateRecord) => void;
   initialSubTab?: "history" | "vaccines" | "labs" | "prescriptions" | "mc" | "samples";
 }
 
@@ -34,6 +36,7 @@ export default function PatientDetailsHub({
   onRenderPrescription,
   onStateUpdate,
   onWalkInCheckIn,
+  onIssueMedicalCertificate,
   initialSubTab,
 }: Props) {
   const [activeSubTab, setActiveSubTab] = useState<"history" | "vaccines" | "labs" | "prescriptions" | "mc" | "samples">(initialSubTab || "history");
@@ -73,8 +76,6 @@ export default function PatientDetailsHub({
   const [mcRecipientEmail, setMcRecipientEmail] = useState(patient.email || "");
 
   // Syncing & Email actions states
-  const [syncingCertId, setSyncingCertId] = useState<string | null>(null);
-  const [syncingPortal, setSyncingPortal] = useState<"suwasiri" | "lankalab" | null>(null);
   const [emailingCertId, setEmailingCertId] = useState<string | null>(null);
   const [selectedEmailBody, setSelectedEmailBody] = useState<string | null>(null);
   const [draftingErr, setDraftingErr] = useState("");
@@ -165,28 +166,66 @@ export default function PatientDetailsHub({
     setMcLoading(true);
     setDraftingErr("");
     try {
-      const res = await fetch(`/api/patients/${patient.id}/medical-certificates`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          diagnosis: mcDiagnosis.trim(),
-          startDate: mcStartDate,
-          endDate: mcEndDate,
-          numDays: mcNumDays,
-          status: mcStatus,
-          doctorName: mcDocName,
-          doctorRegNo: mcDocReg,
-          additionalRemarks: mcRemarks,
-          recipientEmail: mcRecipientEmail
-        })
+      const newMC: MedicalCertificateRecord = {
+        id: `MC-${patient.id}-${Date.now()}`,
+        date: new Date().toISOString().split("T")[0],
+        diagnosis: mcDiagnosis.trim(),
+        startDate: mcStartDate,
+        endDate: mcEndDate,
+        numDays: mcNumDays,
+        status: mcStatus,
+        doctorName: mcDocName,
+        doctorRegNo: mcDocReg,
+        additionalRemarks: mcRemarks,
+        emailStatus: "NOT_SENT",
+        recipientEmail: mcRecipientEmail,
+        suwasiriSyncStatus: "SYNCING",
+        lankalabSyncStatus: "NOT_SYNCED",
+      };
+
+      const synced = await issueMedicalCertificateToSuwasiri({
+        patientId: patient.id,
+        patientName: patient.name,
+        certificate: newMC,
+        clinicName: patient.medicalCenter || "Sri Lankan GP Care",
       });
-      if (!res.ok) {
-        throw new Error("Failed to create medical certificate");
+      newMC.suwasiriSyncStatus = synced ? "SYNCED" : "FAILED";
+      if (synced) {
+        newMC.suwasiriSyncTime = new Date().toISOString();
       }
-      const data = await res.json();
-      if (onStateUpdate) {
-        onStateUpdate(data.state);
+
+      let savedInClinicStore = false;
+      try {
+        const res = await fetch(`/api/patients/${patient.id}/medical-certificates`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            diagnosis: newMC.diagnosis,
+            startDate: newMC.startDate,
+            endDate: newMC.endDate,
+            numDays: newMC.numDays,
+            status: newMC.status,
+            doctorName: newMC.doctorName,
+            doctorRegNo: newMC.doctorRegNo,
+            additionalRemarks: newMC.additionalRemarks,
+            recipientEmail: newMC.recipientEmail,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          savedInClinicStore = true;
+          if (onStateUpdate) onStateUpdate(data.state);
+        }
+      } catch {
+        /* Suwasiri-only patients are not in the JSON clinic store. */
       }
+
+      onIssueMedicalCertificate?.(patient.id, newMC);
+
+      if (!synced && !savedInClinicStore) {
+        throw new Error("Could not issue the certificate to this Suwasiri patient.");
+      }
+
       setMcDiagnosis("");
       setMcRemarks("");
     } catch (err: any) {
@@ -216,46 +255,6 @@ export default function PatientDetailsHub({
       alert("Error sending certificate email: " + err.message);
     } finally {
       setEmailingCertId(null);
-    }
-  };
-
-  const handleSyncSuwasiri = async (certId: string) => {
-    setSyncingCertId(certId);
-    setSyncingPortal("suwasiri");
-    try {
-      const res = await fetch(`/api/medical-certificates/${patient.id}/${certId}/sync-suwasiri`, {
-        method: "POST"
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      if (onStateUpdate) {
-        onStateUpdate(data.state);
-      }
-    } catch (err) {
-      alert("Suwasiri App synchronization gateway is temporarily offline or refused connection.");
-    } finally {
-      setSyncingCertId(null);
-      setSyncingPortal(null);
-    }
-  };
-
-  const handleSyncLankaLab = async (certId: string) => {
-    setSyncingCertId(certId);
-    setSyncingPortal("lankalab");
-    try {
-      const res = await fetch(`/api/medical-certificates/${patient.id}/${certId}/sync-lankalab`, {
-        method: "POST"
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      if (onStateUpdate) {
-        onStateUpdate(data.state);
-      }
-    } catch (err) {
-      alert("LankaLab portal database index gateway is temporarily offline.");
-    } finally {
-      setSyncingCertId(null);
-      setSyncingPortal(null);
     }
   };
 
@@ -675,7 +674,16 @@ export default function PatientDetailsHub({
                     <div key={rx.id} className="bg-white border rounded p-3 relative hover:shadow-xs transition-shadow">
                       <div className="flex justify-between items-center border-b pb-1.5 mb-2">
                         <span className="font-bold text-xs text-[#00334f]">ID: {rx.rxNumber}</span>
-                        <span className="text-[9px] text-slate-400 font-mono">Issued: {rx.date}</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
+                            rx.aslStatus === "DISPENSED"
+                              ? "bg-slate-100 text-slate-600"
+                              : "bg-amber-50 text-amber-800 border border-amber-200"
+                          }`}>
+                            {rx.aslStatus === "DISPENSED" ? "Collected at pharmacy" : "Active e-Rx · Suwasiri"}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-mono">Issued: {rx.date}</span>
+                        </span>
                       </div>
                       <div className="space-y-2">
                         {rx.items && rx.items.map((item, itemIdx) => {
@@ -714,6 +722,32 @@ export default function PatientDetailsHub({
                   )}
                 </div>
               </div>
+
+              {patient.vaccineRecords && patient.vaccineRecords.length > 0 && (
+                <div className="border bg-sky-50/60 border-sky-200/70 p-4 rounded-lg space-y-3">
+                  <div className="flex items-center justify-between border-b border-sky-100 pb-2">
+                    <div>
+                      <h3 className="font-black text-xs uppercase text-sky-900 tracking-wider">Suwasiri Vaccination Logs</h3>
+                      <p className="text-[10px] text-slate-500">Vaccine history synced from the patient’s Suwasiri App only. Medicines issued in GP Care go to Vault → E-Prescription, not this list.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSubTab("vaccines")}
+                      className="text-[10px] font-bold text-sky-800 hover:underline"
+                    >
+                      Open vaccination logs →
+                    </button>
+                  </div>
+                  <div className="space-y-1.5">
+                    {patient.vaccineRecords.slice(0, 6).map((vac, idx) => (
+                      <div key={`${vac.vaccineName}-${idx}`} className="bg-white border rounded px-3 py-2 flex justify-between gap-2 text-[11px]">
+                        <span className="font-bold text-[#00334f]">{vac.vaccineName}</span>
+                        <span className="text-slate-500 whitespace-nowrap">{vac.date} · {vac.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Add history condition form (Clinicians only) */}
               {currentRole !== "Receptionist" && (
@@ -1051,7 +1085,7 @@ export default function PatientDetailsHub({
                         <Sparkles className="w-4 h-4 text-orange-500 animate-pulse" />
                         Draft New Medical Certificate
                       </h4>
-                      <p className="text-[10px] text-slate-500">Draft a GP certified medical certificate. Calculates days automatically and enables live cloud syncing.</p>
+                      <p className="text-[10px] text-slate-500">Issues a GP certified medical certificate to this patient’s Suwasiri Vault only. They can view, download, and email it in the app.</p>
                     </div>
 
                     <form onSubmit={handleCreateMedicalCertificate} className="space-y-3 text-xs">
@@ -1194,7 +1228,7 @@ export default function PatientDetailsHub({
                       <Heart className="w-4 h-4 text-rose-500" />
                       GP Certified Medical Certificates Historical Records
                     </h4>
-                    <p className="text-[10px] text-slate-500">Manage digital medical leaves, patient email certificates, and Lanka Health Net synchronizations.</p>
+                    <p className="text-[10px] text-slate-500">Certificates issued here sync automatically to this patient’s Suwasiri App → Vault → Medical certificates. No LankaLab portal.</p>
                   </div>
 
                   <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
@@ -1318,56 +1352,18 @@ export default function PatientDetailsHub({
                               {mc.emailStatus === "SENT" ? "Transmitted! Click to Re-send Email" : "Compile Draft & Email to Patient"}
                             </button>
 
-                            <div className="flex flex-wrap gap-2">
-                              {/* Suwasiri National Health App Sync */}
-                              <button
-                                type="button"
-                                disabled={syncingCertId === mc.id && syncingPortal === "suwasiri"}
-                                onClick={() => handleSyncSuwasiri(mc.id)}
-                                className={`text-[10px] font-bold px-2.5 py-1.5 rounded transition flex items-center gap-1.5 justify-center ${
-                                  mc.suwasiriSyncStatus === "SYNCED"
-                                    ? "bg-emerald-50 text-emerald-800 border border-emerald-250 cursor-default"
-                                    : "bg-orange-50 hover:bg-orange-100 text-orange-850 border border-orange-200"
-                                }`}
-                              >
-                                {syncingCertId === mc.id && syncingPortal === "suwasiri" ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : mc.suwasiriSyncStatus === "SYNCED" ? (
-                                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                                ) : (
-                                  <RefreshCw className="w-3.5 h-3.5 text-orange-600" />
-                                )}
-                                {mc.suwasiriSyncStatus === "SYNCED" ? "Suwasiri Status: SYNCED" : "Sync Suwasiri App"}
-                              </button>
-
-                              {/* LankaLab Portal System Sync */}
-                              <button
-                                type="button"
-                                disabled={syncingCertId === mc.id && syncingPortal === "lankalab"}
-                                onClick={() => handleSyncLankaLab(mc.id)}
-                                className={`text-[10px] font-bold px-2.5 py-1.5 rounded transition flex items-center gap-1.5 justify-center ${
-                                  mc.lankalabSyncStatus === "SYNCED"
-                                    ? "bg-emerald-50 text-emerald-800 border border-emerald-250 cursor-default"
-                                    : "bg-teal-50 hover:bg-teal-100 text-teal-850 border border-teal-200"
-                                }`}
-                              >
-                                {syncingCertId === mc.id && syncingPortal === "lankalab" ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : mc.lankalabSyncStatus === "SYNCED" ? (
-                                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                                ) : (
-                                  <RefreshCw className="w-3.5 h-3.5 text-teal-600" />
-                                )}
-                                {mc.lankalabSyncStatus === "SYNCED" ? "LankaLab: REGISTERED" : "Sync LankaLab Portal"}
-                              </button>
+                            <div className="flex flex-wrap gap-2 items-center">
+                              <span className="text-[10px] font-bold px-2.5 py-1.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                On Suwasiri Vault for {patient.name}
+                              </span>
                             </div>
                           </div>
 
                           {/* Sync times */}
-                          {(mc.suwasiriSyncTime || mc.lankalabSyncTime) && (
-                            <div className="font-mono text-[9px] text-slate-400 pt-2 flex flex-col gap-0.5 border-t border-dashed">
-                              {mc.suwasiriSyncTime && <span>• Suwasiri central cloud register synchronized at: {mc.suwasiriSyncTime}</span>}
-                              {mc.lankalabSyncTime && <span>• LankaLab portal central diagnostics index synced at: {mc.lankalabSyncTime}</span>}
+                          {mc.suwasiriSyncTime && (
+                            <div className="font-mono text-[9px] text-slate-400 pt-2 border-t border-dashed">
+                              Synced to {patient.name}’s Suwasiri Vault at {mc.suwasiriSyncTime}
                             </div>
                           )}
 

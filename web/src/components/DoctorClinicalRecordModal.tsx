@@ -208,7 +208,7 @@ export default function DoctorClinicalRecordModal({
     };
     onUpdatePatient(updated);
     setNewMedName("");
-    showToast(`Issued ePrescription with QR Token for ${newMedName}`);
+    showToast(`Issued e-Rx for ${newMedName} — synced to Suwasiri Vault → E-Prescription`);
     void issuePrescriptionsToSuwasiri({
       patientId: patient.id,
       doctorName: "Dr. Priyantha Silva",
@@ -415,7 +415,7 @@ export default function DoctorClinicalRecordModal({
                     Current Medications
                   </h3>
                   <ul className="space-y-1.5 text-xs">
-                    {patient.activeMedications.length > 0 ? (
+                    {patient.activeMedications && patient.activeMedications.length > 0 ? (
                       patient.activeMedications.map((m, i) => (
                         <li key={i} className="p-2 bg-emerald-50/50 rounded border border-emerald-200 font-semibold text-emerald-950">
                           {m}
@@ -1022,17 +1022,20 @@ export default function DoctorClinicalRecordModal({
               </div>
 
               <div className="divide-y divide-slate-100">
-                {patient.vaccineRecords.map((v, i) => (
+                {(patient.vaccineRecords || []).map((v, i) => (
                   <div key={i} className="py-3 flex items-center justify-between">
                     <div>
                       <p className="font-bold text-slate-900 text-sm">{v.vaccineName}</p>
-                      <p className="text-slate-500">{v.dose} • Batch: {v.batchNumber} • Date: {v.date}</p>
+                      <p className="text-slate-500">{v.dose} • {v.site || v.batchNumber} • Date: {v.date}</p>
                     </div>
                     <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
-                      ✓ AIR Transmitted
+                      {v.status || "Suwasiri App"}
                     </span>
                   </div>
                 ))}
+                {(!patient.vaccineRecords || patient.vaccineRecords.length === 0) && (
+                  <p className="text-slate-400 italic py-4">No Suwasiri vaccination logs for this patient yet.</p>
+                )}
               </div>
             </div>
           )}

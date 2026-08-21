@@ -186,14 +186,15 @@ export function mergeAppointments(clinic: Appointment[], mobile: Appointment[]):
   return [...mobile, ...clinic.filter((a) => !ids.has(a.id))];
 }
 
-/** Video consult is listed in the telehealth room from slot time until the call starts (or 3h). */
+/** Video consult is listed in the telehealth room from 15 minutes before the slot until +3h. */
 export function isDueTelehealth(apt: Appointment, now = new Date()): boolean {
   if (!apt.isTelehealth && apt.type !== "Telehealth Video") return false;
   if (apt.status === "COMPLETED" || apt.status === "CANCELLED") return false;
   const start = parseSlot(apt);
   if (!start) return false;
+  const open = new Date(start.getTime() - 15 * 60 * 1000);
   const close = new Date(start.getTime() + 3 * 60 * 60 * 1000);
-  return now.getTime() >= start.getTime() && now.getTime() <= close.getTime();
+  return now.getTime() >= open.getTime() && now.getTime() <= close.getTime();
 }
 
 export function subscribeSuwasiriAppointments(

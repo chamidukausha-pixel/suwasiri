@@ -27,7 +27,10 @@ class TelehealthCallSession {
   bool _closed = false;
   bool _remoteDescSet = false;
   bool _answered = false;
+  String? _callId;
+  String? _lastOfferSdp;
   final _pendingIce = <RTCIceCandidate>[];
+  final _outgoingIce = <RTCIceCandidate>[];
 
   DocumentReference<Map<String, dynamic>> get _session =>
       _db.collection('telehealth_sessions').doc(appointmentId);
@@ -62,6 +65,7 @@ class TelehealthCallSession {
       'iceServers': [
         {'urls': 'stun:stun.l.google.com:19302'},
         {'urls': 'stun:stun1.l.google.com:19302'},
+        {'urls': 'stun:stun.cloudflare.com:3478'},
       ],
     });
 
@@ -78,12 +82,7 @@ class TelehealthCallSession {
 
     _pc!.onIceCandidate = (candidate) {
       if (candidate.candidate == null || candidate.candidate!.isEmpty) return;
-      _myIce.add({
-        'candidate': candidate.candidate,
-        'sdpMid': candidate.sdpMid,
-        'sdpMLineIndex': candidate.sdpMLineIndex,
-        'at': FieldValue.serverTimestamp(),
-      });
+      unawaited(_publishIce(candidate));
     };
 
     _iceSub = _theirIce.snapshots().listen((snap) async {
@@ -91,6 +90,10 @@ class TelehealthCallSession {
         if (change.type != DocumentChangeType.added) continue;
         final data = change.doc.data();
         if (data == null) continue;
+        final iceCallId = data['callId'] as String?;
+        if (_callId != null && iceCallId != _callId) {
+          continue;
+        }
         final ice = RTCIceCandidate(
           data['candidate'] as String?,
           data['sdpMid'] as String?,
@@ -130,6 +133,11 @@ class TelehealthCallSession {
       if (_closed || !snap.exists) return;
       final data = snap.data();
       if (data == null) return;
+      final remoteCallId = data['callId'] as String?;
+      if (remoteCallId != null && remoteCallId.isNotEmpty) {
+        _callId = remoteCallId;
+        unawaited(_flushOutgoingIce());
+      }
       if (data['status'] == 'ended') {
         onStatus('ended');
         return;
@@ -147,18 +155,22 @@ class TelehealthCallSession {
     Map<String, dynamic> data,
     void Function(String status) onStatus,
   ) async {
-    if (_answered) return;
     final offer = data['offer'];
     if (offer is! Map) return;
     final sdp = offer['sdp'] as String?;
     final type = offer['type'] as String?;
     if (sdp == null || sdp.isEmpty || _pc == null) return;
+    if (_answered && _lastOfferSdp == sdp) return;
 
     _answered = true;
+    _lastOfferSdp = sdp;
     await _pc!.setRemoteDescription(RTCSessionDescription(sdp, type));
     _remoteDescSet = true;
     await _flushIce();
-    final answer = await _pc!.createAnswer();
+    final answer = await _pc!.createAnswer({
+      'offerToReceiveAudio': 1,
+      'offerToReceiveVideo': 1,
+    });
     await _pc!.setLocalDescription(answer);
     await _session.set({
       'answer': {'sdp': answer.sdp, 'type': answer.type},
@@ -189,6 +201,30 @@ class TelehealthCallSession {
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
     onStatus('live');
+  }
+
+  Future<void> _publishIce(RTCIceCandidate candidate) async {
+    if (_closed) return;
+    if (_callId == null) {
+      _outgoingIce.add(candidate);
+      return;
+    }
+    await _myIce.add({
+      'callId': _callId,
+      'candidate': candidate.candidate,
+      'sdpMid': candidate.sdpMid,
+      'sdpMLineIndex': candidate.sdpMLineIndex,
+      'at': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> _flushOutgoingIce() async {
+    if (_callId == null || _outgoingIce.isEmpty) return;
+    final pending = List<RTCIceCandidate>.from(_outgoingIce);
+    _outgoingIce.clear();
+    for (final ice in pending) {
+      await _publishIce(ice);
+    }
   }
 
   Future<void> _flushIce() async {

@@ -11,6 +11,7 @@ import { getFirebaseDb } from "../firebase";
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun.cloudflare.com:3478" },
 ];
 
 export type TelehealthCallStatus = "idle" | "connecting" | "live" | "ended" | "error";
@@ -31,6 +32,7 @@ export async function startDoctorTelehealthCall(opts: {
   const sessionRef = doc(db, "telehealth_sessions", opts.appointmentId);
   const myIce = collection(sessionRef, "ice_doctor");
   const theirIce = collection(sessionRef, "ice_patient");
+  const callId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   const unsubs: Unsubscribe[] = [];
@@ -47,18 +49,21 @@ export async function startDoctorTelehealthCall(opts: {
   await opts.localVideo.play().catch(() => undefined);
   localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
 
+  const attachRemote = (track: MediaStreamTrack, streams: readonly MediaStream[]) => {
+    const stream = streams[0] ?? new MediaStream([track]);
+    opts.remoteVideo.srcObject = stream;
+    opts.remoteVideo.play().catch(() => undefined);
+    opts.onStatus("live");
+  };
+
   pc.ontrack = (ev) => {
-    const [stream] = ev.streams;
-    if (stream) {
-      opts.remoteVideo.srcObject = stream;
-      opts.remoteVideo.play().catch(() => undefined);
-      opts.onStatus("live");
-    }
+    if (ev.track) attachRemote(ev.track, ev.streams);
   };
 
   pc.onicecandidate = (ev) => {
     if (!ev.candidate) return;
     addDoc(myIce, {
+      callId,
       candidate: ev.candidate.candidate,
       sdpMid: ev.candidate.sdpMid,
       sdpMLineIndex: ev.candidate.sdpMLineIndex,
@@ -82,6 +87,7 @@ export async function startDoctorTelehealthCall(opts: {
       snap.docChanges().forEach((change) => {
         if (change.type !== "added") return;
         const d = change.doc.data();
+        if (d.callId !== callId) return;
         const init: RTCIceCandidateInit = {
           candidate: d.candidate,
           sdpMid: d.sdpMid,
@@ -93,12 +99,16 @@ export async function startDoctorTelehealthCall(opts: {
     })
   );
 
-  const offer = await pc.createOffer();
+  const offer = await pc.createOffer({
+    offerToReceiveAudio: true,
+    offerToReceiveVideo: true,
+  });
   await pc.setLocalDescription(offer);
   await setDoc(
     sessionRef,
     {
       appointmentId: opts.appointmentId,
+      callId,
       offer: { sdp: offer.sdp, type: offer.type },
       answer: null,
       doctorJoined: true,
@@ -113,6 +123,9 @@ export async function startDoctorTelehealthCall(opts: {
     onSnapshot(sessionRef, async (snap) => {
       if (closed || !snap.exists()) return;
       const data = snap.data();
+      if (data?.status === "ended" && data?.callId && data.callId !== callId) {
+        return;
+      }
       if (data?.status === "ended") {
         opts.onStatus("ended");
         return;

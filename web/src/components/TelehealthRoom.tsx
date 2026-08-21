@@ -4,8 +4,6 @@ import {
   VideoOff,
   Mic,
   MicOff,
-  Camera,
-  Share2,
   Clipboard,
   Users,
   MessageSquare,
@@ -50,7 +48,6 @@ export default function TelehealthRoom({
   appointments,
   activePatient,
   sessionDoctorName = "Dr. Priyantha Silva",
-  onInvitePatient,
   onSaveTelehealthNotes,
   drugsDatabase = [],
   onTelehealthSyncSuccess,
@@ -145,11 +142,26 @@ export default function TelehealthRoom({
     if (activePatient) {
       setSelectedPat(activePatient);
       setTelehealthNotes(activePatient.notes || "");
-    } else if (patients.length > 0 && !selectedPat) {
+      return;
+    }
+    if (patients.length > 0 && !selectedPat) {
       setSelectedPat(patients[0]);
       setTelehealthNotes(patients[0].notes || "");
     }
-  }, [activePatient, patients]);
+  }, [activePatient?.id]);
+
+  useEffect(() => {
+    if (!selectedPat) return;
+    const fresh = patients.find((p) => p.id === selectedPat.id);
+    if (!fresh) return;
+    if (
+      fresh.prescriptionsList !== selectedPat.prescriptionsList ||
+      fresh.vaccineRecords !== selectedPat.vaccineRecords ||
+      fresh.activeMedications !== selectedPat.activeMedications
+    ) {
+      setSelectedPat(fresh);
+    }
+  }, [patients, selectedPat?.id]);
 
   useEffect(() => {
     const randomSec = Math.floor(100000 + Math.random() * 900000);
@@ -217,6 +229,31 @@ export default function TelehealthRoom({
       setCallStatus("error");
       alert("Could not start the video call. Allow camera and microphone in the browser, then try again.\n\n" + (err?.message || err));
     }
+  };
+
+  const callTargetApt =
+    selectedVideoApt ||
+    dueVideoAppointments[0] ||
+    appointments.find(
+      (a) =>
+        a.patientId === selectedPat?.id &&
+        (a.isTelehealth || a.type === "Telehealth Video") &&
+        a.status !== "COMPLETED" &&
+        a.status !== "CANCELLED"
+    );
+
+  const handleCallStart = () => {
+    if (!callTargetApt) {
+      alert(
+        "No Suwasiri video booking is ready for this patient. The patient must book a video consult in the Suwasiri App, then open the Call tab."
+      );
+      return;
+    }
+    if (activeCallAptId === callTargetApt.id) {
+      void hangupLiveCall();
+      return;
+    }
+    void startLiveCall(callTargetApt);
   };
 
   const handleAddDrugToTelehealth = () => {
@@ -294,13 +331,6 @@ export default function TelehealthRoom({
     } finally {
       setSyncingSuwasiri(false);
     }
-  };
-
-  const handleSendInvite = (transport: "WhatsApp" | "SMS") => {
-    if (!selectedPat) return;
-    const pathLink = `https://ais-pre-iwjvrfbrqrz2hzqqqg2i2z-981726420643.asia-southeast1.run.app/lobby/telehealth?token=${inviteToken}`;
-    const smsText = `Hi ${selectedPat.name}, Dr. Priyantha Silva from Sri Lankan GP Care is inviting you to join your scheduled Video Consultation right now. Click to join securely: ${pathLink}`;
-    onInvitePatient(selectedPat.name, selectedPat.phone, transport, smsText);
   };
 
   const handleSendChatText = (e: React.FormEvent) => {
@@ -396,7 +426,7 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
               </span>
             </div>
             <p className="text-xs text-slate-500">
-              Interactive video consults with real-time drug searching, live e-Prescription generation, and Suwasiri Mobile Sync.
+              Press Call start beside Record. The patient sees you in the Suwasiri App Call tab — no WhatsApp.
             </p>
           </div>
         </div>
@@ -430,7 +460,7 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
             <div>
               <h3 className="text-sm font-bold text-purple-950">Suwasiri video consults ready now</h3>
               <p className="text-[11px] text-purple-800">
-                Bookings appear from the scheduled time until you start the call with the patient on the Suwasiri App.
+                Press <strong>Call start</strong> in the room below. The patient joins from the Suwasiri App Call tab — no WhatsApp or extra device.
               </p>
             </div>
             <span className="text-[10px] font-bold uppercase tracking-wider bg-white border border-purple-200 text-purple-800 px-2 py-1 rounded-full">
@@ -459,7 +489,7 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
                     }`}
                   >
                     <Video className="w-3.5 h-3.5" />
-                    {live ? (callStatus === "live" ? "End call" : "Connecting…") : "Start video"}
+                    {live ? (callStatus === "live" ? "End call" : "Connecting…") : "Call start"}
                   </button>
                 </div>
               );
@@ -500,7 +530,7 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
                   ref={remoteVideoRef}
                   autoPlay
                   playsInline
-                  className={`w-full h-full object-cover ${callStatus === "live" ? "block" : "hidden"}`}
+                  className={`absolute inset-0 w-full h-full object-cover ${callStatus === "live" ? "opacity-100" : "opacity-0 pointer-events-none"}`}
                 />
                 {callStatus !== "live" && (
                   selectedPat?.image ? (
@@ -540,7 +570,7 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
                   autoPlay
                   playsInline
                   muted
-                  className={`w-full h-full object-cover scale-x-[-1] ${isCameraOn && (callStatus === "connecting" || callStatus === "live") ? "block" : "hidden"}`}
+                  className={`absolute inset-0 w-full h-full object-cover scale-x-[-1] ${isCameraOn && (callStatus === "connecting" || callStatus === "live") ? "opacity-100" : "opacity-0 pointer-events-none"}`}
                 />
                 {!(isCameraOn && (callStatus === "connecting" || callStatus === "live")) && (
                   isCameraOn ? (
@@ -603,42 +633,30 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
                   <span className="w-2 h-2 rounded-full bg-rose-500"></span>
                   <span>{recording ? "Recording..." : "Record"}</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={handleCallStart}
+                  className={`px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs ${
+                    callTargetApt && activeCallAptId === callTargetApt.id
+                      ? "bg-rose-600 hover:bg-rose-700 text-white"
+                      : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                  }`}
+                  title="Start a live video call with the patient on the Suwasiri App"
+                >
+                  <Video className="w-4 h-4" />
+                  <span>
+                    {callTargetApt && activeCallAptId === callTargetApt.id
+                      ? callStatus === "live"
+                        ? "End call"
+                        : "Connecting…"
+                      : "Call start"}
+                  </span>
+                </button>
               </div>
 
-              <div className="flex items-center gap-2">
-                {selectedVideoApt && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      activeCallAptId === selectedVideoApt.id
-                        ? hangupLiveCall()
-                        : startLiveCall(selectedVideoApt)
-                    }
-                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 ${
-                      activeCallAptId === selectedVideoApt.id
-                        ? "bg-rose-600 hover:bg-rose-700 text-white"
-                        : "bg-purple-700 hover:bg-purple-800 text-white"
-                    }`}
-                  >
-                    <Video className="w-3.5 h-3.5" />
-                    {activeCallAptId === selectedVideoApt.id ? "End Suwasiri call" : "Start Suwasiri video"}
-                  </button>
-                )}
-                <button
-                  onClick={() => handleSendInvite("WhatsApp")}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
-                >
-                  <Share2 className="w-3.5 h-3.5" />
-                  <span>WhatsApp</span>
-                </button>
-
-                <button
-                  onClick={() => handleSendInvite("SMS")}
-                  className="bg-sky-600 hover:bg-sky-700 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs cursor-pointer"
-                >
-                  <Clipboard className="w-3.5 h-3.5" />
-                  <span>SMS Invite</span>
-                </button>
+              <div className="flex items-center gap-2 text-[10px] text-slate-400 font-medium max-w-[220px] text-right">
+                Patient sees you in Suwasiri Call. You see the patient here. No WhatsApp.
               </div>
             </div>
           </div>

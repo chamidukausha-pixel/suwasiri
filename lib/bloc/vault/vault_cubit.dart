@@ -125,6 +125,7 @@ class VaultCubit extends Cubit<VaultState> {
 
   final HealthRepository _health;
   StreamSubscription<List<Prescription>>? _rxSub;
+  StreamSubscription<List<DoctorCertificate>>? _certSub;
 
   Future<void> unlock(Future<bool> Function() biometric) async {
     final ok = await biometric();
@@ -139,6 +140,11 @@ class VaultCubit extends Cubit<VaultState> {
     _rxSub = _health.watchPrescriptions(patientId).listen((rx) {
       if (isClosed) return;
       emit(state.copyWith(prescriptions: rx));
+    });
+    await _certSub?.cancel();
+    _certSub = _health.watchCertificates(patientId).listen((certs) {
+      if (isClosed) return;
+      emit(state.copyWith(certificates: certs));
     });
   }
 
@@ -180,8 +186,9 @@ class VaultCubit extends Cubit<VaultState> {
       vaccineHistory: List<VaccineHistoryEntry>.from(
         PatientHealthSamples.vaccineHistory(patientId: patientId),
       ),
-      certificates: List<DoctorCertificate>.from(
-        PatientHealthSamples.doctorCertificates(patientId: patientId),
+      certificates: PatientHealthSamples.mergeCertificatesWithSamples(
+        patientId: patientId,
+        stored: const [],
       ),
       loading: false,
     ));
@@ -228,13 +235,16 @@ class VaultCubit extends Cubit<VaultState> {
   /// new patient.
   void resetForPatient() {
     unawaited(_rxSub?.cancel());
+    unawaited(_certSub?.cancel());
     _rxSub = null;
+    _certSub = null;
     emit(VaultState(unlocked: state.unlocked));
   }
 
   @override
   Future<void> close() {
     _rxSub?.cancel();
+    _certSub?.cancel();
     return super.close();
   }
 

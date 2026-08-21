@@ -153,7 +153,21 @@ abstract final class PatientHealthSamples {
           if (!byId.containsKey(s.id)) s,
     ];
     return [...active, ...extra]..sort((a, b) =>
-        (b.issuedAt ?? DateTime(0)).compareTo(a.issuedAt ?? DateTime(0)));
+            (b.issuedAt ?? DateTime(0)).compareTo(a.issuedAt ?? DateTime(0)));
+  }
+
+  static List<DoctorCertificate> mergeCertificatesWithSamples({
+    required String patientId,
+    required List<DoctorCertificate> stored,
+  }) {
+    final live = stored.where((c) => c.source == 'gp_care').toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    if (live.isNotEmpty) return live;
+    if (stored.isNotEmpty) {
+      return List<DoctorCertificate>.from(stored)
+        ..sort((a, b) => b.date.compareTo(a.date));
+    }
+    return doctorCertificates(patientId: patientId);
   }
 
   static List<TreatmentNote> treatmentNotes({required String patientId}) {
@@ -490,6 +504,8 @@ class DoctorCertificate {
     required this.certificateNo,
     required this.date,
     required this.body,
+    this.doctorRegNo = '',
+    this.source = '',
   });
 
   final String id;
@@ -500,6 +516,26 @@ class DoctorCertificate {
   final String certificateNo;
   final DateTime date;
   final String body;
+  final String doctorRegNo;
+  final String source;
+
+  factory DoctorCertificate.fromMap(String id, Map<String, dynamic> map) {
+    return DoctorCertificate(
+      id: id,
+      patientId: map['patientId'] as String? ?? '',
+      title: map['title'] as String? ?? 'Medical Certificate',
+      doctor: map['doctor'] as String? ?? '',
+      clinicName: map['clinicName'] as String? ?? 'Sri Lankan GP Care',
+      certificateNo: map['certificateNo'] as String? ?? id,
+      date: DateTime.tryParse(
+            map['issuedAt'] as String? ?? map['date'] as String? ?? '',
+          ) ??
+          DateTime.now(),
+      body: map['body'] as String? ?? '',
+      doctorRegNo: map['doctorRegNo'] as String? ?? '',
+      source: map['source'] as String? ?? '',
+    );
+  }
 }
 
 class TreatmentNote {

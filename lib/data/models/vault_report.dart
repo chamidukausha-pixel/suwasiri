@@ -262,14 +262,16 @@ class Prescription extends Equatable {
 
 /// Latest doctor-issued script that is not yet sent to MediLanka.
 List<Prescription> latestPendingPrescription(List<Prescription> all) {
-  final pending = all.where((p) => !p.sentToPharmacare).toList()
-    ..sort(
-      (a, b) =>
-          (b.issuedAt ?? DateTime(0)).compareTo(a.issuedAt ?? DateTime(0)),
-    );
-  if (pending.isEmpty) return const [];
-  final code = pending.first.code;
-  return pending.where((p) => p.code == code).toList();
+  final pending = all.where((p) => !p.sentToPharmacare).toList();
+  final gpCare = pending.where((p) => p.source == 'gp_care').toList();
+  final pool = gpCare.isNotEmpty ? gpCare : pending;
+  pool.sort(
+    (a, b) =>
+        (b.issuedAt ?? DateTime(0)).compareTo(a.issuedAt ?? DateTime(0)),
+  );
+  if (pool.isEmpty) return const [];
+  final code = pool.first.code;
+  return pool.where((p) => p.code == code).toList();
 }
 
 String prescriptionScriptNumber(List<Prescription> medicines) {

@@ -86,6 +86,8 @@ class CertificateFormView extends StatelessWidget {
                 _CertRow(label: l.t('patientName'), value: patientName),
                 _CertRow(label: l.t('healthIdLabel'), value: healthId),
                 _CertRow(label: l.t('issuedDoctorName'), value: certificate.doctor),
+                if (certificate.doctorRegNo.isNotEmpty)
+                  _CertRow(label: l.t('slmcReg'), value: certificate.doctorRegNo),
                 _CertRow(
                   label: l.t('issuedHospitalClinic'),
                   value: certificate.clinicName,

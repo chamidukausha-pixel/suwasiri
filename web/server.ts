@@ -1835,7 +1835,8 @@ app.post("/api/patients/:id/medical-certificates", (req, res) => {
     additionalRemarks: additionalRemarks || "",
     emailStatus: "NOT_SENT",
     recipientEmail: recipientEmail || pat.email || "patient@gmail.com",
-    suwasiriSyncStatus: "NOT_SYNCED",
+    suwasiriSyncStatus: "SYNCED",
+    suwasiriSyncTime: new Date().toISOString(),
     lankalabSyncStatus: "NOT_SYNCED"
   };
 

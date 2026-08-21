@@ -194,6 +194,14 @@ class DemoHealthRepository implements HealthRepository {
   }
 
   @override
+  Stream<List<DoctorCertificate>> watchCertificates(String patientId) async* {
+    yield PatientHealthSamples.mergeCertificatesWithSamples(
+      patientId: patientId,
+      stored: const [],
+    );
+  }
+
+  @override
   Future<List<Prescription>> issueTelehealthPrescription({
     required String patientId,
     required String doctorName,
@@ -322,7 +330,8 @@ class DemoHealthRepository implements HealthRepository {
       AppNotification(
         id: _uuid.v4(),
         title: 'Lanka GP Care sync',
-        body: 'Active medicines refreshed from registered GP care record.',
+        body:
+            'Vaccine history sent to Sri Lankan GP Care. Doctor-issued e-prescriptions stay in Vault → E-Prescription.',
         timestamp: DateTime.now(),
         type: NotificationPayloadType.sync,
       ),

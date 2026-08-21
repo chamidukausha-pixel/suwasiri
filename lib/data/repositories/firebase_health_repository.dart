@@ -35,6 +35,8 @@ class FirebaseHealthRepository implements HealthRepository {
       _db.collection('notifications');
   CollectionReference<Map<String, dynamic>> get _prescriptions =>
       _db.collection('prescriptions');
+  CollectionReference<Map<String, dynamic>> get _certificates =>
+      _db.collection('medical_certificates');
   CollectionReference<Map<String, dynamic>> get _sosSessions =>
       _db.collection('sos_sessions');
 
@@ -74,6 +76,22 @@ class FirebaseHealthRepository implements HealthRepository {
           .map((d) => Prescription.fromMap(d.id, d.data()))
           .toList();
       return PatientHealthSamples.mergeStoredWithSamples(
+        patientId: patientId,
+        stored: list,
+      );
+    });
+  }
+
+  @override
+  Stream<List<DoctorCertificate>> watchCertificates(String patientId) {
+    return _certificates
+        .where('patientId', isEqualTo: patientId)
+        .snapshots()
+        .map((snap) {
+      final list = snap.docs
+          .map((d) => DoctorCertificate.fromMap(d.id, d.data()))
+          .toList();
+      return PatientHealthSamples.mergeCertificatesWithSamples(
         patientId: patientId,
         stored: list,
       );
@@ -206,11 +224,39 @@ class FirebaseHealthRepository implements HealthRepository {
 
   @override
   Future<void> syncGpCare(String patientId) async {
+    final now = DateTime.now().toIso8601String();
+    final history = PatientHealthSamples.vaccineHistory(patientId: patientId);
+    for (final entry in history) {
+      await _vaccinations.doc('suwasiri-hist-$patientId-${entry.id}').set({
+        'patientId': patientId,
+        'vaccineName': entry.vaccineName,
+        'date': entry.date.toIso8601String(),
+        'doseLabel': entry.doseLabel,
+        'dose': entry.doseLabel,
+        'batchNumber': entry.batchCode,
+        'facilityName': entry.facility,
+        'issuer': entry.issuer,
+        'status': 'completed',
+        'recordType': 'history',
+        'source': 'suwasiri_app',
+        'syncedAt': now,
+      }, SetOptions(merge: true));
+    }
+    final bookings = await getVaccineBookings(patientId);
+    for (final booking in bookings) {
+      await _vaccinations.doc(booking.id).set({
+        'patientId': patientId,
+        'recordType': 'booking',
+        'source': 'suwasiri_app',
+        'syncedAt': now,
+      }, SetOptions(merge: true));
+    }
     await pushNotification(
       AppNotification(
         id: _uuid.v4(),
         title: 'Lanka GP Care sync',
-        body: 'Active medicines refreshed from registered GP care record.',
+        body:
+            'Vaccine history sent to Sri Lankan GP Care. Doctor-issued e-prescriptions stay in Vault → E-Prescription.',
         timestamp: DateTime.now(),
         type: NotificationPayloadType.sync,
       ),

@@ -205,9 +205,7 @@ class IssuedMedicalHistorySection extends StatelessWidget {
     final notes = state.treatmentNotes.isNotEmpty
         ? state.treatmentNotes
         : PatientHealthSamples.treatmentNotes(patientId: patientId);
-    final certificates = state.certificates.isNotEmpty
-        ? state.certificates
-        : PatientHealthSamples.doctorCertificates(patientId: patientId);
+    const certificates = state.certificates;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -849,6 +847,14 @@ class _CertificatesList extends StatelessWidget {
                             style: const TextStyle(
                               color: AppColors.slateMuted,
                               fontSize: 11,
+                            ),
+                          ),
+                          Text(
+                            l.t('tapToViewCert'),
+                            style: const TextStyle(
+                              color: Color(0xFF7C3AED),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],

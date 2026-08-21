@@ -80,6 +80,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   TelehealthCallSession? _liveCall;
   bool _liveConnected = false;
   bool _joiningLive = false;
+  bool _liveJoinBlocked = false;
   String _liveStatus = '';
 
   @override
@@ -223,6 +224,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
         _videoAppt?.doctorId != next.doctorId ||
         _videoAppt?.timeSlot != next.timeSlot;
     if (!mounted) return;
+    if (changed) _liveJoinBlocked = false;
     setState(() => _videoAppt = next);
     if (changed || _sessionId == null) {
       await _startSession();
@@ -258,6 +260,12 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
         return;
       }
       setState(() => _remaining = _remainingFor(appt));
+      if (!_liveJoinBlocked &&
+          appt.canJoinGpCareCall &&
+          _liveCall == null &&
+          !_joiningLive) {
+        unawaited(_joinGpCareCall());
+      }
     });
   }
 
@@ -291,7 +299,11 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
       _cameraReady = false;
     });
 
-    unawaited(_initCamera());
+    if (appt.canJoinGpCareCall && !_liveJoinBlocked) {
+      unawaited(_joinGpCareCall());
+    } else {
+      unawaited(_initCamera());
+    }
 
     final health = context.read<HealthRepository>();
     await health.syncGpCare(user.id);
@@ -314,6 +326,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   }
 
   void _endCall() {
+    _liveJoinBlocked = true;
     _rxTimer?.cancel();
     unawaited(_hangupLiveCall());
     unawaited(_disposeCamera());
@@ -342,11 +355,19 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
 
   Future<void> _joinGpCareCall() async {
     final appt = _videoAppt;
-    if (appt == null || !appt.canJoinGpCareCall || _joiningLive) return;
+    if (appt == null ||
+        !appt.canJoinGpCareCall ||
+        _joiningLive ||
+        _liveCall != null) {
+      return;
+    }
     setState(() {
       _joiningLive = true;
       _liveStatus = 'waiting';
     });
+    while (_cameraBusy) {
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+    }
     await _disposeCamera();
     final session = TelehealthCallSession(
       appointmentId: appt.id,
@@ -379,6 +400,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     } catch (e) {
       await _hangupLiveCall();
       if (!mounted) return;
+      unawaited(_initCamera());
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }

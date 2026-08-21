@@ -20,7 +20,7 @@ Prioritized next work. Move items to **Done** in [STATUS.md](STATUS.md) when shi
 
 1. Real Phone Auth (Firebase) instead of OTP `123456`
 2. Vault PDF/image upload via Firebase Storage
-3. Telehealth/Call: real signaling / video provider (e-Rx formal form + PharmaCare handoff already in UI)
+3. Telehealth/Call: live WebRTC to GP Care is wired (STUN); a TURN server may be needed on some mobile networks
 4. Live PharmaCare API (replace notification-only portal handoff)
 5. Payment tokens → real gateway if required
 
@@ -38,7 +38,7 @@ Keep `web/` as the exact React/Vite/Express clinic portal. Do not change Flutter
 
 1. Document mapping of web models → Firestore collections ([WEB.md](WEB.md)) — tenancy collections listed in [FIREBASE.md](FIREBASE.md)
 2. Wire web `server.ts` / client to Firebase Auth + Firestore (`suwasiri-91824`) without changing the UI framework
-3. Shared appointments (live) and remaining prescriptions / vault / labs / vaccinations across mobile and web (`hospitalId` on clinical docs)
+3. Shared appointments (live), GP Care e-Rx → Vault, and Suwasiri vaccine history → GP Care. Remaining vault/labs notes stay JSON until tenancy Firestore.
 4. Role-aware access: Platform Super Admin can open every web module; Hospital Super Admin same within a tenant; committed RBAC hides staff nav. Mobile stays patient-only.
 
 ## Do not regress

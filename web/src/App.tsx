@@ -56,7 +56,7 @@ import {
 
 import { 
   Patient, Appointment, Alert, Task, Billing, VaccineRecord, LabResult, PrescriptionRecord, LabOrder, NotificationLog, ClinicMessage, Expense,
-  Hospital, Branch, RoleDefinition, StaffMembership, StaffUser, StaffProvider
+  Hospital, Branch, RoleDefinition, StaffMembership, StaffUser, StaffProvider, MedicalCertificateRecord
 } from "./types";
 
 import ClinicMonthCalendar from "./components/ClinicMonthCalendar";
@@ -95,11 +95,18 @@ import type { User } from "firebase/auth";
 import {
   appointmentPatientName,
   compareAppointmentTime,
+  isDueTelehealth,
   mergeAppointments,
   mergePatients,
+  stubPatientFromBooking,
   subscribeSuwasiriAppointments,
 } from "./sync/suwasiriAppointments";
 import { issuePrescriptionsToSuwasiri } from "./sync/suwasiriPrescriptions";
+import {
+  applySuwasiriChart,
+  subscribeSuwasiriPatientCharts,
+  type SuwasiriChartPatch,
+} from "./sync/suwasiriPatientChart";
 
 export interface DrugFormularyItem {
   name: string;
@@ -440,9 +447,13 @@ export default function App() {
   const [clinicAppointments, setAppointments] = useState<Appointment[]>([]);
   const [suwasiriAppointments, setSuwasiriAppointments] = useState<Appointment[]>([]);
   const [suwasiriPatients, setSuwasiriPatients] = useState<Patient[]>([]);
+  const [suwasiriCharts, setSuwasiriCharts] = useState<Record<string, SuwasiriChartPatch>>({});
   const patients = useMemo(
-    () => mergePatients(clinicPatients, suwasiriPatients),
-    [clinicPatients, suwasiriPatients]
+    () =>
+      mergePatients(clinicPatients, suwasiriPatients).map((p) =>
+        applySuwasiriChart(p, suwasiriCharts[p.id])
+      ),
+    [clinicPatients, suwasiriPatients, suwasiriCharts]
   );
   const appointments = useMemo(
     () => mergeAppointments(clinicAppointments, suwasiriAppointments),
@@ -650,6 +661,8 @@ export default function App() {
   const [consultCustomMed, setConsultCustomMed] = useState<string>("");
   const [consultAllergiesStr, setConsultAllergiesStr] = useState<string>("");
   const [consultMedsList, setConsultMedsList] = useState<string[]>([]);
+  const [suwasiriRxSyncing, setSuwasiriRxSyncing] = useState(false);
+  const [suwasiriRxSyncMsg, setSuwasiriRxSyncMsg] = useState<string | null>(null);
   const [consultMedInstruction, setConsultMedInstruction] = useState<string>("Take 1 tablet twice a day");
   const [consultMedDays, setConsultMedDays] = useState<string>("5");
   const [consultMedMeal, setConsultMedMeal] = useState<string>("After Meal");
@@ -745,6 +758,25 @@ export default function App() {
       setSuwasiriPatients(pats);
     });
   }, [authUser?.uid]);
+
+  const suwasiriPatientIdsKey = useMemo(
+    () =>
+      [...new Set(suwasiriAppointments.map((a) => a.patientId).filter(Boolean))]
+        .sort()
+        .join(","),
+    [suwasiriAppointments]
+  );
+
+  useEffect(() => {
+    if (!authUser || !isFirebaseConfigured() || !suwasiriPatientIdsKey) {
+      setSuwasiriCharts({});
+      return;
+    }
+    const ids = suwasiriPatientIdsKey.split(",").filter(Boolean);
+    return subscribeSuwasiriPatientCharts(ids, (patientId, patch) => {
+      setSuwasiriCharts((prev) => ({ ...prev, [patientId]: patch }));
+    });
+  }, [authUser?.uid, suwasiriPatientIdsKey]);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
@@ -922,6 +954,7 @@ export default function App() {
     setConsultCustomMed("");
     setConsultSelectedMed("");
     setAiAnalysisResult("");
+    setSuwasiriRxSyncMsg(null);
     setActiveTab("clinical");
   };
 
@@ -1198,11 +1231,52 @@ export default function App() {
     setConsultMedsList(consultMedsList.filter(m => m !== med));
   };
 
+  const handleSyncDrugsToSuwasiri = async (): Promise<{ count: number; code: string } | null> => {
+    if (!selectedConsultPatient) return null;
+    if (consultMedsList.length === 0) {
+      setSuwasiriRxSyncMsg("Select medicines first, then sync to the patient’s Suwasiri Vault.");
+      return null;
+    }
+    setSuwasiriRxSyncing(true);
+    setSuwasiriRxSyncMsg(null);
+    try {
+      const matchApt = appointments.find(
+        (a) => a.patientId === selectedConsultPatient.id && a.status !== "COMPLETED"
+      );
+      const rxNum = `RX-SL-${Math.floor(10000 + Math.random() * 90000)}`;
+      const result = await issuePrescriptionsToSuwasiri({
+        patientId: selectedConsultPatient.id,
+        doctorName: sessionUser?.name || "Dr. Priyantha Silva",
+        clinicName:
+          activeHospital?.name ||
+          selectedConsultPatient.medicalCenter ||
+          "PrimeCare Medical Centre - Colombo Central",
+        medicines: consultMedsList,
+        sessionId: matchApt?.id,
+        rxNumber: rxNum,
+        prescriberNumber: "12908",
+      });
+      if (!result) {
+        setSuwasiriRxSyncMsg("Could not reach Suwasiri (check Firebase). The patient will not see this e-Rx yet.");
+        return null;
+      }
+      setSuwasiriRxSyncMsg(
+        `${result.count} medicine(s) synced. The patient can open Suwasiri → Vault → E-Prescription.`
+      );
+      return result;
+    } catch (err) {
+      console.error(err);
+      setSuwasiriRxSyncMsg("Suwasiri sync failed. Try again.");
+      return null;
+    } finally {
+      setSuwasiriRxSyncing(false);
+    }
+  };
+
   // Save Consultation and Issue SLMC e-Prescription
   const handleSaveConsultation = async () => {
     if (!selectedConsultPatient) return;
     try {
-      // 1. Generate digital eRx record
       const signatureText = "Dr. Priyantha Silva, MBBS (Col), MD (FMed), SLMC: 12908";
       const rxNum = `RX-SL-${Math.floor(10000 + Math.random() * 90000)}`;
       const newPrescriptionRecord: PrescriptionRecord = {
@@ -1221,7 +1295,27 @@ export default function App() {
         doctor: "Dr. Priyantha Silva"
       };
 
-      // 2. Transmit to server
+      const matchApt = appointments.find(a => a.patientId === selectedConsultPatient.id && a.status !== "COMPLETED");
+
+      // Write e-Rx to Firestore first so a Suwasiri App patient sees it even if they are not in the JSON clinic store.
+      if (consultMedsList.length > 0) {
+        const synced = await issuePrescriptionsToSuwasiri({
+          patientId: selectedConsultPatient.id,
+          doctorName: sessionUser?.name || "Dr. Priyantha Silva",
+          clinicName: activeHospital?.name || selectedConsultPatient.medicalCenter || "PrimeCare Medical Centre - Colombo Central",
+          medicines: consultMedsList,
+          sessionId: matchApt?.id,
+          rxNumber: rxNum,
+          prescriberNumber: "12908",
+        });
+        if (synced) {
+          setSuwasiriRxSyncMsg(
+            `${synced.count} medicine(s) now in the patient’s Suwasiri Vault → E-Prescription.`
+          );
+        }
+      }
+
+      let savedPatient = selectedConsultPatient;
       const res = await fetch(`/api/patients/${selectedConsultPatient.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -1233,33 +1327,21 @@ export default function App() {
           historyEntry
         })
       });
-      const data = await res.json();
-      setPatients(data.state.patients);
-
-      const matchApt = appointments.find(a => a.patientId === selectedConsultPatient.id && a.status !== "COMPLETED");
-      if (consultMedsList.length > 0) {
-        await issuePrescriptionsToSuwasiri({
-          patientId: selectedConsultPatient.id,
-          doctorName: sessionUser?.name || "Dr. Priyantha Silva",
-          clinicName: activeHospital?.name || selectedConsultPatient.medicalCenter || "PrimeCare Medical Centre - Colombo Central",
-          medicines: consultMedsList,
-          sessionId: matchApt?.id,
-          rxNumber: rxNum,
-          prescriberNumber: "12908",
-        });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.state?.patients) setPatients(data.state.patients);
+        if (data.patient) savedPatient = data.patient;
       }
 
-      // 3. Auto mark active appointment completed
-      if (matchApt) {
+      if (matchApt && matchApt.source !== "suwasiri_app") {
         await handleUpdateAptStatus(matchApt.id, "COMPLETED");
       }
 
-      alert(`Consultation records locked securely. Digitally signed SLMC e-Prescription issued: ${rxNum} and integrated with Suwasiri database!`);
-      setActiveReceiptRx({ patient: data.patient, prescription: newPrescriptionRecord });
+      alert(`Consultation records locked securely. Digitally signed SLMC e-Prescription issued: ${rxNum} and synced to Suwasiri Vault → E-Prescription.`);
+      setActiveReceiptRx({ patient: savedPatient, prescription: newPrescriptionRecord });
 
-      // Automatically open the patient's clinical Record Hub section on finish on prescriptions tab
       setActiveHubInitialTab("prescriptions");
-      setActiveHubPatient(data.patient);
+      setActiveHubPatient(savedPatient);
       setSelectedConsultPatient(null);
       setActiveTab("dashboard");
     } catch (err) {
@@ -2621,9 +2703,8 @@ export default function App() {
                                       <div 
                                         className="font-serif font-bold text-sm text-[#00334f] hover:text-sky-700 cursor-pointer flex items-center gap-1.5"
                                         onClick={() => {
-                                          if (p) {
-                                            handleStartConsultation(p);
-                                          }
+                                          const person = p || stubPatientFromBooking(apt);
+                                          handleStartConsultation(person);
                                         }}
                                         title="Click patient name to launch GP Exam Room"
                                       >
@@ -2690,7 +2771,8 @@ export default function App() {
                                         <button
                                           onClick={() => {
                                             handleUpdateAptStatus(apt.id, "IN EXAM ROOM");
-                                            if (p) handleStartConsultation(p);
+                                            const person = p || stubPatientFromBooking(apt);
+                                            handleStartConsultation(person);
                                           }}
                                           className="text-amber-900 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors shadow-xs text-xs font-bold inline-flex items-center gap-1"
                                         >
@@ -3103,7 +3185,11 @@ export default function App() {
                                 <td className="p-3">
                                   <div 
                                     className="flex items-start gap-2.5 cursor-pointer group"
-                                    onClick={() => p && setActiveHubPatient(p)}
+                                    onClick={() => {
+                                      const person = p || stubPatientFromBooking(apt);
+                                      handleStartConsultation(person);
+                                    }}
+                                    title="Click patient name to launch GP Exam Room"
                                   >
                                     <div className="w-8 h-8 rounded-full bg-[#dee8ff] text-[#00334f] font-bold text-xs flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                                       {(appointmentPatientName(apt, p) || "P").split(" ").map(n => n[0]).join("").slice(0, 2)}
@@ -3175,7 +3261,8 @@ export default function App() {
                                           return;
                                         }
                                         handleUpdateAptStatus(apt.id, "IN EXAM ROOM");
-                                        if (p) handleStartConsultation(p);
+                                        const person = p || stubPatientFromBooking(apt);
+                                        handleStartConsultation(person);
                                       }}
                                       className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded font-bold transition-colors text-xs shadow-xs"
                                     >
@@ -3802,7 +3889,7 @@ export default function App() {
                           {consultMedsList.length > 0 && (
                             <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black px-2 py-0.5 rounded flex items-center gap-1">
                               <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
-                              <span>Ready to Sync on Save</span>
+                              <span>Ready to sync to Suwasiri Vault</span>
                             </span>
                           )}
                         </div>
@@ -3845,7 +3932,7 @@ export default function App() {
                                 )}
 
                                 <div className="text-[9px] text-[#006f66] bg-teal-50 px-2 py-1 rounded inline-flex items-center gap-1 font-bold self-start border border-teal-100 uppercase tracking-tight">
-                                  <span>🔄 Direct Synced with Suwasiri active prescription database</span>
+                                  <span>Appears in Suwasiri Vault → E-Prescription after sync</span>
                                 </div>
                               </div>
                             );
@@ -3858,7 +3945,25 @@ export default function App() {
                       </div>
 
                       {/* Save consultation records trigger */}
-                      <div className="pt-4 border-t">
+                      <div className="pt-4 border-t space-y-2">
+                        {suwasiriRxSyncMsg && (
+                          <p className="text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded px-3 py-2">
+                            {suwasiriRxSyncMsg}
+                          </p>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => { void handleSyncDrugsToSuwasiri(); }}
+                          disabled={suwasiriRxSyncing || consultMedsList.length === 0}
+                          className="w-full bg-sky-700 hover:bg-sky-800 disabled:bg-slate-300 text-white font-bold py-2.5 px-4 rounded text-xs uppercase flex items-center justify-center gap-1.5"
+                        >
+                          {suwasiriRxSyncing ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Share2 className="w-4 h-4" />
+                          )}
+                          Sync e-Rx to Suwasiri App
+                        </button>
                         <button
                           type="button"
                           onClick={handleSaveConsultation}
@@ -3950,7 +4055,12 @@ export default function App() {
               <TelehealthRoom
                 patients={hospitalPatients}
                 appointments={tenantAppointments}
-                activePatient={null}
+                activePatient={
+                  hospitalPatients.find((p) => {
+                    const due = tenantAppointments.find((a) => isDueTelehealth(a));
+                    return Boolean(due && p.id === due.patientId);
+                  }) || null
+                }
                 sessionDoctorName={sessionUser?.name || "Dr. Priyantha Silva"}
                 drugsDatabase={drugs}
                 onTelehealthSyncSuccess={fetchState}
@@ -5793,7 +5903,10 @@ export default function App() {
       {/* OVERLAY HUB PANEL: DETAILED PATIENT HISTORY CARD */}
       {activeHubPatient && (
         <PatientDetailsHub
-          patient={activeHubPatient}
+          patient={applySuwasiriChart(
+            patients.find((p) => p.id === activeHubPatient.id) || activeHubPatient,
+            suwasiriCharts[activeHubPatient.id]
+          )}
           labOrders={labOrders}
           drugsDatabase={drugs}
           currentRole={currentRole}
@@ -5807,6 +5920,21 @@ export default function App() {
             setActiveReceiptRx({ patient: activeHubPatient, prescription: rx });
           }}
           onWalkInCheckIn={handleCheckInWalkIn}
+          onIssueMedicalCertificate={(patientId, cert) => {
+            const addCert = (p: Patient): Patient =>
+              p.id !== patientId
+                ? p
+                : {
+                    ...p,
+                    medicalCertificatesList: [
+                      cert,
+                      ...(p.medicalCertificatesList || []).filter((c) => c.id !== cert.id),
+                    ],
+                  };
+            setPatients((prev) => prev.map(addCert));
+            setSuwasiriPatients((prev) => prev.map(addCert));
+            setActiveHubPatient((prev) => (prev ? addCert(prev) : prev));
+          }}
           onStateUpdate={(updatedState) => {
             if (updatedState.patients) setPatients(updatedState.patients);
             if (updatedState.notifications) setNotifications(updatedState.notifications);
@@ -6181,7 +6309,10 @@ export default function App() {
       {/* 16-TAB DOCTOR CLINICAL RECORD (BP PREMIER / SRI LANKAN STANDARD CONSULTATION) */}
       {activeDoctorRecordPatient && (
         <DoctorClinicalRecordModal
-          patient={activeDoctorRecordPatient}
+          patient={applySuwasiriChart(
+            patients.find((p) => p.id === activeDoctorRecordPatient.id) || activeDoctorRecordPatient,
+            suwasiriCharts[activeDoctorRecordPatient.id]
+          )}
           appointments={appointments}
           billingList={billing}
           currentRole={currentRole}

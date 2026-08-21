@@ -43,9 +43,10 @@ Aligned with `firestore.rules` and `FirebaseHealthRepository` / `FirebaseAuthRep
 |------------|------------|------------|
 | `users` | profile map (`name`, `email`, `NIC`, `bloodGroup`, `barcodeNumber`, `healthIntake`, …) | `users/{uid}` = auth uid |
 | `vault` | `patientId`, `title`, `issuedBy`, `date`, `metrics` | household: `uid` or `uid_*` |
-| `vaccinations` | `patientId`, facility, `slot`, `status`, `vaccineName`, `bookedAt` | write if household patient |
+| `vaccinations` | `patientId`, facility, `slot`, `status`, `vaccineName`, `bookedAt`, `recordType` (`booking` / `history`), `source` (`suwasiri_app`) | write if household patient; **read: any signed-in** (GP Care sees **vaccine history only** from the app) |
 | `appointments` | `patientId`, doctor fields, `timeSlot`, `date`, `time`, `token`, `consultMode` (`clinic` / `video`), `hospital`, `hospitalId`, `branchId`, `patientName`, `source` (`suwasiri_app`), `bookedAt` | create: household; **read: any signed-in** (GP Care staff); update: household or staff |
 | `prescriptions` | `patientId`, `medicine`, `schedule`, `doseBadge`, `sessionId`, `sentToPharmacare` (MediLanka portal flag), `clinicName`, `doctor`, `code`, `source` (`gp_care` when issued from GP Care) | read/create: signed-in (staff issue + patient read); update: household or staff |
+| `medical_certificates` | `patientId`, `patientName`, `title`, `doctor`, `body`, `certificateNo`, `source` (`gp_care`) | read/create: signed-in; update: household or staff. App Vault filters by the active patient’s `patientId` |
 | `sos_sessions` | `patientId`, lat/lng, `accuracyMeters`, `address`, `shareLiveGps`, `active` | owner write; readable when `shareLiveGps` |
 | `notifications` | `title`, `body`, `timestamp`, `type`, `read` | any signed-in (tighten later) |
 | `telehealth_sessions` | WebRTC offer/answer + `ice_doctor` / `ice_patient` ICE candidates | any signed-in (patient app + GP Care doctor) |

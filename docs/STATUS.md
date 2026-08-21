@@ -65,9 +65,12 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Doctors: clinic-name search + PrimeCare Medical Centre (Dr. Priyantha Silva cardiology, Dr. Anoja Senanayake dermatology) and more named clinics
 - [x] Web lobby + doctor dashboard month calendar (current month/time, prev/next month, click a date for that day’s appointments and patient details)
 - [x] Suwasiri App bookings sync to GP Care calendar (Firestore `appointments`; clinic + video; patient name/time/doctor on the selected date)
-- [x] Video consults appear in GP Care Telehealth from slot time; doctor + patient join a live WebRTC call (app camera/mic ↔ browser camera/mic)
+- [x] Clicking a booked name on the GP Care lobby / doctor dashboard opens the **GP Exam Room** (previous consult flow)
+- [x] Video consults: Telehealth **Call start** (beside Record) opens in-browser camera/mic to the Suwasiri App Call tab — no WhatsApp
 - [x] Suwasiri bookings show the real patient name on GP Care (Chamidu / Sakuni / family member)
-- [x] GP Care issued e-Rx syncs to Suwasiri Vault E-Prescription and Call E-Prescription; MediLanka send moves them to Issued Medical History
+- [x] GP Care issued e-Rx syncs to Suwasiri Vault E-Prescription (exam room **Sync e-Rx to Suwasiri App** + save consult); MediLanka send moves them to Issued Medical History
+- [x] GP Care issued medical certificates sync to that patient’s Suwasiri **Vault → Medical certificates** (view / download / email). LankaLab portal sync removed from certificate history.
+- [x] Suwasiri Vault **Sync Lanka GP Care** sends **vaccine history only** to the GP Care vaccination log (not medicines, labs, or notes)
 - [x] Profile: accounts menu (My Profile, Account Settings, Billing & Plans, Help Center, Dark Mode, Switch Account for family)
 - [x] Family Switch Account: Sakuni / Denuk full patient parity (clinic, video, vault, vaccines, billing) under Chamidu login; household Firestore rules deployed
 
@@ -82,7 +85,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [ ] Firebase Storage for vault file uploads (`fileUrl`)
 - [ ] Tighten `notifications` rules to owner-scoped (`userId == auth.uid`)
 - [ ] Telehealth/Call: live WebRTC to GP Care is wired (STUN); a TURN server may be needed on some mobile networks
-- [ ] Web + mobile sync: appointments + telehealth signaling are on shared Firestore; remaining clinical charts still use the web JSON store. Tenancy/RBAC is in the web JSON store; tenancy collections are documented, not deployed.
+- [ ] Web + mobile sync: appointments, telehealth, e-Rx, and medical certificates are on Firestore; Vault → GP Care sync is **vaccine history only**. Remaining GP EMR notes still use the web JSON store. Tenancy/RBAC is in the web JSON store; tenancy collections are documented, not deployed.
 
 ## Known caveats
 
