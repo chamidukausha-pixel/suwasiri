@@ -205,7 +205,7 @@ class IssuedMedicalHistorySection extends StatelessWidget {
     final notes = state.treatmentNotes.isNotEmpty
         ? state.treatmentNotes
         : PatientHealthSamples.treatmentNotes(patientId: patientId);
-    const certificates = state.certificates;
+    final certificates = state.certificates;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
