@@ -57,26 +57,27 @@ class FirebaseHealthRepository implements HealthRepository {
         await _prescriptions.where('patientId', isEqualTo: patientId).get();
     final list = snap.docs
         .map((d) => Prescription.fromMap(d.id, d.data()))
-        .where((p) => p.active)
         .toList();
-    final samples =
-        PatientHealthSamples.allSamplePrescriptions(patientId: patientId);
-    if (list.isEmpty) {
-      return samples
-        ..sort((a, b) => (b.issuedAt ?? DateTime(0))
-            .compareTo(a.issuedAt ?? DateTime(0)));
-    }
-    final byId = {for (final p in list) p.id: p};
-    final merged = <Prescription>[
-      ...list,
-      for (final s in samples)
-        if (!byId.containsKey(s.id) &&
-            !( !s.sentToPharmacare &&
-                list.any((p) => p.code == s.code && p.sentToPharmacare)))
-          s,
-    ]..sort((a, b) =>
-        (b.issuedAt ?? DateTime(0)).compareTo(a.issuedAt ?? DateTime(0)));
-    return merged;
+    return PatientHealthSamples.mergeStoredWithSamples(
+      patientId: patientId,
+      stored: list,
+    );
+  }
+
+  @override
+  Stream<List<Prescription>> watchPrescriptions(String patientId) {
+    return _prescriptions
+        .where('patientId', isEqualTo: patientId)
+        .snapshots()
+        .map((snap) {
+      final list = snap.docs
+          .map((d) => Prescription.fromMap(d.id, d.data()))
+          .toList();
+      return PatientHealthSamples.mergeStoredWithSamples(
+        patientId: patientId,
+        stored: list,
+      );
+    });
   }
 
   @override

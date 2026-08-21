@@ -9,7 +9,9 @@ import '../../core/theme/app_colors.dart';
 import '../../localization/app_localizations.dart';
 
 Future<void> showSosOverlay(BuildContext context) {
-  final patientId = context.read<AuthCubit>().state.user?.id;
+  // SOS always belongs to the main applicant (Chamidu), not a switched profile.
+  final auth = context.read<AuthCubit>();
+  final patientId = auth.ownerUid ?? auth.state.user?.id;
   context.read<SosCubit>().prepareEmergency(patientId: patientId);
 
   return showGeneralDialog(

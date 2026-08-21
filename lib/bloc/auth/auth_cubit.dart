@@ -15,14 +15,18 @@ class AuthState extends Equatable {
     this.loading = false,
     this.familyMembers = const [],
     this.activeFamilyKey,
+    this.ownerUid,
   });
 
   final AuthStatus status;
+  /// Active profile (Chamidu / Sakuni / Denuk). `user.id` is the data patientId.
   final UserProfile? user;
   final String? error;
   final bool loading;
   final List<FamilyMember> familyMembers;
   final String? activeFamilyKey;
+  /// Firebase Auth uid of the main applicant (Chamidu). SOS / account ownership.
+  final String? ownerUid;
 
   AuthState copyWith({
     AuthStatus? status,
@@ -33,6 +37,7 @@ class AuthState extends Equatable {
     bool clearError = false,
     List<FamilyMember>? familyMembers,
     String? activeFamilyKey,
+    String? ownerUid,
   }) {
     return AuthState(
       status: status ?? this.status,
@@ -41,6 +46,7 @@ class AuthState extends Equatable {
       loading: loading ?? this.loading,
       familyMembers: familyMembers ?? this.familyMembers,
       activeFamilyKey: activeFamilyKey ?? this.activeFamilyKey,
+      ownerUid: ownerUid ?? this.ownerUid,
     );
   }
 
@@ -52,6 +58,7 @@ class AuthState extends Equatable {
         loading,
         familyMembers,
         activeFamilyKey,
+        ownerUid,
       ];
 }
 
@@ -75,8 +82,10 @@ class AuthCubit extends Cubit<AuthState> {
   static const String _kChild = 'child';
 
   Future<void> _initFamilyMembers({required UserProfile owner}) async {
-    // Each family member gets a unique virtual patientId derived from the
-    // owner uid so the Vault, Schedule, and Vaccine cubits load isolated data.
+    // Family profiles under Chamidu's Firebase account.
+    // Each member has a unique patientId `{ownerUid}_{key}` so Home / Doctors /
+    // Call / Vault / Vaccines / Billing stay fully isolated — Firestore rules
+    // allow these household ids for the signed-in owner.
     final wifeId = '${owner.id}_wife';
     final childId = '${owner.id}_child';
 
@@ -127,6 +136,8 @@ class AuthCubit extends Cubit<AuthState> {
       user: members.firstWhere((m) => m.key == _kOwner).profile,
       familyMembers: members,
       activeFamilyKey: _kOwner,
+      ownerUid: owner.id,
+      loading: false,
     ));
   }
 
@@ -135,12 +146,29 @@ class AuthCubit extends Cubit<AuthState> {
 
   bool get isActiveOwner => _isFamilyOwner;
 
+  /// Active profile patient id (Chamidu / Sakuni / Denuk) for bookings & vault.
+  String? get activePatientId => state.user?.id;
+
+  /// Main applicant Firebase uid (always Chamidu for SOS / account ownership).
+  String? get ownerUid {
+    if (state.ownerUid != null) return state.ownerUid;
+    for (final m in state.familyMembers) {
+      if (m.key == _kOwner) return m.profile.id;
+    }
+    return state.user?.id;
+  }
+
   Future<void> selectFamilyMember(String key) async {
     if (state.familyMembers.isEmpty) return;
     final found = state.familyMembers.where((m) => m.key == key).toList();
     if (found.isEmpty) return;
     final member = found.first;
-    emit(state.copyWith(user: member.profile, activeFamilyKey: key));
+    emit(state.copyWith(
+      user: member.profile,
+      activeFamilyKey: key,
+      ownerUid: state.ownerUid,
+      clearError: true,
+    ));
   }
 
   /// Prototype: adds/updates family member inside in-memory list.
@@ -187,7 +215,7 @@ class AuthCubit extends Cubit<AuthState> {
     try {
       final user =
           await _auth.signInWithEmail(email: email, password: password);
-      emit(AuthState(status: AuthStatus.authenticated, user: user));
+      await _initFamilyMembers(owner: user);
     } catch (e) {
       emit(state.copyWith(loading: false, error: e.toString()));
     }
@@ -201,7 +229,7 @@ class AuthCubit extends Cubit<AuthState> {
         email: email,
         password: password,
       );
-      emit(AuthState(status: AuthStatus.authenticated, user: user));
+      await _initFamilyMembers(owner: user);
     } catch (e) {
       emit(state.copyWith(loading: false, error: e.toString()));
     }
@@ -212,7 +240,7 @@ class AuthCubit extends Cubit<AuthState> {
     try {
       final user =
           await _auth.signInWithPhoneDemo(phone: phone, otp: otp);
-      emit(AuthState(status: AuthStatus.authenticated, user: user));
+      await _initFamilyMembers(owner: user);
     } catch (e) {
       emit(state.copyWith(loading: false, error: e.toString()));
     }
@@ -222,7 +250,7 @@ class AuthCubit extends Cubit<AuthState> {
     emit(state.copyWith(loading: true, clearError: true));
     try {
       final user = await _auth.signInWithGoogleDemo();
-      emit(AuthState(status: AuthStatus.authenticated, user: user));
+      await _initFamilyMembers(owner: user);
     } catch (e) {
       emit(state.copyWith(loading: false, error: e.toString()));
     }

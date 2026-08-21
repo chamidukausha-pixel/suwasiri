@@ -9,31 +9,42 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    // Main applicant uid OR family virtual ids: `{uid}_wife`, `{uid}_child`, …
+    // so Sakuni / Denuk bookings, vault, vaccines work under Chamidu's account.
+    function isHouseholdPatient(pid) {
+      return isSignedIn() && (
+        pid == request.auth.uid ||
+        pid.matches('^' + request.auth.uid + '_.+$')
+      );
+    }
+
     match /users/{userId} {
       allow read, write: if isOwner(userId);
     }
 
     match /vault/{reportId} {
       allow read, write: if isSignedIn()
-        && resource.data.patientId == request.auth.uid;
+        && isHouseholdPatient(resource.data.patientId);
       allow create: if isSignedIn()
-        && request.resource.data.patientId == request.auth.uid;
+        && isHouseholdPatient(request.resource.data.patientId);
     }
 
     match /vaccinations/{vaccineId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn()
-        && request.resource.data.patientId == request.auth.uid;
+      allow create, update: if isSignedIn()
+        && isHouseholdPatient(request.resource.data.patientId);
+      allow delete: if isSignedIn()
+        && isHouseholdPatient(resource.data.patientId);
     }
 
     match /appointments/{bookingId} {
-      // Patients write their own bookings. Any signed-in GP Care staff can read
-      // so clinic / video slots appear on the shared calendar and telehealth room.
+      // Patients write their own / family-member bookings. Any signed-in GP Care
+      // staff can read so clinic / video slots appear on the shared calendar.
       allow create: if isSignedIn()
-        && request.resource.data.patientId == request.auth.uid;
+        && isHouseholdPatient(request.resource.data.patientId);
       allow read: if isSignedIn();
       allow update, delete: if isSignedIn()
-        && (resource.data.patientId == request.auth.uid
+        && (isHouseholdPatient(resource.data.patientId)
             || request.resource.data.patientId == resource.data.patientId);
     }
 
@@ -50,10 +61,13 @@ service cloud.firestore {
     }
 
     match /prescriptions/{rxId} {
-      allow read, write: if isSignedIn()
-        && resource.data.patientId == request.auth.uid;
-      allow create: if isSignedIn()
-        && request.resource.data.patientId == request.auth.uid;
+      // Patients read their household scripts. GP Care staff issue e-Rx from
+      // the clinic / telehealth room onto the same collection.
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn()
+        && (isHouseholdPatient(resource.data.patientId)
+            || request.resource.data.patientId == resource.data.patientId);
     }
 
     // Live Suwasariya dispatcher GPS — owner writes; signed-in can read active sessions.

@@ -129,6 +129,33 @@ abstract final class PatientHealthSamples {
         ...historyMedicines(patientId: patientId),
       ];
 
+  /// Vault: keep samples only where GP Care has not issued that section yet.
+  static List<Prescription> mergeStoredWithSamples({
+    required String patientId,
+    required List<Prescription> stored,
+  }) {
+    final active = stored.where((p) => p.active).toList();
+    final samples = allSamplePrescriptions(patientId: patientId);
+    if (active.isEmpty) {
+      return samples
+        ..sort((a, b) =>
+            (b.issuedAt ?? DateTime(0)).compareTo(a.issuedAt ?? DateTime(0)));
+    }
+    final hasPending = active.any((p) => !p.sentToPharmacare);
+    final hasHistory = active.any((p) => p.sentToPharmacare);
+    final byId = {for (final p in active) p.id: p};
+    final extra = <Prescription>[
+      if (!hasPending)
+        for (final s in samples.where((s) => !s.sentToPharmacare))
+          if (!byId.containsKey(s.id)) s,
+      if (!hasHistory)
+        for (final s in samples.where((s) => s.sentToPharmacare))
+          if (!byId.containsKey(s.id)) s,
+    ];
+    return [...active, ...extra]..sort((a, b) =>
+        (b.issuedAt ?? DateTime(0)).compareTo(a.issuedAt ?? DateTime(0)));
+  }
+
   static List<TreatmentNote> treatmentNotes({required String patientId}) {
     final now = DateTime.now();
     return [

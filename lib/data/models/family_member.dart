@@ -2,10 +2,11 @@ import 'package:equatable/equatable.dart';
 
 import 'user_profile.dart';
 
-/// In-app family member selector (prototype).
+/// In-app family member under the signed-in main applicant account.
 ///
-/// Note: For now these members reuse the same `profile.id` (the signed-in
-/// user's uid) so all existing Firestore security rules keep working.
+/// Each [profile.id] is a household patient id (`{ownerUid}` or
+/// `{ownerUid}_wife` / `_child`) so bookings, vault, vaccines and payments
+/// stay isolated while Firestore rules still authorize the owner session.
 class FamilyMember extends Equatable {
   const FamilyMember({
     required this.key,

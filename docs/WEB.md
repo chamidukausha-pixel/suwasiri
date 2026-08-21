@@ -57,12 +57,13 @@ See [FIREBASE.md](FIREBASE.md) planned tenancy collections. Platform Super Admin
 Work both apps in this repo. Align on shared data, not a shared UI framework.
 
 1. **Identity** — same Firebase Auth users (`users/{uid}`) so a patient on mobile is the same person a GP sees on web.
-2. **Appointments (live)** — after checkout in Suwasiri, the booking is written to Firestore `appointments`. GP Care (signed-in staff) listens to that collection and merges it with the clinic diary. Click a calendar date (e.g. 30 August 2026) to see the patient, doctor, time, clinic vs video, and a **Suwasiri App** badge.
-3. **Video consults** — video bookings appear in **Telehealth** from the slot time until the doctor starts the call. Doctor (GP Care) and patient (Suwasiri Call tab) join the same `telehealth_sessions/{appointmentId}` WebRTC room — camera and mic in the browser and the app, no extra devices.
-4. **Roles** — Platform Super Admin (tenants) + Hospital Super Admin (RBAC/staff/branches) + hospital template roles. Mobile remains the patient companion.
-5. **Do not** rewrite the web UI to match Flutter widgets, or the Flutter UI to match the clinic dashboard.
+2. **Appointments (live)** — after checkout in Suwasiri, the booking is written to Firestore `appointments` under the **active patient name** (Chamidu, Sakuni, Denuk). GP Care staff see that name on the calendar, not a generic “Suwasiri patient” label.
+3. **Video consults** — video bookings appear in **Telehealth** from the slot time until the doctor starts the call. Doctor (GP Care) and patient (Suwasiri Call tab) join the same `telehealth_sessions/{appointmentId}` WebRTC room.
+4. **E-prescriptions (live)** — medicines issued in GP Care (exam room, clinical record, or telehealth) write to Firestore `prescriptions`. They show on Suwasiri **Vault → E-Prescription** (same formal script). During a video consult they also show on **Call → E-Prescription**. After MediLanka / pharmacy collection they leave those sections and appear under **Vault → Issued Medical History**.
+5. **Roles** — Platform Super Admin (tenants) + Hospital Super Admin (RBAC/staff/branches) + hospital template roles. Mobile remains the patient companion.
+6. **Do not** rewrite the web UI to match Flutter widgets, or the Flutter UI to match the clinic dashboard.
 
-**Deploy rules after pull:** `firebase deploy --only firestore:rules` so staff can read `appointments` and both sides can use `telehealth_sessions`.
+**Deploy rules after pull:** `firebase deploy --only firestore:rules` so staff can read `appointments`, issue `prescriptions`, and both sides can use `telehealth_sessions`.
 
 ## Firebase Auth (web)
 

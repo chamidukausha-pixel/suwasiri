@@ -42,10 +42,10 @@ Aligned with `firestore.rules` and `FirebaseHealthRepository` / `FirebaseAuthRep
 | Collection | Key fields | Owner rule |
 |------------|------------|------------|
 | `users` | profile map (`name`, `email`, `NIC`, `bloodGroup`, `barcodeNumber`, `healthIntake`, …) | `users/{uid}` = auth uid |
-| `vault` | `patientId`, `title`, `issuedBy`, `date`, `metrics` | `patientId == uid` |
-| `vaccinations` | `patientId`, facility, `slot`, `status`, `vaccineName`, `bookedAt` | write if `patientId == uid` |
-| `appointments` | `patientId`, doctor fields, `timeSlot`, `date`, `time`, `token`, `consultMode` (`clinic` / `video`), `hospital`, `hospitalId`, `branchId`, `patientName`, `source` (`suwasiri_app`), `bookedAt` | create: owner; **read: any signed-in** (GP Care staff); update: owner or staff |
-| `prescriptions` | `patientId`, `medicine`, `schedule`, `doseBadge`, `sessionId`, `sentToPharmacare` (MediLanka portal flag), `clinicName`, `issuedAt` | `patientId == uid` |
+| `vault` | `patientId`, `title`, `issuedBy`, `date`, `metrics` | household: `uid` or `uid_*` |
+| `vaccinations` | `patientId`, facility, `slot`, `status`, `vaccineName`, `bookedAt` | write if household patient |
+| `appointments` | `patientId`, doctor fields, `timeSlot`, `date`, `time`, `token`, `consultMode` (`clinic` / `video`), `hospital`, `hospitalId`, `branchId`, `patientName`, `source` (`suwasiri_app`), `bookedAt` | create: household; **read: any signed-in** (GP Care staff); update: household or staff |
+| `prescriptions` | `patientId`, `medicine`, `schedule`, `doseBadge`, `sessionId`, `sentToPharmacare` (MediLanka portal flag), `clinicName`, `doctor`, `code`, `source` (`gp_care` when issued from GP Care) | read/create: signed-in (staff issue + patient read); update: household or staff |
 | `sos_sessions` | `patientId`, lat/lng, `accuracyMeters`, `address`, `shareLiveGps`, `active` | owner write; readable when `shareLiveGps` |
 | `notifications` | `title`, `body`, `timestamp`, `type`, `read` | any signed-in (tighten later) |
 | `telehealth_sessions` | WebRTC offer/answer + `ice_doctor` / `ice_patient` ICE candidates | any signed-in (patient app + GP Care doctor) |
@@ -61,7 +61,11 @@ Add these when the GP Care web app is wired to Firebase. Do **not** change the s
 | `roles/{roleId}` | `hospitalId`, `name`, `isSystem`, `enabled`, 16 permission flags | Hospital Super Admin of that hospital |
 | `memberships/{id}` | `userId`, `hospitalId`, `roleId`, `branchIds[]`, `active` | `hospitalId` must match an active membership of `auth.uid` |
 
-Clinical collections (`appointments`, `prescriptions`, `vault`, `vaccinations`) should gain `hospitalId`. Staff queries: membership contains hospital. Patient mobile app keeps owner rules (`patientId == uid`). Hospital A must not read Hospital B.
+Clinical collections (`appointments`, `prescriptions`, `vault`, `vaccinations`) should gain `hospitalId`. Staff queries: membership contains hospital. Patient mobile app uses **household** patient ids: main applicant `auth.uid`, family members `{uid}_wife` / `{uid}_child` / … (see `isHouseholdPatient` in `firestore.rules`). SOS stays on the main applicant uid only.
+
+## Family profiles (mobile)
+
+Switch Account on Profile keeps one Firebase Auth session (Chamidu) and swaps the active patient profile. Bookings, video consults, vault, vaccines, and billing use that profile’s `patientId` so Sakuni and Denuk each get a full account under the same login.
 
 ## CLI (Windows)
 

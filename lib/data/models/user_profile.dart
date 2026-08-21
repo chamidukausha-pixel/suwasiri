@@ -50,7 +50,17 @@ class UserProfile extends Equatable {
   String get displayName {
     final fromIntake = healthIntake?.fullName.trim();
     if (fromIntake != null && fromIntake.isNotEmpty) return fromIntake;
-    return name;
+    final n = name.trim();
+    if (n.isNotEmpty && n.toLowerCase() != 'patient') return n;
+    final local = email.split('@').first.replaceAll(RegExp(r'[._]+'), ' ').trim();
+    if (local.isNotEmpty) {
+      return local
+          .split(RegExp(r'\s+'))
+          .where((w) => w.isNotEmpty)
+          .map((w) => '${w[0].toUpperCase()}${w.substring(1)}')
+          .join(' ');
+    }
+    return n.isNotEmpty ? n : 'Patient';
   }
 
   bool get isProfileComplete {

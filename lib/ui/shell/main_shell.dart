@@ -47,8 +47,11 @@ class _MainShellState extends State<MainShell> {
           user.id,
           dateOfBirth: user.effectiveDateOfBirth,
         );
-    // Reset vault so data reloads when the user navigates to that tab.
-    context.read<VaultCubit>().resetForPatient();
+    final vault = context.read<VaultCubit>();
+    vault.resetForPatient();
+    if (vault.state.unlocked) {
+      vault.watch(user.id);
+    }
   }
 
   void _goTo(int index) => setState(() => _index = index);

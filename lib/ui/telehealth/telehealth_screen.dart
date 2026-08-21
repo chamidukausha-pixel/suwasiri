@@ -6,14 +6,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/notification/notification_cubit.dart';
 import '../../bloc/schedule/schedule_cubit.dart';
 import '../../bloc/vault/vault_cubit.dart';
 import '../../core/theme/app_colors.dart';
-import '../../data/catalogs/patient_health_samples.dart';
 import '../../data/catalogs/doctor_catalog.dart';
 import '../../data/models/appointment.dart';
 import '../../data/models/vault_report.dart';
@@ -75,6 +73,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   Duration _remaining = const Duration(minutes: 8, seconds: 18);
   Timer? _callTimer;
   Timer? _rxTimer;
+  StreamSubscription<List<Prescription>>? _rxWatch;
   CameraController? _camera;
   bool _cameraReady = false;
   bool _cameraBusy = false;
@@ -110,6 +109,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     _aiCtrl.dispose();
     _callTimer?.cancel();
     _rxTimer?.cancel();
+    unawaited(_rxWatch?.cancel());
     unawaited(_hangupLiveCall());
     _disposeCamera();
     super.dispose();
@@ -234,6 +234,8 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   Future<void> _teardownSession({required bool clearAppt}) async {
     _callTimer?.cancel();
     _rxTimer?.cancel();
+    await _rxWatch?.cancel();
+    _rxWatch = null;
     await _hangupLiveCall();
     await _disposeCamera();
     if (!mounted) return;
@@ -279,16 +281,8 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     _rxTimer?.cancel();
 
     setState(() {
-      _sessionId = const Uuid().v4();
-      _sessionRx = PatientHealthSamples.latestDoctorScript(
-        patientId: user.id,
-        doctorName: _doctorName,
-        clinicName: _clinicName,
-        sessionId: _sessionId,
-        issuedAt: DateTime.now(),
-      )
-          .map((p) => p.copyWith(updating: true))
-          .toList();
+      _sessionId = appt.id;
+      _sessionRx = const [];
       _rxUpdating = true;
       _remaining = _remainingFor(appt);
       _showAiOverlay = true;
@@ -299,24 +293,21 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
 
     unawaited(_initCamera());
 
-    await context.read<HealthRepository>().syncGpCare(user.id);
+    final health = context.read<HealthRepository>();
+    await health.syncGpCare(user.id);
     if (!mounted) return;
 
     _ensureExpiryTimer();
-
-    _rxTimer = Timer(const Duration(seconds: 5), () async {
-      if (!mounted || _sessionId == null) return;
-      final issued =
-          await context.read<HealthRepository>().issueTelehealthPrescription(
-                patientId: user.id,
-                doctorName: appt.doctorName,
-                sessionId: _sessionId!,
-              );
+    await _rxWatch?.cancel();
+    _rxWatch = health.watchPrescriptions(user.id).listen((list) {
       if (!mounted) return;
-      await context.read<NotificationCubit>().load();
-      if (!mounted) return;
+      final pending = list.where((p) {
+        if (p.sentToPharmacare) return false;
+        if (p.source == 'gp_care') return true;
+        return p.sessionId != null && p.sessionId == appt.id;
+      }).toList();
       setState(() {
-        _sessionRx = issued;
+        _sessionRx = pending;
         _rxUpdating = false;
       });
     });
@@ -417,7 +408,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     await notifications.load();
     if (!mounted) return;
     try {
-      await context.read<VaultCubit>().load(user.id);
+      await context.read<VaultCubit>().watch(user.id);
     } catch (_) {}
     if (!mounted) return;
     // After pharmacy send, remove from Call E-Prescription (moves to Vault Issued Medicines).
@@ -500,7 +491,16 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     final hasCall = appt != null && appt.isActiveSlot;
     final waiting = hasCall && appt.timeSlot.isAfter(DateTime.now());
 
-    return BlocListener<ScheduleCubit, ScheduleState>(
+    return BlocListener<AuthCubit, AuthState>(
+      listenWhen: (prev, curr) =>
+          prev.activeFamilyKey != curr.activeFamilyKey ||
+          prev.user?.id != curr.user?.id,
+      listener: (context, _) {
+        unawaited(
+          _applyVideo(context.read<ScheduleCubit>().state.nextVideo),
+        );
+      },
+      child: BlocListener<ScheduleCubit, ScheduleState>(
       listenWhen: (prev, next) =>
           prev.nextVideo?.id != next.nextVideo?.id ||
           prev.nextVideo?.doctorId != next.nextVideo?.doctorId ||
@@ -562,7 +562,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
               camera: _camera,
               cameraReady: _cameraReady,
               showAiOverlay: _showAiOverlay && !_liveConnected,
-              doctorName: appt.doctorName,
+              doctorName: _doctorName,
               liveConnected: _liveConnected,
               joiningLive: _joiningLive,
               canJoinLive: appt.canJoinGpCareCall,
@@ -593,15 +593,14 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
                   : _timerLabel,
               timerCaption:
                   waiting ? l.t('scheduledConsult') : l.t('timeRemaining'),
-              doctorName: appt.doctorName,
+              doctorName: _doctorName,
             ),
             const SizedBox(height: 14),
             _EPrescriptionCard(
               medicines: _sessionRx,
               updating: _rxUpdating,
-              doctorName: appt.doctorName,
-              clinicName: DoctorCatalog.doctorById(appt.doctorId)?.hospital ??
-                  (appt.hospital.isEmpty ? appt.specialty : appt.hospital),
+              doctorName: _doctorName,
+              clinicName: _clinicName,
               onOpenClinic: (meds, clinic, doctor) => _openClinicPrescription(
                 medicines: meds,
                 clinicName: clinic,
@@ -626,9 +625,10 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
             onGoogle: _openAiGoogle,
           ),
         ],
-      ),
-    ),
-    );
+      ), // ListView
+    ), // SafeArea
+    ), // ScheduleCubit listener
+    ); // AuthCubit listener
   }
 }
 

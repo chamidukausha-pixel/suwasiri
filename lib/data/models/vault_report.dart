@@ -144,6 +144,7 @@ class Prescription extends Equatable {
     this.issuedAt,
     this.clinicName = 'Lanka GP Care Virtual Clinic',
     this.prescriberNumber = '1234567',
+    this.source = '',
   });
 
   final String id;
@@ -161,6 +162,8 @@ class Prescription extends Equatable {
   final String clinicName;
   /// Doctor registration / issued number shown on the formal script.
   final String prescriberNumber;
+  /// `gp_care` when issued from Sri Lankan GP Care; empty for in-app samples.
+  final String source;
 
   Prescription copyWith({
     String? id,
@@ -177,6 +180,7 @@ class Prescription extends Equatable {
     DateTime? issuedAt,
     String? clinicName,
     String? prescriberNumber,
+    String? source,
   }) {
     return Prescription(
       id: id ?? this.id,
@@ -193,6 +197,7 @@ class Prescription extends Equatable {
       issuedAt: issuedAt ?? this.issuedAt,
       clinicName: clinicName ?? this.clinicName,
       prescriberNumber: prescriberNumber ?? this.prescriberNumber,
+      source: source ?? this.source,
     );
   }
 
@@ -210,6 +215,7 @@ class Prescription extends Equatable {
         'issuedAt': (issuedAt ?? DateTime.now()).toIso8601String(),
         'clinicName': clinicName,
         'prescriberNumber': prescriberNumber,
+        if (source.isNotEmpty) 'source': source,
       };
 
   factory Prescription.fromMap(String id, Map<String, dynamic> map) {
@@ -230,6 +236,7 @@ class Prescription extends Equatable {
           : null,
       clinicName: map['clinicName'] as String? ?? 'Lanka GP Care Virtual Clinic',
       prescriberNumber: map['prescriberNumber'] as String? ?? '1234567',
+      source: map['source'] as String? ?? '',
     );
   }
 
@@ -249,6 +256,7 @@ class Prescription extends Equatable {
         issuedAt,
         clinicName,
         prescriberNumber,
+        source,
       ];
 }
 

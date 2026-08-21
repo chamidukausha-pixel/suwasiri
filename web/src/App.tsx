@@ -93,11 +93,13 @@ import { isFirebaseConfigured } from "./firebase";
 import { signOutFirebase, staffForAuthUser, subscribeAuth } from "./firebaseAuth";
 import type { User } from "firebase/auth";
 import {
+  appointmentPatientName,
   compareAppointmentTime,
   mergeAppointments,
   mergePatients,
   subscribeSuwasiriAppointments,
 } from "./sync/suwasiriAppointments";
+import { issuePrescriptionsToSuwasiri } from "./sync/suwasiriPrescriptions";
 
 export interface DrugFormularyItem {
   name: string;
@@ -1234,8 +1236,20 @@ export default function App() {
       const data = await res.json();
       setPatients(data.state.patients);
 
-      // 3. Auto mark active appointment completed
       const matchApt = appointments.find(a => a.patientId === selectedConsultPatient.id && a.status !== "COMPLETED");
+      if (consultMedsList.length > 0) {
+        await issuePrescriptionsToSuwasiri({
+          patientId: selectedConsultPatient.id,
+          doctorName: sessionUser?.name || "Dr. Priyantha Silva",
+          clinicName: activeHospital?.name || selectedConsultPatient.medicalCenter || "PrimeCare Medical Centre - Colombo Central",
+          medicines: consultMedsList,
+          sessionId: matchApt?.id,
+          rxNumber: rxNum,
+          prescriberNumber: "12908",
+        });
+      }
+
+      // 3. Auto mark active appointment completed
       if (matchApt) {
         await handleUpdateAptStatus(matchApt.id, "COMPLETED");
       }
@@ -2613,7 +2627,7 @@ export default function App() {
                                         }}
                                         title="Click patient name to launch GP Exam Room"
                                       >
-                                        <span>{p?.name || apt.patientName || "Unregistered Patient"}</span>
+                                        <span>{appointmentPatientName(apt, p)}</span>
                                         <Stethoscope className="w-3.5 h-3.5 text-sky-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                                       </div>
                                       <div className="text-[10px] text-slate-500 flex items-center gap-2 mt-0.5 flex-wrap">
@@ -2961,7 +2975,7 @@ export default function App() {
                             if (lobbySearchQuery) {
                               const p = patients.find(pat => pat.id === apt.patientId);
                               const q = lobbySearchQuery.toLowerCase();
-                              const matchName = (p?.name || apt.patientName || "").toLowerCase().includes(q);
+                              const matchName = appointmentPatientName(apt, p).toLowerCase().includes(q);
                               const matchReason = apt.reason.toLowerCase().includes(q);
                               const matchId = apt.patientId.toLowerCase().includes(q);
                               const matchPhone = (p?.phone || apt.patientPhone || "").toLowerCase().includes(q);
@@ -3092,11 +3106,11 @@ export default function App() {
                                     onClick={() => p && setActiveHubPatient(p)}
                                   >
                                     <div className="w-8 h-8 rounded-full bg-[#dee8ff] text-[#00334f] font-bold text-xs flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                                      {(p?.name || apt.patientName || "P").split(" ").map(n => n[0]).join("").slice(0, 2)}
+                                      {(appointmentPatientName(apt, p) || "P").split(" ").map(n => n[0]).join("").slice(0, 2)}
                                     </div>
                                     <div>
                                       <p className="font-serif font-bold text-slate-900 group-hover:text-[#00334f] group-hover:underline">
-                                        {p?.name || apt.patientName || "Unregistered Patient"}
+                                        {appointmentPatientName(apt, p)}
                                       </p>
                                       <p className="text-[10px] text-slate-400">
                                         <span className="font-mono font-bold text-slate-500">[{apt.patientId}]</span>

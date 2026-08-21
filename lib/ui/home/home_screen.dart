@@ -93,7 +93,12 @@ class _HomeScreenState extends State<HomeScreen> {
         nextClinic == null ? null : doctorHospital(nextClinic);
     final firstName = user?.name.split(' ').first ?? '';
 
-    return SafeArea(
+    return BlocListener<AuthCubit, AuthState>(
+      listenWhen: (prev, curr) =>
+          prev.activeFamilyKey != curr.activeFamilyKey ||
+          prev.user?.id != curr.user?.id,
+      listener: (context, state) => _syncSchedule(),
+      child: SafeArea(
       bottom: false,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
@@ -238,7 +243,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-    );
+      ), // SafeArea
+    ); // BlocListener
   }
 }
 

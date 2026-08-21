@@ -803,11 +803,11 @@ class AppLocalizations {
     },
     'noPendingCallRx': {
       'en':
-          'No pending e-prescription for this call. Sent scripts appear under Vault → Issued Medical History.',
+          'Waiting for Lanka GP Care to issue this consult’s e-prescription. After pharmacy collection it moves to Vault → Issued Medical History.',
       'si':
-          'මෙම ඇමතුමට අපේක්ෂිත ඊ-වට්ටෝරුවක් නැත. යවන ලද ඒවා Vault → Issued Medical History යටතේය.',
+          'Lanka GP Care ඊ-වට්ටෝරුව නිකුත් කරන තෙක් රැඳී සිටින්න. ඖෂධාගාරයෙන් ලබාගත් පසු Vault → Issued Medical History යටතේ පෙනේ.',
       'ta':
-          'இந்த அழைப்பிற்கு நிலுவை மின் மருந்துச்சீட்டு இல்லை. அனுப்பியவை Vault → Issued Medical History-இல்.',
+          'Lanka GP Care மின் மருந்துச்சீட்டை வழங்கும் வரை காத்திருக்கவும். மருந்தகத்தில் பெற்ற பின் Vault → Issued Medical History-இல்.',
     },
     'rxMovedToHistory': {
       'en':
@@ -823,9 +823,9 @@ class AppLocalizations {
       'ta': 'மருந்தகம் அனுப்ப நிலுவை',
     },
     'noPendingMedicines': {
-      'en': 'No pending medicines. In-person or call scripts appear here until sent to MediLanka.',
-      'si': 'අපේක්ෂිත බෙහෙත් නැත. MediLanka වෙත යවන තෙක් සායන/ඇමතුම් වට්ටෝරු මෙහි පෙනේ.',
-      'ta': 'நிலுவை மருந்துகள் இல்லை. MediLanka அனுப்பும் வரை இங்கே தோன்றும்.',
+      'en': 'Waiting for Lanka GP Care to issue an e-prescription. After pharmacy collection it appears under Issued Medical History.',
+      'si': 'Lanka GP Care ඊ-වට්ටෝරුව නිකුත් කරන තෙක් රැඳී සිටින්න. ඖෂධාගාරයෙන් ලබාගත් පසු Issued Medical History යටතේ පෙනේ.',
+      'ta': 'Lanka GP Care மின் மருந்துச்சீட்டை வழங்கும் வரை காத்திருக்கவும். மருந்தகத்தில் பெற்ற பின் Issued Medical History-இல்.',
     },
     'noVaccineHistory': {
       'en': 'No vaccine history yet.',

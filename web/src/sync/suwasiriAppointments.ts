@@ -110,10 +110,27 @@ export function mapFirestoreAppointment(
   };
 }
 
+export function appointmentPatientName(apt: Appointment, patient?: Patient | null): string {
+  const fromApt = (apt.patientName || "").trim();
+  if (fromApt && fromApt.toLowerCase() !== "suwasiri patient") return fromApt;
+  const fromPat = (patient?.name || "").trim();
+  if (fromPat && fromPat.toLowerCase() !== "suwasiri patient") return fromPat;
+  const email = (apt.patientEmail || patient?.email || "").split("@")[0].trim();
+  if (email) {
+    return email
+      .replace(/[._]+/g, " ")
+      .split(" ")
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  }
+  return "Patient";
+}
+
 export function stubPatientFromBooking(apt: Appointment): Patient {
   return {
     id: apt.patientId,
-    name: apt.patientName || "Suwasiri patient",
+    name: appointmentPatientName(apt),
     age: 0,
     gender: "Unknown",
     bloodType: "—",
@@ -146,7 +163,20 @@ export function mergePatients(clinic: Patient[], mobile: Patient[]): Patient[] {
   const byId = new Map<string, Patient>();
   for (const p of clinic) byId.set(p.id, p);
   for (const p of mobile) {
-    if (!byId.has(p.id)) byId.set(p.id, p);
+    const existing = byId.get(p.id);
+    if (!existing) {
+      byId.set(p.id, p);
+      continue;
+    }
+    const name = (p.name || "").trim();
+    if (name && name.toLowerCase() !== "suwasiri patient") {
+      byId.set(p.id, {
+        ...existing,
+        name,
+        phone: p.phone || existing.phone,
+        email: p.email || existing.email,
+      });
+    }
   }
   return [...byId.values()];
 }

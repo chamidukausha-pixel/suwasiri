@@ -66,7 +66,10 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Web lobby + doctor dashboard month calendar (current month/time, prev/next month, click a date for that day’s appointments and patient details)
 - [x] Suwasiri App bookings sync to GP Care calendar (Firestore `appointments`; clinic + video; patient name/time/doctor on the selected date)
 - [x] Video consults appear in GP Care Telehealth from slot time; doctor + patient join a live WebRTC call (app camera/mic ↔ browser camera/mic)
+- [x] Suwasiri bookings show the real patient name on GP Care (Chamidu / Sakuni / family member)
+- [x] GP Care issued e-Rx syncs to Suwasiri Vault E-Prescription and Call E-Prescription; MediLanka send moves them to Issued Medical History
 - [x] Profile: accounts menu (My Profile, Account Settings, Billing & Plans, Help Center, Dark Mode, Switch Account for family)
+- [x] Family Switch Account: Sakuni / Denuk full patient parity (clinic, video, vault, vaccines, billing) under Chamidu login; household Firestore rules deployed
 
 ## In progress / next
 

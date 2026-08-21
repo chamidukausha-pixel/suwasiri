@@ -29,8 +29,9 @@ import {
   Sparkles
 } from "lucide-react";
 import { Patient, Appointment } from "../types";
-import { isDueTelehealth } from "../sync/suwasiriAppointments";
+import { isDueTelehealth, appointmentPatientName } from "../sync/suwasiriAppointments";
 import { startDoctorTelehealthCall, type TelehealthCallHandle, type TelehealthCallStatus } from "../sync/telehealthRtc";
+import { issuePrescriptionsToSuwasiri } from "../sync/suwasiriPrescriptions";
 
 interface Props {
   patients: Patient[];
@@ -262,6 +263,17 @@ export default function TelehealthRoom({
 
       if (!res.ok) throw new Error("Sync failed");
 
+      await issuePrescriptionsToSuwasiri({
+        patientId: selectedPat.id,
+        doctorName: sessionDoctorName,
+        clinicName: selectedPat.medicalCenter || "PrimeCare Medical Centre - Colombo Central",
+        medicines: formattedMedsStrings,
+        sessionId: selectedVideoApt?.id
+          || appointments.find((a) => a.patientId === selectedPat.id && (a.isTelehealth || a.type === "Telehealth Video"))?.id,
+        rxNumber: inviteToken ? `EP-${inviteToken}` : undefined,
+        prescriberNumber: "12908",
+      });
+
       // Connect with Patient Drug History
       if (onUpdatePatientMedications) {
         const existing = selectedPat.currentMedications || [];
@@ -432,7 +444,7 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
               return (
                 <div key={apt.id} className="bg-white border border-purple-100 rounded-lg p-3 flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-bold text-[#00334f]">{p?.name || apt.patientName || "Patient"}</p>
+                    <p className="text-sm font-bold text-[#00334f]">{appointmentPatientName(apt, p)}</p>
                     <p className="text-[11px] text-slate-500">
                       {apt.time} · {apt.doctorName || sessionDoctorName}
                       {apt.token ? ` · ${apt.token}` : ""}

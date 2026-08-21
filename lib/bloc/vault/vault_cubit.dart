@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -122,12 +124,22 @@ class VaultCubit extends Cubit<VaultState> {
   VaultCubit(this._health) : super(const VaultState());
 
   final HealthRepository _health;
+  StreamSubscription<List<Prescription>>? _rxSub;
 
   Future<void> unlock(Future<bool> Function() biometric) async {
     final ok = await biometric();
     if (ok) {
       emit(state.copyWith(unlocked: true));
     }
+  }
+
+  Future<void> watch(String patientId) async {
+    await load(patientId);
+    await _rxSub?.cancel();
+    _rxSub = _health.watchPrescriptions(patientId).listen((rx) {
+      if (isClosed) return;
+      emit(state.copyWith(prescriptions: rx));
+    });
   }
 
   Future<void> load(String patientId) async {
@@ -142,23 +154,15 @@ class VaultCubit extends Cubit<VaultState> {
       // Still show curated Vault samples if network/Firestore fails.
     }
 
-    final sampleRx =
-        PatientHealthSamples.allSamplePrescriptions(patientId: patientId);
+    if (rx.isEmpty) {
+      rx = PatientHealthSamples.mergeStoredWithSamples(
+        patientId: patientId,
+        stored: const [],
+      );
+    }
+
     final sampleLabs =
         PatientHealthSamples.sampleLabReports(patientId: patientId);
-
-    final rxById = {for (final p in rx) p.id: p};
-    final mergedRx = <Prescription>[
-      ...rx,
-      for (final s in sampleRx)
-        if (!rxById.containsKey(s.id) &&
-            !(s.sentToPharmacare == false &&
-                rx.any((p) =>
-                    p.code == s.code && p.sentToPharmacare)))
-          s,
-    ]..sort((a, b) =>
-        (b.issuedAt ?? DateTime(0)).compareTo(a.issuedAt ?? DateTime(0)));
-
     final reportIds = {for (final r in reports) r.id};
     final mergedReports = <VaultReport>[
       ...reports,
@@ -168,7 +172,7 @@ class VaultCubit extends Cubit<VaultState> {
 
     emit(state.copyWith(
       reports: mergedReports,
-      prescriptions: mergedRx,
+      prescriptions: rx,
       treatmentNotes:
           List<TreatmentNote>.from(
             PatientHealthSamples.treatmentNotes(patientId: patientId),
@@ -223,7 +227,15 @@ class VaultCubit extends Cubit<VaultState> {
   /// Clears loaded records so the next visit to the Vault tab reloads for the
   /// new patient.
   void resetForPatient() {
+    unawaited(_rxSub?.cancel());
+    _rxSub = null;
     emit(VaultState(unlocked: state.unlocked));
+  }
+
+  @override
+  Future<void> close() {
+    _rxSub?.cancel();
+    return super.close();
   }
 
   void setFilter(VaultFilter filter) {

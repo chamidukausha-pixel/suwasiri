@@ -8,6 +8,7 @@ import '../services/lab_assistant_replies.dart';
 abstract class HealthRepository {
   Future<List<VaultReport>> getVaultReports(String patientId);
   Future<List<Prescription>> getPrescriptions(String patientId);
+  Stream<List<Prescription>> watchPrescriptions(String patientId);
   Future<void> syncLankaLab(String patientId);
   Future<void> syncGpCare(String patientId);
 

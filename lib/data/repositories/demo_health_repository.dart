@@ -33,6 +33,7 @@ class DemoHealthRepository implements HealthRepository {
 
   List<Prescription> _rxMemory = [];
   final _apptChanges = StreamController<void>.broadcast();
+  final _rxChanges = StreamController<void>.broadcast();
 
   final _doctors = DoctorCatalog.doctors;
 
@@ -177,18 +178,19 @@ class DemoHealthRepository implements HealthRepository {
 
   @override
   Future<List<Prescription>> getPrescriptions(String patientId) async {
-    final mine =
-        _rxMemory.where((p) => p.patientId == patientId && p.active).toList();
-    final samples =
-        PatientHealthSamples.allSamplePrescriptions(patientId: patientId);
-    if (mine.isEmpty) return samples;
-    final byId = {for (final p in mine) p.id: p};
-    return [
-      ...mine,
-      for (final s in samples)
-        if (!byId.containsKey(s.id)) s,
-    ]..sort((a, b) =>
-        (b.issuedAt ?? DateTime(0)).compareTo(a.issuedAt ?? DateTime(0)));
+    final mine = _rxMemory.where((p) => p.patientId == patientId).toList();
+    return PatientHealthSamples.mergeStoredWithSamples(
+      patientId: patientId,
+      stored: mine,
+    );
+  }
+
+  @override
+  Stream<List<Prescription>> watchPrescriptions(String patientId) async* {
+    yield await getPrescriptions(patientId);
+    await for (final _ in _rxChanges.stream) {
+      yield await getPrescriptions(patientId);
+    }
   }
 
   @override
@@ -207,6 +209,7 @@ class DemoHealthRepository implements HealthRepository {
       issuedAt: now,
     );
     _rxMemory = [..._rxMemory, ...batch];
+    _rxChanges.add(null);
     await pushNotification(
       AppNotification(
         id: _uuid.v4(),
@@ -230,6 +233,7 @@ class DemoHealthRepository implements HealthRepository {
             ? p.copyWith(sentToPharmacare: true, updating: false)
             : p)
         .toList();
+    _rxChanges.add(null);
     await pushNotification(
       AppNotification(
         id: _uuid.v4(),
@@ -263,6 +267,7 @@ class DemoHealthRepository implements HealthRepository {
             updating: false,
           ),
     ];
+    _rxChanges.add(null);
     await pushNotification(
       AppNotification(
         id: _uuid.v4(),

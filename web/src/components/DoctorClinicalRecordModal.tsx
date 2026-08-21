@@ -16,6 +16,7 @@ import {
   calculatePaediatricDose 
 } from "../utils/clinicalCalculators";
 import ClinicalCalculatorsModal from "./ClinicalCalculatorsModal";
+import { issuePrescriptionsToSuwasiri } from "../sync/suwasiriPrescriptions";
 
 interface Props {
   patient: Patient;
@@ -208,6 +209,15 @@ export default function DoctorClinicalRecordModal({
     onUpdatePatient(updated);
     setNewMedName("");
     showToast(`Issued ePrescription with QR Token for ${newMedName}`);
+    void issuePrescriptionsToSuwasiri({
+      patientId: patient.id,
+      doctorName: "Dr. Priyantha Silva",
+      clinicName: patient.medicalCenter || "PrimeCare Medical Centre - Colombo Central",
+      medicines: [`${newMedName} [${newMedDose}]`],
+      rxNumber: newRx.rxNumber,
+      sessionId: appointments.find((a) => a.patientId === patient.id && a.status !== "COMPLETED")?.id,
+      prescriberNumber: "12908",
+    });
   };
 
   // Add Pathology Order

@@ -31,7 +31,7 @@ class _VaultScreenState extends State<VaultScreen> {
     }
     final user = auth.state.user;
     if (user != null && vault.state.unlocked) {
-      await vault.load(user.id);
+      await vault.watch(user.id);
     }
   }
 
@@ -40,7 +40,7 @@ class _VaultScreenState extends State<VaultScreen> {
     final auth = context.read<AuthCubit>();
     final user = auth.state.user;
     if (user != null && vault.state.unlocked) {
-      await vault.load(user.id);
+      await vault.watch(user.id);
     }
   }
 
