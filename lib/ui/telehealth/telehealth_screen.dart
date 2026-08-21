@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:camera/camera.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:intl/intl.dart';
@@ -81,7 +83,9 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   bool _liveConnected = false;
   bool _joiningLive = false;
   bool _liveJoinBlocked = false;
+  bool _incomingRinging = false;
   String _liveStatus = '';
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _ringSub;
 
   @override
   void initState() {
@@ -111,6 +115,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     _callTimer?.cancel();
     _rxTimer?.cancel();
     unawaited(_rxWatch?.cancel());
+    unawaited(_ringSub?.cancel());
     unawaited(_hangupLiveCall());
     _disposeCamera();
     super.dispose();
@@ -226,11 +231,44 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     if (!mounted) return;
     if (changed) _liveJoinBlocked = false;
     setState(() => _videoAppt = next);
+    _watchIncomingRing(next.id);
     if (changed || _sessionId == null) {
       await _startSession();
     } else {
       _ensureExpiryTimer();
     }
+  }
+
+  void _watchIncomingRing(String appointmentId) {
+    unawaited(_ringSub?.cancel());
+    _ringSub = FirebaseFirestore.instance
+        .collection('telehealth_sessions')
+        .doc(appointmentId)
+        .snapshots()
+        .listen((snap) {
+      if (!mounted || _liveCall != null) return;
+      final data = snap.data();
+      if (data == null) {
+        if (_incomingRinging) setState(() => _incomingRinging = false);
+        return;
+      }
+      final status = (data['status'] as String? ?? '').toLowerCase();
+      final doctorJoined = data['doctorJoined'] == true;
+      final hasOffer = data['offer'] is Map;
+      final answered = data['answer'] is Map;
+      final ringing = doctorJoined &&
+          hasOffer &&
+          !answered &&
+          (status == 'ringing' ||
+              status == 'connecting' ||
+              status == 'lobby');
+      if (ringing == _incomingRinging) return;
+      setState(() => _incomingRinging = ringing);
+      if (ringing) {
+        HapticFeedback.heavyImpact();
+        SystemSound.play(SystemSoundType.alert);
+      }
+    });
   }
 
   Future<void> _teardownSession({required bool clearAppt}) async {
@@ -260,12 +298,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
         return;
       }
       setState(() => _remaining = _remainingFor(appt));
-      if (!_liveJoinBlocked &&
-          appt.canJoinGpCareCall &&
-          _liveCall == null &&
-          !_joiningLive) {
-        unawaited(_joinGpCareCall());
-      }
+      // Do not auto-join — patient answers when the doctor rings from GP Care.
     });
   }
 
@@ -299,11 +332,8 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
       _cameraReady = false;
     });
 
-    if (appt.canJoinGpCareCall && !_liveJoinBlocked) {
-      unawaited(_joinGpCareCall());
-    } else {
-      unawaited(_initCamera());
-    }
+    // Patient waits with camera on; joins only after Answer / Join.
+    unawaited(_initCamera());
 
     final health = context.read<HealthRepository>();
     await health.syncGpCare(user.id);
@@ -355,14 +385,14 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
 
   Future<void> _joinGpCareCall() async {
     final appt = _videoAppt;
-    if (appt == null ||
-        !appt.canJoinGpCareCall ||
-        _joiningLive ||
-        _liveCall != null) {
-      return;
-    }
+    if (appt == null || _joiningLive || _liveCall != null) return;
+    // Allow answer when doctor is ringing even slightly outside the T-15 window.
+    if (!appt.canJoinGpCareCall && !_incomingRinging) return;
+    if (_liveJoinBlocked && !_incomingRinging) return;
     setState(() {
       _joiningLive = true;
+      _liveJoinBlocked = false;
+      _incomingRinging = false;
       _liveStatus = 'waiting';
     });
     while (_cameraBusy) {
@@ -587,7 +617,8 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
               doctorName: _doctorName,
               liveConnected: _liveConnected,
               joiningLive: _joiningLive,
-              canJoinLive: appt.canJoinGpCareCall,
+              canJoinLive: appt.canJoinGpCareCall || _incomingRinging,
+              incomingRinging: _incomingRinging,
               liveStatus: _liveStatus,
               localRenderer: _liveCall?.localRenderer,
               remoteRenderer: _liveCall?.remoteRenderer,
@@ -606,6 +637,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
               },
               onEnd: _endCall,
               onJoinLive: _joinGpCareCall,
+              onAnswerCall: _joinGpCareCall,
             ),
             const SizedBox(height: 14),
             _LiveConsultationCard(
@@ -665,6 +697,7 @@ class _VideoStage extends StatelessWidget {
     required this.liveConnected,
     required this.joiningLive,
     required this.canJoinLive,
+    required this.incomingRinging,
     required this.liveStatus,
     required this.localRenderer,
     required this.remoteRenderer,
@@ -674,6 +707,7 @@ class _VideoStage extends StatelessWidget {
     required this.onShare,
     required this.onEnd,
     required this.onJoinLive,
+    required this.onAnswerCall,
   });
 
   final bool muted;
@@ -685,6 +719,7 @@ class _VideoStage extends StatelessWidget {
   final bool liveConnected;
   final bool joiningLive;
   final bool canJoinLive;
+  final bool incomingRinging;
   final String liveStatus;
   final RTCVideoRenderer? localRenderer;
   final RTCVideoRenderer? remoteRenderer;
@@ -694,6 +729,7 @@ class _VideoStage extends StatelessWidget {
   final VoidCallback onShare;
   final VoidCallback onEnd;
   final VoidCallback onJoinLive;
+  final VoidCallback onAnswerCall;
 
   @override
   Widget build(BuildContext context) {
@@ -883,7 +919,42 @@ class _VideoStage extends StatelessWidget {
               ),
             ),
           ),
-          if (canJoinLive && !liveConnected)
+          if (incomingRinging && !liveConnected)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 78,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$doctorName is calling via Lanka GP Care…',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    onPressed: joiningLive ? null : onAnswerCall,
+                    icon: Icon(
+                      joiningLive ? Icons.hourglass_top : Icons.call,
+                    ),
+                    label: Text(
+                      joiningLive ? l.t('waitingForGpCare') : 'Answer call',
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.onlineGreen,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (canJoinLive && !liveConnected)
             Positioned(
               left: 16,
               right: 16,

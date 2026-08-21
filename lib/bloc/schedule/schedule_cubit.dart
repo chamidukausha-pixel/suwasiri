@@ -7,6 +7,7 @@ import '../../data/models/appointment.dart';
 import '../../data/models/vaccine_models.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../core/utils/booking_expiry.dart';
+import '../../data/services/video_call_reminder_service.dart';
 
 class ScheduleState extends Equatable {
   const ScheduleState({
@@ -72,13 +73,20 @@ class ScheduleState extends Equatable {
 
 /// Live Home / Call schedule. Video consults → Call + Home; clinic → Home only.
 class ScheduleCubit extends Cubit<ScheduleState> {
-  ScheduleCubit(this._health) : super(const ScheduleState());
+  ScheduleCubit(this._health) : super(const ScheduleState()) {
+    _reminder = VideoCallReminderService(_health);
+  }
 
   final HealthRepository _health;
+  late final VideoCallReminderService _reminder;
   StreamSubscription<List<Appointment>>? _sub;
   Timer? _expiryTick;
   Timer? _midnightTick;
   String? _patientId;
+
+  /// Optional UI hook (e.g. alarm dialog on Home / Call).
+  set onVideoReminder(void Function(Appointment appt)? cb) =>
+      _reminder.onAlarm = cb;
 
   Future<void> watch(String patientId) async {
     if (_patientId == patientId && _sub != null) {
@@ -95,16 +103,19 @@ class ScheduleCubit extends Cubit<ScheduleState> {
         vax = await _health.getVaccineBookings(patientId);
       } catch (_) {}
       if (isClosed) return;
+      final merged = _mergePending(appts);
       emit(state.copyWith(
-        appointments: _mergePending(appts),
+        appointments: merged,
         vaccineBookings: _mergePendingVaccines(vax),
         tick: state.tick + 1,
       ));
       _armMidnightTick();
+      unawaited(_reminder.check(merged));
     });
     _expiryTick = Timer.periodic(const Duration(seconds: 20), (_) {
       if (isClosed) return;
       emit(state.copyWith(tick: state.tick + 1));
+      unawaited(_reminder.check(state.appointments));
     });
   }
 
@@ -200,6 +211,7 @@ class ScheduleCubit extends Cubit<ScheduleState> {
     _sub?.cancel();
     _expiryTick?.cancel();
     _midnightTick?.cancel();
+    _reminder.dispose();
     return super.close();
   }
 }

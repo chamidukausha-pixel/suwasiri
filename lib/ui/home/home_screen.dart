@@ -115,11 +115,6 @@ class _HomeScreenState extends State<HomeScreen> {
             style:
                 Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 15),
           ),
-          const SizedBox(height: 18),
-          _SearchField(
-            hint: l.t('searchDoctors'),
-            onTap: () => widget.onNavigate(1),
-          ),
           const SizedBox(height: 24),
           Text(
             l.t('quickActions'),
@@ -243,44 +238,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       ), // SafeArea
     ); // BlocListener
-  }
-}
-
-class _SearchField extends StatelessWidget {
-  const _SearchField({required this.hint, required this.onTap});
-
-  final String hint;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return MinTap(
-      onTap: onTap,
-      child: Container(
-        height: 52,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          color: AppColors.cardBg(context),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.line(context)),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.search_rounded, color: AppColors.muted(context)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                hint,
-                style: TextStyle(
-                  color: AppColors.muted(context),
-                  fontSize: 15,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 

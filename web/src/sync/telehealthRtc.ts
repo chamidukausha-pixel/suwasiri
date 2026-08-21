@@ -112,7 +112,7 @@ export async function startDoctorTelehealthCall(opts: {
       offer: { sdp: offer.sdp, type: offer.type },
       answer: null,
       doctorJoined: true,
-      status: "connecting",
+      status: "ringing",
       updatedAt: Date.now(),
     },
     { merge: true }
