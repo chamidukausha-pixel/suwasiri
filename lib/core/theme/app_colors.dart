@@ -32,4 +32,30 @@ abstract final class AppColors {
   static const Color warningSoft = Color(0xFFFEF3C7);
   static const Color heartPink = Color(0xFFE11D48);
   static const Color onlineGreen = Color(0xFF22C55E);
+
+  /// Pure black page background in dark mode.
+  static const Color darkCanvas = Color(0xFF000000);
+  /// Elevated card surface in dark mode.
+  static const Color darkSurface = Color(0xFF121212);
+
+  static bool isDark(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark;
+
+  static Color pageBg(BuildContext context) =>
+      isDark(context) ? darkCanvas : canvas;
+
+  static Color cardBg(BuildContext context) =>
+      isDark(context) ? darkSurface : surface;
+
+  static Color ink(BuildContext context) =>
+      isDark(context) ? Colors.white : trustBlueDark;
+
+  static Color muted(BuildContext context) =>
+      isDark(context) ? Colors.white70 : slateMuted;
+
+  static Color line(BuildContext context) =>
+      isDark(context) ? Colors.white24 : border;
+
+  static Color softFill(BuildContext context) =>
+      isDark(context) ? const Color(0xFF1E1E1E) : trustBlueSoft;
 }

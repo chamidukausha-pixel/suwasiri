@@ -27,7 +27,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { Patient, Appointment } from "../types";
-import { isDueTelehealth, appointmentPatientName } from "../sync/suwasiriAppointments";
+import { isDueTelehealth, isVideoBooking, appointmentPatientName, stubPatientFromBooking } from "../sync/suwasiriAppointments";
 import { startDoctorTelehealthCall, type TelehealthCallHandle, type TelehealthCallStatus } from "../sync/telehealthRtc";
 import { issuePrescriptionsToSuwasiri } from "../sync/suwasiriPrescriptions";
 
@@ -35,6 +35,8 @@ interface Props {
   patients: Patient[];
   appointments: Appointment[];
   activePatient: Patient | null;
+  focusPatientId?: string;
+  focusAppointmentId?: string;
   sessionDoctorName?: string;
   onInvitePatient: (pName: string, phone: string, transport: "WhatsApp" | "SMS", token: string) => void;
   onSaveTelehealthNotes: (patientId: string, notes: string) => void;
@@ -47,6 +49,8 @@ export default function TelehealthRoom({
   patients,
   appointments,
   activePatient,
+  focusPatientId,
+  focusAppointmentId,
   sessionDoctorName = "Dr. Priyantha Silva",
   onSaveTelehealthNotes,
   drugsDatabase = [],
@@ -72,20 +76,7 @@ export default function TelehealthRoom({
     instructions: string;
     duration: string;
     meal: string;
-  }>>([
-    {
-      drug: "Amoxicillin 500mg Capsule",
-      instructions: "1 capsule every 8 hours",
-      duration: "5 days",
-      meal: "After Meal"
-    },
-    {
-      drug: "Paracetamol 500mg Tablet",
-      instructions: "1-2 tablets every 6 hours as needed for fever/pain",
-      duration: "3 days",
-      meal: "After Meal"
-    }
-  ]);
+  }>>([]);
 
   // Drug Search Bar States
   const [drugSearchQuery, setDrugSearchQuery] = useState("");
@@ -138,17 +129,31 @@ export default function TelehealthRoom({
     d.toLowerCase().includes(drugSearchQuery.toLowerCase())
   );
 
+  const rosterPatients = useMemo(() => {
+    const byId = new Map<string, Patient>();
+    for (const p of patients) byId.set(p.id, p);
+    for (const apt of appointments) {
+      if (!isVideoBooking(apt) || !apt.patientId || byId.has(apt.patientId)) continue;
+      byId.set(apt.patientId, stubPatientFromBooking(apt));
+    }
+    return [...byId.values()];
+  }, [patients, appointments]);
+
   useEffect(() => {
-    if (activePatient) {
-      setSelectedPat(activePatient);
-      setTelehealthNotes(activePatient.notes || "");
+    const focused =
+      (focusPatientId && rosterPatients.find((p) => p.id === focusPatientId)) ||
+      activePatient ||
+      null;
+    if (focused) {
+      setSelectedPat(focused);
+      setTelehealthNotes(focused.notes || "");
       return;
     }
-    if (patients.length > 0 && !selectedPat) {
-      setSelectedPat(patients[0]);
-      setTelehealthNotes(patients[0].notes || "");
+    if (rosterPatients.length > 0 && !selectedPat) {
+      setSelectedPat(rosterPatients[0]);
+      setTelehealthNotes(rosterPatients[0].notes || "");
     }
-  }, [activePatient?.id]);
+  }, [activePatient?.id, focusPatientId, rosterPatients.length]);
 
   useEffect(() => {
     if (!selectedPat) return;
@@ -186,8 +191,10 @@ export default function TelehealthRoom({
     return appointments.filter((a) => isDueTelehealth(a, now));
   }, [appointments, nowTick]);
 
-  const selectedVideoApt = dueVideoAppointments.find((a) => a.patientId === selectedPat?.id)
-    || appointments.find((a) => a.patientId === selectedPat?.id && (a.isTelehealth || a.type === "Telehealth Video"));
+  const selectedVideoApt =
+    appointments.find((a) => a.id === focusAppointmentId) ||
+    dueVideoAppointments.find((a) => a.patientId === selectedPat?.id) ||
+    appointments.find((a) => a.patientId === selectedPat?.id && isVideoBooking(a));
 
   const hangupLiveCall = async () => {
     await callHandleRef.current?.hangup();
@@ -197,7 +204,7 @@ export default function TelehealthRoom({
   };
 
   const startLiveCall = async (apt: Appointment) => {
-    const patient = patients.find((p) => p.id === apt.patientId);
+    const patient = rosterPatients.find((p) => p.id === apt.patientId) || stubPatientFromBooking(apt);
     if (patient) {
       setSelectedPat(patient);
       setTelehealthNotes(patient.notes || "");
@@ -232,12 +239,13 @@ export default function TelehealthRoom({
   };
 
   const callTargetApt =
+    (focusAppointmentId && appointments.find((a) => a.id === focusAppointmentId)) ||
     selectedVideoApt ||
     dueVideoAppointments[0] ||
     appointments.find(
       (a) =>
         a.patientId === selectedPat?.id &&
-        (a.isTelehealth || a.type === "Telehealth Video") &&
+        isVideoBooking(a) &&
         a.status !== "COMPLETED" &&
         a.status !== "CANCELLED"
     );
@@ -259,18 +267,27 @@ export default function TelehealthRoom({
   const handleAddDrugToTelehealth = () => {
     const drugToAdd = drugSearchQuery.trim() || selectedDrugName;
     if (!drugToAdd) return;
-
-    setTelehealthMedsList((prev) => [
-      ...prev,
-      {
-        drug: drugToAdd,
-        instructions: doseInstr,
-        duration: doseDays.includes("day") ? doseDays : `${doseDays} days`,
-        meal: doseMeal
-      }
-    ]);
+    const line = {
+      drug: drugToAdd,
+      instructions: doseInstr,
+      duration: doseDays.includes("day") ? doseDays : `${doseDays} days`,
+      meal: doseMeal
+    };
+    setTelehealthMedsList((prev) => [...prev, line]);
     setDrugSearchQuery("");
     setShowDrugDropdown(false);
+    if (selectedPat?.id) {
+      const sessionId = callTargetApt?.id || focusAppointmentId;
+      void issuePrescriptionsToSuwasiri({
+        patientId: selectedPat.id,
+        doctorName: sessionDoctorName,
+        clinicName: selectedPat.medicalCenter || "PrimeCare Medical Centre - Colombo Central",
+        medicines: [`${line.drug} [${line.instructions}, for ${line.duration}, ${line.meal}]`],
+        sessionId,
+        rxNumber: sessionId ? `EP-TH-${sessionId.slice(0, 8)}` : undefined,
+        prescriberNumber: "12908",
+      });
+    }
   };
 
   const handleRemoveDrug = (index: number) => {
@@ -305,8 +322,9 @@ export default function TelehealthRoom({
         doctorName: sessionDoctorName,
         clinicName: selectedPat.medicalCenter || "PrimeCare Medical Centre - Colombo Central",
         medicines: formattedMedsStrings,
-        sessionId: selectedVideoApt?.id
-          || appointments.find((a) => a.patientId === selectedPat.id && (a.isTelehealth || a.type === "Telehealth Video"))?.id,
+        sessionId: focusAppointmentId
+          || selectedVideoApt?.id
+          || appointments.find((a) => a.patientId === selectedPat.id && isVideoBooking(a))?.id,
         rxNumber: inviteToken ? `EP-${inviteToken}` : undefined,
         prescriberNumber: "12908",
       });
@@ -437,7 +455,7 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
           <select
             value={selectedPat?.id || ""}
             onChange={(e) => {
-              const found = patients.find((p) => p.id === e.target.value);
+              const found = rosterPatients.find((p) => p.id === e.target.value);
               if (found) {
                 setSelectedPat(found);
                 setTelehealthNotes(found.notes || "");
@@ -445,7 +463,7 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
             }}
             className="p-2 border rounded-lg bg-white text-xs font-bold text-[#00334f] outline-none focus:border-[#00334f]"
           >
-            {patients.map((p) => (
+            {rosterPatients.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} ({p.age}y, {p.gender}) — ID: {p.id}
               </option>

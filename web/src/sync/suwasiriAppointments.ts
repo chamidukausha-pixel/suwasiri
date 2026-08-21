@@ -1,6 +1,8 @@
 import {
   collection,
+  doc,
   onSnapshot,
+  updateDoc,
   type Unsubscribe,
 } from "firebase/firestore";
 import { getFirebaseDb, isFirebaseConfigured } from "../firebase";
@@ -186,9 +188,19 @@ export function mergeAppointments(clinic: Appointment[], mobile: Appointment[]):
   return [...mobile, ...clinic.filter((a) => !ids.has(a.id))];
 }
 
+export function isVideoBooking(apt: Appointment): boolean {
+  const mode = String(apt.consultMode || "").toLowerCase();
+  return Boolean(
+    apt.isTelehealth ||
+    apt.type === "Telehealth Video" ||
+    mode === "video" ||
+    mode.includes("tele")
+  );
+}
+
 /** Video consult is listed in the telehealth room from 15 minutes before the slot until +3h. */
 export function isDueTelehealth(apt: Appointment, now = new Date()): boolean {
-  if (!apt.isTelehealth && apt.type !== "Telehealth Video") return false;
+  if (!isVideoBooking(apt)) return false;
   if (apt.status === "COMPLETED" || apt.status === "CANCELLED") return false;
   const start = parseSlot(apt);
   if (!start) return false;
@@ -222,4 +234,13 @@ export function subscribeSuwasiriAppointments(
     console.warn("Suwasiri appointment sync unavailable", err);
     return undefined;
   }
+}
+
+export async function updateSuwasiriAppointmentStatus(
+  appointmentId: string,
+  status: Appointment["status"]
+): Promise<void> {
+  if (!isFirebaseConfigured() || !appointmentId) return;
+  const db = getFirebaseDb();
+  await updateDoc(doc(db, "appointments", appointmentId), { status });
 }

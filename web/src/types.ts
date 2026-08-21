@@ -288,6 +288,9 @@ export interface SampleCollection {
   labName?: string;
   lankaLabSyncStatus?: "NOT_SYNCED" | "SYNCED";
   lankaLabLedgerKey?: string;
+  testName?: string;
+  orderedBy?: string;
+  registeredBy?: string;
 }
 
 export interface MedicalCertificateRecord {
@@ -438,6 +441,10 @@ export interface NotificationLog {
   content: string;
   date: string;
   status: string;
+  read?: boolean;
+  sampleId?: string;
+  testName?: string;
+  registeredBy?: string;
 }
 
 export interface ClinicMessage {

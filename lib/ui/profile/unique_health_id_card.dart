@@ -69,10 +69,12 @@ class UniqueHealthIdCard extends StatelessWidget {
               children: [
                 Text(
                   user.displayName,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 20,
-                    color: Color(0xFF065F46),
+                    color: AppColors.isDark(context)
+                        ? Colors.white
+                        : const Color(0xFF065F46),
                   ),
                 ),
                 const SizedBox(height: 12),

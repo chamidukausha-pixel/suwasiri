@@ -22,6 +22,19 @@ interface Props {
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+export function LiveColomboClock({ className = "" }: { className?: string }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <span className={className}>
+      {formatColomboClock(now)}
+    </span>
+  );
+}
+
 export default function ClinicMonthCalendar({
   year,
   month,
@@ -55,7 +68,7 @@ export default function ClinicMonthCalendar({
             </div>
             <div className="min-w-0">
               <h3 className="font-serif font-bold text-sm text-[#00334f] truncate">{title}</h3>
-              <p className="text-[10px] font-mono font-bold text-emerald-700 tabular-nums">
+              <p className="text-2xl font-mono font-black text-emerald-800 tabular-nums leading-tight tracking-tight">
                 {formatColomboClock(now)}
               </p>
             </div>

@@ -259,21 +259,33 @@ class AuthCubit extends Cubit<AuthState> {
   Future<void> updateProfile(UserProfile profile) async {
     emit(state.copyWith(loading: true, clearError: true));
     try {
-      final ensured = profile.withEnsuredBarcode();
-      await _auth.updateProfile(ensured);
-      // Keep prototype family in-memory, but update the owner profile values.
+      final key = state.activeFamilyKey ?? _kOwner;
+      // Keep the active patient id (Chamidu / Sakuni / Denuk) stable.
+      final ensured = profile
+          .copyWith(id: state.user?.id ?? profile.id)
+          .withEnsuredBarcode();
+
+      if (key == _kOwner) {
+        await _auth.updateProfile(ensured);
+      }
+
       if (state.familyMembers.isNotEmpty) {
         final updated = state.familyMembers.map((m) {
-          if (m.key != _kOwner) return m;
-          return FamilyMember(key: _kOwner, relationLabel: m.relationLabel, profile: ensured);
+          if (m.key != key) return m;
+          return FamilyMember(
+            key: key,
+            relationLabel: m.relationLabel,
+            profile: ensured,
+          );
         }).toList();
 
         emit(state.copyWith(
-          user: state.activeFamilyKey == _kOwner ? ensured : state.user,
+          loading: false,
+          user: ensured,
           familyMembers: updated,
+          ownerUid: state.ownerUid,
         ));
       } else {
-        // Fallback: rebuild family.
         await _initFamilyMembers(owner: ensured);
       }
     } catch (e) {

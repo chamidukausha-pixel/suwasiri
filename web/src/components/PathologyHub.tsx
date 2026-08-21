@@ -25,6 +25,7 @@ import {
   Edit3
 } from "lucide-react";
 import { Patient, LabResult, LabOrder } from "../types";
+import { PATHOLOGY_INVESTIGATIONS } from "../catalogs/pathologyInvestigations";
 
 interface Props {
   patients: Patient[];
@@ -33,6 +34,7 @@ interface Props {
   onOpenPatientEverything: (patient: Patient) => void;
   onStartConsultation: (patient: Patient) => void;
   onOrderLabTest?: (patientId: string, testName: string, remarks: string) => void;
+  onMarkLabReviewed?: (patientId: string, labResultId: string) => void;
 }
 
 export default function PathologyHub({
@@ -41,14 +43,15 @@ export default function PathologyHub({
   currentRole,
   onOpenPatientEverything,
   onStartConsultation,
-  onOrderLabTest
+  onOrderLabTest,
+  onMarkLabReviewed
 }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "ABNORMAL" | "NORMAL" | "PENDING">("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ABNORMAL" | "NORMAL" | "PENDING">("PENDING");
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [orderPatientId, setOrderPatientId] = useState(patients[0]?.id || "");
-  const [orderTestName, setOrderTestName] = useState("Full Blood Count (FBC)");
+  const [orderTestName, setOrderTestName] = useState(PATHOLOGY_INVESTIGATIONS[0].name);
   const [orderRemarks, setOrderRemarks] = useState("");
 
   // Doctor comments & Suwasiri app sync state
@@ -141,16 +144,23 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
 
   // Filter based on search and status
   const filteredPathologyPatients = pathologyPatients.filter((p) => {
+    const q = searchQuery.toLowerCase().trim();
     const matchesSearch =
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.medicareNumber && p.medicareNumber.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (p.suwasiriBarcode && p.suwasiriBarcode.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      !q ||
+      p.name.toLowerCase().includes(q) ||
+      p.id.toLowerCase().includes(q) ||
+      (p.medicareNumber && p.medicareNumber.toLowerCase().includes(q)) ||
+      (p.suwasiriBarcode && p.suwasiriBarcode.toLowerCase().includes(q)) ||
       p.labResults?.some(
         (lr) =>
-          lr.testName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          lr.result.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          lr.remarks.toLowerCase().includes(searchQuery.toLowerCase())
+          lr.testName.toLowerCase().includes(q) ||
+          lr.result.toLowerCase().includes(q) ||
+          (lr.remarks && lr.remarks.toLowerCase().includes(q))
+      ) ||
+      labOrders.some(
+        (o) =>
+          o.patientId === p.id &&
+          (o.testName.toLowerCase().includes(q) || o.id.toLowerCase().includes(q))
       );
 
     if (!matchesSearch) return false;
@@ -163,10 +173,7 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
       return p.labResults?.some((lr) => lr.status === "COMPLETED" && !lr.abnormalFlag);
     }
     if (statusFilter === "PENDING") {
-      return (
-        p.labResults?.some((lr) => lr.status === "PENDING" || !lr.doctorReviewed) ||
-        labOrders.some((o) => o.patientId === p.id && o.status !== "COMPLETED")
-      );
+      return p.labResults?.some((lr) => !lr.doctorReviewed) || false;
     }
     return true;
   });
@@ -184,6 +191,9 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
     (sum, p) => sum + (p.labResults?.filter((lr) => !lr.doctorReviewed).length || 0),
     0
   );
+  const unreadPathologyPatientCount = pathologyPatients.filter((p) =>
+    p.labResults?.some((lr) => !lr.doctorReviewed)
+  ).length;
 
   const handleCreateOrder = (e: React.FormEvent) => {
     e.preventDefault();
@@ -191,7 +201,6 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
       onOrderLabTest(orderPatientId, orderTestName, orderRemarks);
       setShowOrderModal(false);
       setOrderRemarks("");
-      alert(`Pathology order for "${orderTestName}" successfully dispatched to laboratory ledger!`);
     }
   };
 
@@ -210,12 +219,12 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                   <h1 className="text-xl font-serif font-bold text-[#00334f]">
                     Pathology Patients & Diagnostic Laboratory Results
                   </h1>
-                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-200">
-                    Pathology Patients Only ({totalPathologyPatients})
+                  <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-200">
+                    Unread reports ({unreadPathologyPatientCount} patients)
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Direct diagnostic tracking for patients with biochemical, haematology, microbiology, and histology specimens. Click any patient's name to view their complete 16-tab clinical file or launch an exam.
+                  Unread pathology reports only. After you view and mark a report as read, that patient drops off this unread count.
                 </p>
               </div>
             </div>
@@ -235,9 +244,9 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
         {/* Pathology Summary KPI Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-4 border-t border-slate-100">
           <div className="bg-emerald-50/70 border border-emerald-200/60 p-3 rounded-lg">
-            <span className="text-[10px] uppercase font-bold text-emerald-800 tracking-wider">Pathology Patients</span>
-            <div className="text-2xl font-black text-emerald-950 mt-0.5">{totalPathologyPatients}</div>
-            <p className="text-[10px] text-emerald-700">With recorded lab outcomes</p>
+            <span className="text-[10px] uppercase font-bold text-emerald-800 tracking-wider">Unread Pathology Patients</span>
+            <div className="text-2xl font-black text-emerald-950 mt-0.5">{unreadPathologyPatientCount}</div>
+            <p className="text-[10px] text-emerald-700">With unread reports</p>
           </div>
 
           <div className="bg-rose-50/70 border border-rose-200/60 p-3 rounded-lg">
@@ -246,11 +255,18 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
             <p className="text-[10px] text-rose-700">Requires doctor action</p>
           </div>
 
-          <div className="bg-amber-50/70 border border-amber-200/60 p-3 rounded-lg">
+          <button
+            type="button"
+            onClick={() => setStatusFilter("PENDING")}
+            className={`text-left bg-amber-50/70 border p-3 rounded-lg transition ${
+              statusFilter === "PENDING" ? "border-amber-400 ring-1 ring-amber-300" : "border-amber-200/60 hover:border-amber-400"
+            }`}
+            title="Show unreviewed tests grouped under each patient name"
+          >
             <span className="text-[10px] uppercase font-bold text-amber-800 tracking-wider">Unreviewed Tests</span>
             <div className="text-2xl font-black text-amber-950 mt-0.5">{unreviewedCount}</div>
-            <p className="text-[10px] text-amber-700">Awaiting GP verification</p>
-          </div>
+            <p className="text-[10px] text-amber-700">Click to list tests by patient</p>
+          </button>
 
           <div className="bg-sky-50/70 border border-sky-200/60 p-3 rounded-lg">
             <span className="text-[10px] uppercase font-bold text-sky-800 tracking-wider">Total Test Reports</span>
@@ -296,15 +312,45 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
         </div>
       </div>
 
+      <div className="bg-white p-4 border rounded-xl shadow-xs">
+        <h3 className="text-[10px] font-bold uppercase text-slate-500 mb-2">Test / Investigation Profile</h3>
+        <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+          {PATHOLOGY_INVESTIGATIONS.map((inv) => (
+            <span
+              key={inv.name}
+              className="text-[10px] font-bold bg-slate-50 text-slate-700 border border-slate-200 px-2 py-1 rounded-full"
+              title={`${inv.category} • ${inv.sample}`}
+            >
+              {inv.name}
+            </span>
+          ))}
+        </div>
+      </div>
+
       {/* Pathology Patients List */}
       <div className="space-y-4">
         {filteredPathologyPatients.length > 0 ? (
           filteredPathologyPatients.map((patient) => {
+            const q = searchQuery.toLowerCase().trim();
+            const nameHit = Boolean(
+              q &&
+                (patient.name.toLowerCase().includes(q) ||
+                  patient.id.toLowerCase().includes(q))
+            );
+            const visibleLabs = (patient.labResults || []).filter((lr) => {
+              if (statusFilter === "PENDING" && lr.doctorReviewed) return false;
+              if (!q || nameHit) return true;
+              return (
+                lr.testName.toLowerCase().includes(q) ||
+                lr.result.toLowerCase().includes(q) ||
+                (lr.remarks && lr.remarks.toLowerCase().includes(q))
+              );
+            });
             const abnormalTests =
-              patient.labResults?.filter(
+              visibleLabs.filter(
                 (lr) => lr.status === "ABNORMAL" || lr.status === "CRITICAL" || lr.abnormalFlag
               ) || [];
-            const isSelected = selectedPatientId === patient.id;
+            const isSelected = selectedPatientId === patient.id || Boolean(q);
 
             return (
               <div
@@ -326,9 +372,15 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                         {/* CRITICAL: Clicking patient name shows EVERYTHING */}
                         <button
                           type="button"
-                          onClick={() => onOpenPatientEverything(patient)}
+                          onClick={() => {
+                            if (q) {
+                              setSelectedPatientId(isSelected && selectedPatientId === patient.id ? null : patient.id);
+                              return;
+                            }
+                            onOpenPatientEverything(patient);
+                          }}
                           className="font-serif font-bold text-base text-[#00334f] hover:text-emerald-700 hover:underline transition-colors flex items-center gap-1.5 text-left group"
-                          title="Click to open complete 16-Tab Clinical Patient Record (shows everything)"
+                          title={q ? "Showing pathology details for this patient" : "Click to open complete 16-Tab Clinical Patient Record"}
                         >
                           <span>{patient.name}</span>
                           <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 transition-colors" />
@@ -359,10 +411,24 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                         <span>•</span>
                         <span>Clinic: <strong className="text-slate-700">{patient.medicalCenter || "Colombo Central Clinic"}</strong></span>
                       </p>
+                      {statusFilter === "PENDING" && visibleLabs.length > 0 && (
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-bold uppercase text-amber-800">Unreviewed tests:</span>
+                          {visibleLabs.map((lr) => (
+                            <span
+                              key={lr.id || lr.testName}
+                              className="text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-full"
+                            >
+                              {lr.testName}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   {/* Right Actions */}
+                  {!q && (
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
                     <button
                       type="button"
@@ -384,6 +450,7 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                       Inspect Full Record (Everything)
                     </button>
                   </div>
+                  )}
                 </div>
 
                 {/* Pathology Test Results Table */}
@@ -391,14 +458,14 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                       <FlaskConical className="w-4 h-4 text-emerald-600" />
-                      Recorded Pathology Test Results ({patient.labResults?.length || 0})
+                      Recorded Pathology Test Results ({visibleLabs.length})
                     </h3>
                     <span className="text-[11px] text-slate-400">
                       Laboratory Provider: LankaLab Central & Australian Clinical Labs
                     </span>
                   </div>
 
-                  {patient.labResults && patient.labResults.length > 0 ? (
+                  {visibleLabs.length > 0 ? (
                     <div className="space-y-4">
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-xs border border-slate-100 rounded-lg overflow-hidden">
@@ -414,7 +481,7 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
-                            {patient.labResults.map((test, tIdx) => {
+                            {visibleLabs.map((test, tIdx) => {
                               const isAbnormal =
                                 test.status === "ABNORMAL" || test.status === "CRITICAL" || test.abnormalFlag;
                               const reportKey = getReportKey(patient.id, test, tIdx);
@@ -535,9 +602,30 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
 
                                   <td className="p-2.5 text-right whitespace-nowrap">
                                     <div className="flex items-center justify-end gap-1.5">
+                                      {!test.doctorReviewed && onMarkLabReviewed && (
+                                        <button
+                                          type="button"
+                                          onClick={() => onMarkLabReviewed(patient.id, test.id)}
+                                          className="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                          title="Mark this report as read / reviewed"
+                                        >
+                                          <CheckCircle2 className="w-3 h-3" />
+                                          Mark read
+                                        </button>
+                                      )}
+                                      {test.doctorReviewed && (
+                                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                                          Read
+                                        </span>
+                                      )}
                                       <button
                                         type="button"
-                                        onClick={() => handleDownloadTestPdf(patient, test)}
+                                        onClick={() => {
+                                          handleDownloadTestPdf(patient, test);
+                                          if (!test.doctorReviewed && onMarkLabReviewed) {
+                                            onMarkLabReviewed(patient.id, test.id);
+                                          }
+                                        }}
                                         className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
                                         title="Download this individual test report as PDF"
                                       >
@@ -648,15 +736,11 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                   className="w-full p-2.5 border rounded-lg bg-white text-slate-800 font-bold outline-none focus:border-[#00334f]"
                   required
                 >
-                  <option value="Full Blood Count (FBC)">Full Blood Count (FBC) + Diff</option>
-                  <option value="HbA1c Glycated Hemoglobin">HbA1c Glycated Hemoglobin (Diabetes Review)</option>
-                  <option value="Lipid Profile (Cholesterol, HDL, LDL, Triglycerides)">Lipid Profile Complete</option>
-                  <option value="Renal Function Tests (Urea, Creatinine, eGFR)">Renal Function / U&Es</option>
-                  <option value="Liver Function Tests (ALT, AST, ALP, Bilirubin)">Liver Function Panel (LFT)</option>
-                  <option value="Urine Full Report (UFR) & Culture/ABST">Urine Full Report & Microbiology Culture</option>
-                  <option value="Thyroid Function (TSH, Free T4)">Thyroid Stimulating Hormone (TSH)</option>
-                  <option value="Serum Ferritin & Iron Studies">Serum Ferritin & Iron Studies</option>
-                  <option value="Cervical Screening Test (CST - HPV)">Cervical Screening Test (CST HPV)</option>
+                  {PATHOLOGY_INVESTIGATIONS.map((inv) => (
+                    <option key={inv.name} value={inv.name}>
+                      {inv.category}: {inv.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 

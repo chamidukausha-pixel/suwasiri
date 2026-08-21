@@ -59,7 +59,7 @@ import {
   Hospital, Branch, RoleDefinition, StaffMembership, StaffUser, StaffProvider, MedicalCertificateRecord
 } from "./types";
 
-import ClinicMonthCalendar from "./components/ClinicMonthCalendar";
+import ClinicMonthCalendar, { LiveColomboClock } from "./components/ClinicMonthCalendar";
 import RoleSwitcher from "./components/RoleSwitcher";
 import { formatDateKey, formatLongDate } from "./utils/clinicCalendar";
 import LoginView from "./components/LoginView";
@@ -96,10 +96,12 @@ import {
   appointmentPatientName,
   compareAppointmentTime,
   isDueTelehealth,
+  isVideoBooking,
   mergeAppointments,
   mergePatients,
   stubPatientFromBooking,
   subscribeSuwasiriAppointments,
+  updateSuwasiriAppointmentStatus,
 } from "./sync/suwasiriAppointments";
 import { issuePrescriptionsToSuwasiri } from "./sync/suwasiriPrescriptions";
 import {
@@ -107,6 +109,7 @@ import {
   subscribeSuwasiriPatientCharts,
   type SuwasiriChartPatch,
 } from "./sync/suwasiriPatientChart";
+import { PATHOLOGY_INVESTIGATIONS, sampleCategoryForTest } from "./catalogs/pathologyInvestigations";
 
 export interface DrugFormularyItem {
   name: string;
@@ -444,16 +447,26 @@ export default function App() {
 
   // Global Sync State (clinic JSON store + live Suwasiri App Firestore bookings)
   const [clinicPatients, setPatients] = useState<Patient[]>([]);
+  const [reviewedLabKeys, setReviewedLabKeys] = useState<Record<string, true>>({});
   const [clinicAppointments, setAppointments] = useState<Appointment[]>([]);
   const [suwasiriAppointments, setSuwasiriAppointments] = useState<Appointment[]>([]);
   const [suwasiriPatients, setSuwasiriPatients] = useState<Patient[]>([]);
   const [suwasiriCharts, setSuwasiriCharts] = useState<Record<string, SuwasiriChartPatch>>({});
   const patients = useMemo(
     () =>
-      mergePatients(clinicPatients, suwasiriPatients).map((p) =>
-        applySuwasiriChart(p, suwasiriCharts[p.id])
-      ),
-    [clinicPatients, suwasiriPatients, suwasiriCharts]
+      mergePatients(clinicPatients, suwasiriPatients).map((p) => {
+        const patched = applySuwasiriChart(p, suwasiriCharts[p.id]);
+        if (!patched.labResults?.length) return patched;
+        return {
+          ...patched,
+          labResults: patched.labResults.map((lr) =>
+            reviewedLabKeys[`${patched.id}:${lr.id}`]
+              ? { ...lr, doctorReviewed: true }
+              : lr
+          ),
+        };
+      }),
+    [clinicPatients, suwasiriPatients, suwasiriCharts, reviewedLabKeys]
   );
   const appointments = useMemo(
     () => mergeAppointments(clinicAppointments, suwasiriAppointments),
@@ -532,7 +545,10 @@ export default function App() {
 
   // Interface view overlays
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [focusedSearchPatientId, setFocusedSearchPatientId] = useState<string | null>(null);
   const [showNotificationPopup, setShowNotificationPopup] = useState<boolean>(false);
+  const [highlightSampleId, setHighlightSampleId] = useState<string | null>(null);
+  const [dispatchTestFilter, setDispatchTestFilter] = useState<string>("ALL");
   const [selectedConsultPatient, setSelectedConsultPatient] = useState<Patient | null>(null);
   
   // Modal controllers
@@ -958,6 +974,21 @@ export default function App() {
     setActiveTab("clinical");
   };
 
+  const [telehealthFocus, setTelehealthFocus] = useState<{
+    patientId: string;
+    appointmentId: string;
+  } | null>(null);
+
+  const openBookedPatient = (apt: Appointment, p?: Patient | null) => {
+    const person = p || stubPatientFromBooking(apt);
+    if (isVideoBooking(apt)) {
+      setTelehealthFocus({ patientId: person.id, appointmentId: apt.id });
+      setActiveTab("telehealth");
+      return;
+    }
+    handleStartConsultation(person);
+  };
+
   // Tasks checklist controls
   const handleAddTask = async (e: FormEvent) => {
     e.preventDefault();
@@ -1093,14 +1124,26 @@ export default function App() {
   };
 
   const handleUpdateAptStatus = async (id: string, status: Appointment["status"]) => {
+    const isSuwasiri = suwasiriAppointments.some((a) => a.id === id);
+    if (isSuwasiri) {
+      setSuwasiriAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
+      try {
+        await updateSuwasiriAppointmentStatus(id, status);
+      } catch (err) {
+        console.error(err);
+      }
+      return;
+    }
+    setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)));
     try {
       const res = await fetch(`/api/appointments/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status })
       });
+      if (!res.ok) return;
       const data = await res.json();
-      setAppointments(data.state.appointments);
+      if (data.state?.appointments) setAppointments(data.state.appointments);
     } catch (err) {
       console.error(err);
     }
@@ -1587,17 +1630,82 @@ export default function App() {
   };
 
   const handleHubOrderLabTest = async (patientId: string, testName: string, remarks: string) => {
+    const pat = patients.find((p) => p.id === patientId);
     try {
       const res = await fetch("/api/lab-orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientId, testName, remarks })
+        body: JSON.stringify({
+          patientId,
+          testName,
+          remarks,
+          patientName: pat?.name,
+          sampleCategory: sampleCategoryForTest(testName),
+          orderedBy: sessionUser?.name || currentRole,
+        })
       });
       const data = await res.json();
-      setLabOrders(data.state.labOrders);
+      if (data.state?.labOrders) setLabOrders(data.state.labOrders);
+      if (data.state?.sampleCollections) setSampleCollections(data.state.sampleCollections);
+      if (data.state?.notifications) setNotifications(data.state.notifications);
+      if (data.state?.clinicMessages) setClinicMessages(data.state.clinicMessages);
+      alert(`Pathology order for "${testName}" sent to Sample Dispatch Hub. Reception will be notified.`);
+    } catch (err) {
+      console.error(err);
+      alert("Could not dispatch the pathology order.");
+    }
+  };
+
+  const handleMarkLabReviewed = async (patientId: string, labResultId: string) => {
+    setReviewedLabKeys((prev) => ({ ...prev, [`${patientId}:${labResultId}`]: true }));
+    try {
+      await fetch(`/api/patients/${patientId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewLabResultId: labResultId, reviewedBy: sessionUser?.name || currentRole }),
+      });
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const dispatchInbox = notifications.filter(
+    (n) => n.templateType === "PATHOLOGY_ORDER" && n.status !== "READ" && !n.read
+  );
+
+  const openSampleDispatchFromAlert = async (alert: NotificationLog) => {
+    requestTab("sampleCollection");
+    if (alert.sampleId) setHighlightSampleId(alert.sampleId);
+    const registrar = sessionUser?.name || currentRole;
+    if (alert.sampleId) {
+      try {
+        const res = await fetch(`/api/sample-collections/${alert.sampleId}/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ registeredBy: registrar }),
+        });
+        const data = await res.json();
+        if (data.state?.sampleCollections) setSampleCollections(data.state.sampleCollections);
+        if (data.state?.notifications) setNotifications(data.state.notifications);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    try {
+      await fetch(`/api/notifications/${alert.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ read: true, status: "READ", registeredBy: registrar }),
+      });
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === alert.id ? { ...n, read: true, status: "READ", registeredBy: registrar } : n
+        )
+      );
+    } catch (err) {
+      console.error(err);
+    }
+    setShowNotificationPopup(false);
   };
 
   const handleHubProcessLabResult = async (orderId: string, resultVal: string) => {
@@ -1715,29 +1823,38 @@ export default function App() {
     });
 
     // 3. Lab orders & Pathology tests
+    const labHits: typeof matches = [];
     if (p.labResults) {
       p.labResults.forEach(lr => {
-        if (lr.testName.toLowerCase().includes(query) || (lr.category && lr.category.toLowerCase().includes(query)) || (lr.result && lr.result.toLowerCase().includes(query))) {
-          matches.push({ type: "LAB", label: `Pathology: ${lr.testName}`, snippet: `${lr.result} (${lr.status}) • ${lr.date}` });
+        if (
+          lr.testName.toLowerCase().includes(query) ||
+          (lr.category && lr.category.toLowerCase().includes(query)) ||
+          (lr.result && lr.result.toLowerCase().includes(query))
+        ) {
+          labHits.push({ type: "LAB", label: `Pathology: ${lr.testName}`, snippet: `${lr.result} (${lr.status}) • ${lr.date}` });
         }
       });
     }
     labOrders.filter(o => o.patientId === p.id).forEach(lo => {
       if (lo.testName.toLowerCase().includes(query) || lo.id.toLowerCase().includes(query)) {
-        matches.push({ type: "LAB", label: `Lab Order #${lo.id}`, snippet: `${lo.testName} • Status: ${lo.status}` });
+        labHits.push({ type: "LAB", label: `Lab Order #${lo.id}`, snippet: `${lo.testName} • Status: ${lo.status}` });
       }
     });
 
     // 4. eRx Prescriptions & Active medications
+    const rxHits: typeof matches = [];
     if (p.prescriptionsList) {
       p.prescriptionsList.forEach(rx => {
-        if (rx.rxNumber.toLowerCase().includes(query) || (rx.ePrescriptionToken && rx.ePrescriptionToken.toLowerCase().includes(query))) {
-          matches.push({ type: "ERX", label: `eRx #${rx.rxNumber}`, snippet: `Token: ${rx.ePrescriptionToken || "eRx-SEALED"} • ${rx.date}` });
+        const tokenHit =
+          rx.rxNumber.toLowerCase().includes(query) ||
+          (rx.ePrescriptionToken && rx.ePrescriptionToken.toLowerCase().includes(query));
+        if (tokenHit) {
+          rxHits.push({ type: "ERX", label: `eRx #${rx.rxNumber}`, snippet: `Token: ${rx.ePrescriptionToken || "eRx-SEALED"} • ${rx.date}` });
         }
         if (rx.items) {
           rx.items.forEach(item => {
-            if (typeof item === "string" && item.toLowerCase().includes(query)) {
-              matches.push({ type: "ERX", label: `Prescription Item`, snippet: item });
+            if (typeof item === "string" && (item.toLowerCase().includes(query) || tokenHit)) {
+              rxHits.push({ type: "ERX", label: `Prescription Item`, snippet: item });
             }
           });
         }
@@ -1746,10 +1863,44 @@ export default function App() {
     if (p.activeMedications) {
       p.activeMedications.forEach(med => {
         if (med.toLowerCase().includes(query)) {
-          matches.push({ type: "ERX", label: "Active Medication", snippet: med });
+          rxHits.push({ type: "ERX", label: "Active Medication", snippet: med });
         }
       });
     }
+
+    const nameOrIdMatch = matches.length > 0;
+    if (nameOrIdMatch) {
+      if (labHits.length === 0) {
+        p.labResults?.forEach((lr) => {
+          labHits.push({
+            type: "LAB",
+            label: `Pathology: ${lr.testName}`,
+            snippet: `${lr.result || "Pending"} (${lr.status}) • ${lr.date}`,
+          });
+        });
+        labOrders.filter((o) => o.patientId === p.id).forEach((lo) => {
+          labHits.push({
+            type: "LAB",
+            label: `Lab Order #${lo.id}`,
+            snippet: `${lo.testName} • Status: ${lo.status}`,
+          });
+        });
+      }
+      if (rxHits.length === 0) {
+        p.prescriptionsList?.forEach((rx) => {
+          rxHits.push({
+            type: "ERX",
+            label: `eRx #${rx.rxNumber}`,
+            snippet: (rx.items || []).join(", ") || rx.date,
+          });
+        });
+        p.activeMedications?.forEach((med) => {
+          rxHits.push({ type: "ERX", label: "Active Medication", snippet: med });
+        });
+      }
+    }
+
+    matches.push(...labHits, ...rxHits);
 
     // 5. Allergies
     if (p.allergies && p.allergies.toLowerCase().includes(query)) {
@@ -1759,13 +1910,27 @@ export default function App() {
     return matches.length > 0 ? matches : null;
   };
 
-  // Filter list registries based on multi-field search
+  // Name-first registry filter: searching a patient name shows only that person
   const filteredPatients = patients.filter(p => {
     if ((p.hospitalId || HOSPITAL_PRIMECARE) !== sessionHospitalId) return false;
     if (!isPlatformSA && !canViewHospitalWideCharts(activeRole) && (p.branchId || BRANCH_COLOMBO) !== sessionBranchId) return false;
+    if (focusedSearchPatientId) return p.id === focusedSearchPatientId;
     if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase().trim();
+    const nameHits = patients.filter((x) => {
+      if ((x.hospitalId || HOSPITAL_PRIMECARE) !== sessionHospitalId) return false;
+      return x.name.toLowerCase().includes(query);
+    });
+    if (nameHits.length > 0) {
+      return p.name.toLowerCase().includes(query);
+    }
     return getSearchMatchDetails(p, searchQuery) !== null;
   });
+
+  const unreadPathologyPatientCount = patients.filter((p) =>
+    p.labResults?.some((lr) => !lr.doctorReviewed)
+  ).length;
+  const lobbyCheckedInCount = dayAppointments.filter((a) => a.status === "CHECKED IN").length;
 
   // Advanced Financial calculations
   const totalIncome = billing.filter(b => b.status === "PAID").reduce((sum, b) => sum + b.amount, 0);
@@ -1802,6 +1967,73 @@ export default function App() {
       remainingAmount: dayRemaining
     };
   });
+
+  const clinicalSearchPanel = searchQuery.trim() ? (
+    <section className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+      <div className="px-5 py-3 border-b bg-[#f0f3ff] flex items-center justify-between gap-3">
+        <div>
+          <h2 className="font-bold text-sm text-[#00334f]">
+            {focusedSearchPatientId
+              ? `Patient file: ${filteredPatients[0]?.name || searchQuery}`
+              : `Patients matching “${searchQuery}”`}
+          </h2>
+          <p className="text-[11px] text-slate-500">
+            Only this patient is shown. Click a name to open their details.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setSearchQuery("");
+            setFocusedSearchPatientId(null);
+          }}
+          className="text-xs font-bold text-slate-500 hover:text-red-600"
+        >
+          Clear
+        </button>
+      </div>
+      <div className="divide-y divide-slate-100">
+        {filteredPatients.length === 0 ? (
+          <p className="p-6 text-center text-xs text-slate-500">No patient matches this name.</p>
+        ) : (
+          filteredPatients.map((p) => {
+            const details = getSearchMatchDetails(p, searchQuery) || [];
+            const labs = details.filter((m) => m.type === "LAB");
+            const erx = details.filter((m) => m.type === "ERX");
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setFocusedSearchPatientId(p.id)}
+                className="w-full text-left p-4 space-y-2 hover:bg-sky-50/70 transition"
+              >
+                <p className="font-serif font-bold text-sm text-[#00334f]">
+                  {p.name}{" "}
+                  <span className="font-mono text-[10px] text-slate-500 font-sans">[{p.id}]</span>
+                </p>
+                <p className="text-[11px] text-slate-600">
+                  {p.age} yrs • {p.gender} • {p.phone || "No phone"} • {p.medicalCenter || "Clinic"}
+                </p>
+                {p.allergies && (
+                  <p className="text-[11px] text-rose-700">Allergies: {p.allergies}</p>
+                )}
+                {labs.map((m, i) => (
+                  <div key={`d-lab-${i}`} className="text-xs bg-emerald-50 border border-emerald-100 rounded px-3 py-2">
+                    <span className="font-bold text-emerald-900">{m.label}: </span>{m.snippet}
+                  </div>
+                ))}
+                {erx.map((m, i) => (
+                  <div key={`d-rx-${i}`} className="text-xs bg-purple-50 border border-purple-100 rounded px-3 py-2">
+                    <span className="font-bold text-purple-900">{m.label}: </span>{m.snippet}
+                  </div>
+                ))}
+              </button>
+            );
+          })
+        )}
+      </div>
+    </section>
+  ) : null;
 
   if (!authReady) {
     return (
@@ -2035,7 +2267,12 @@ export default function App() {
             }`}
           >
             <FlaskConical className="w-4 h-4 mr-3 text-rose-500" />
-            <span className="text-[13px] font-medium">Sample Dispatch Hub</span>
+            <span className="text-[13px] font-medium flex-1">Sample Dispatch Hub</span>
+            {dispatchInbox.length > 0 && (
+              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center">
+                {dispatchInbox.length}
+              </span>
+            )}
           </button>
           )}
 
@@ -2208,22 +2445,28 @@ export default function App() {
         />
 
         {/* Header toolbar */}
-        <header className="flex justify-between items-center h-16 px-6 sticky top-0 z-20 bg-white border-b border-[#c1c7cf] print:hidden">
-          <div className="flex items-center flex-1 relative">
+        <header className="flex justify-between items-center h-16 px-6 sticky top-0 z-20 bg-white border-b border-[#c1c7cf] print:hidden gap-4">
+          <div className="flex items-center flex-1 relative min-w-0">
             <div className="relative w-full max-w-lg">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#72787f]">
                 <Search className="w-4 h-4" />
               </span>
               <input
                 className="w-full pl-10 pr-10 py-2 bg-[#f0f3ff] border border-[#c1c7cf] focus:border-[#00334f] focus:bg-white outline-none text-xs transition-all rounded-lg"
-                placeholder={headerSearchPlaceholder || "Search patient name, Medicare/IHI/NIC, Lab order, or eRx token..."}
+                placeholder={headerSearchPlaceholder || "Search patient name..."}
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setFocusedSearchPatientId(null);
+                }}
               />
               {searchQuery && (
                 <button
-                  onClick={() => setSearchQuery("")}
+                  onClick={() => {
+                    setSearchQuery("");
+                    setFocusedSearchPatientId(null);
+                  }}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-red-600"
                   title="Clear search"
                 >
@@ -2231,104 +2474,96 @@ export default function App() {
                 </button>
               )}
 
-              {/* LIVE UNIVERSAL SEARCH RESULTS DROPDOWN (Patient Name, Identity Number, Lab Order, eRx) */}
-              {searchQuery.trim().length > 0 && (
+              {searchQuery.trim().length > 0 && !focusedSearchPatientId && (
                 <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden max-h-[480px] flex flex-col animate-in fade-in slide-in-from-top-2">
                   <div className="bg-[#f0f3ff] px-4 py-2.5 border-b flex items-center justify-between">
                     <span className="text-xs font-bold text-[#00334f] flex items-center gap-1.5">
                       <Search className="w-3.5 h-3.5 text-[#00334f]" />
-                      Search Matches for "{searchQuery}" ({filteredPatients.length} found)
+                      Patients matching "{searchQuery}" ({filteredPatients.length})
                     </span>
                     <span className="text-[10px] text-slate-500 font-semibold">
-                      Searches Name • Identity/Medicare/IHI • Lab Orders • eRx
+                      Click a name to view that patient only
                     </span>
                   </div>
 
                   <div className="overflow-y-auto divide-y divide-slate-100 p-1 flex-1">
                     {filteredPatients.length === 0 ? (
                       <div className="p-6 text-center text-slate-400 space-y-1">
-                        <p className="text-xs font-bold text-slate-600">No matching clinical records found</p>
-                        <p className="text-[11px]">No patient matched by name, ID/Medicare/IHI, lab test, or eRx script.</p>
+                        <p className="text-xs font-bold text-slate-600">No matching patient found</p>
+                        <p className="text-[11px]">Try the full patient name, for example Chamidu Kaushal Rathnayake.</p>
                       </div>
                     ) : (
-                      filteredPatients.map(p => {
-                        const matchDetails = getSearchMatchDetails(p, searchQuery);
-                        return (
-                          <div key={p.id} className="p-3 hover:bg-sky-50/60 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div className="space-y-1 flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-serif font-bold text-xs text-[#00334f]">
-                                  {p.name}
-                                </span>
-                                <span className="text-[10px] text-slate-500 font-mono bg-slate-100 px-1.5 py-0.2 rounded">
-                                  ID: {p.id}
-                                </span>
-                                <span className="text-[10px] text-slate-500">
-                                  {p.gender}, {p.age} yrs
-                                </span>
-                                {p.medicareNumber && (
-                                  <span className="text-[10px] text-sky-800 bg-sky-100 px-1.5 py-0.2 rounded font-mono">
-                                    MC: {p.medicareNumber.split("/")[0]}
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Specific Matches Badges */}
-                              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                                {matchDetails?.map((m, idx) => (
-                                  <span
-                                    key={idx}
-                                    className={`text-[10px] font-medium px-2 py-0.5 rounded-md border ${
-                                      m.type === "LAB"
-                                        ? "bg-emerald-50 text-emerald-850 border-emerald-200"
-                                        : m.type === "ERX"
-                                        ? "bg-purple-50 text-purple-850 border-purple-200"
-                                        : m.type === "IDENTITY"
-                                        ? "bg-sky-50 text-sky-850 border-sky-200"
-                                        : m.type === "ALLERGY"
-                                        ? "bg-rose-50 text-rose-850 border-rose-200"
-                                        : "bg-slate-100 text-slate-800 border-slate-200"
-                                    }`}
-                                  >
-                                    <strong className="font-bold">{m.label}:</strong> {m.snippet}
-                                  </span>
-                                ))}
-                              </div>
+                      filteredPatients.map(p => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              setFocusedSearchPatientId(p.id);
+                              setSearchQuery(p.name);
+                            }}
+                            className="w-full text-left p-3 hover:bg-sky-50 transition flex flex-col gap-1"
+                          >
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-serif font-bold text-xs text-[#00334f]">
+                                {p.name}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-mono bg-slate-100 px-1.5 py-0.2 rounded">
+                                ID: {p.id}
+                              </span>
                             </div>
-
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  handleStartConsultation(p);
-                                  setSearchQuery("");
-                                }}
-                                className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs transition"
-                              >
-                                <Stethoscope className="w-3.5 h-3.5" />
-                                Open GP Exam &rarr;
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveDoctorRecordPatient(p);
-                                  setSearchQuery("");
-                                }}
-                                className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1"
-                              >
-                                <FileText className="w-3.5 h-3.5" />
-                                16-Tab Record
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })
+                            <p className="text-[11px] text-slate-600">
+                              {p.age} yrs • {p.gender} • {p.phone || "No phone"}
+                            </p>
+                          </button>
+                      ))
                     )}
                   </div>
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowNotificationPopup((open) => !open)}
+              className="relative flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-[#f0f3ff] hover:bg-white hover:border-[#00334f] transition"
+              title="Staff notifications"
+            >
+              <Bell className="w-4 h-4 text-[#00334f]" />
+              <span className="text-xs font-bold text-[#00334f] hidden sm:inline">Notifications</span>
+              {dispatchInbox.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[10px] font-black flex items-center justify-center">
+                  {dispatchInbox.length}
+                </span>
+              )}
+            </button>
+            {showNotificationPopup && (
+              <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-[360px] max-w-[90vw] bg-white border border-slate-200 rounded-xl shadow-2xl z-50 overflow-hidden">
+                <div className="px-4 py-2.5 bg-[#f0f3ff] border-b flex items-center justify-between">
+                  <p className="text-xs font-bold text-[#00334f]">Sample Dispatch Hub</p>
+                  <button type="button" className="text-[10px] font-bold text-slate-400" onClick={() => setShowNotificationPopup(false)}>Close</button>
+                </div>
+                <div className="max-h-72 overflow-y-auto divide-y">
+                  {dispatchInbox.length === 0 ? (
+                    <p className="p-4 text-xs text-slate-500">No new pathology dispatch alerts.</p>
+                  ) : (
+                    dispatchInbox.map((alert) => (
+                      <button
+                        key={alert.id}
+                        type="button"
+                        onClick={() => { void openSampleDispatchFromAlert(alert); }}
+                        className="w-full text-left p-3 hover:bg-amber-50 transition"
+                      >
+                        <p className="text-xs font-bold text-[#00334f]">{alert.testName || "Pathology order"}</p>
+                        <p className="text-[11px] text-slate-600 mt-0.5">{alert.content}</p>
+                        <p className="text-[10px] text-amber-800 font-bold mt-1">Open Sample Dispatch Hub →</p>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-4">
@@ -2416,7 +2651,11 @@ export default function App() {
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-4">
+                        <div className="text-right hidden sm:block">
+                          <p className="text-[10px] font-bold uppercase text-slate-400">Colombo time</p>
+                          <LiveColomboClock className="text-2xl font-mono font-black text-[#00334f] tabular-nums leading-none" />
+                        </div>
                         <button
                           type="button"
                           onClick={() => setShowCalculatorsModal(true)}
@@ -2467,7 +2706,7 @@ export default function App() {
                           <span className="text-[10px] uppercase font-bold tracking-wider">Waiting</span>
                           <Clock className="w-4 h-4 text-amber-600 group-hover:scale-110 transition-transform" />
                         </div>
-                        <div className="text-2xl font-black text-amber-900">{dayAppointments.filter((a) => a.status === "CHECKED IN").length}</div>
+                        <div className="text-2xl font-black text-amber-900">{lobbyCheckedInCount}</div>
                         <p className="text-[10px] text-amber-700 mt-0.5">In lobby queue</p>
                       </div>
 
@@ -2495,8 +2734,8 @@ export default function App() {
                           <span className="text-[10px] uppercase font-bold tracking-wider">Pathology</span>
                           <FlaskConical className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
                         </div>
-                        <div className="text-2xl font-black text-emerald-900">7</div>
-                        <p className="text-[10px] text-emerald-700 mt-0.5 font-semibold">View Pathology &rarr;</p>
+                        <div className="text-2xl font-black text-emerald-900">{unreadPathologyPatientCount}</div>
+                        <p className="text-[10px] text-emerald-700 mt-0.5 font-semibold">Unread reports →</p>
                       </div>
 
                       {/* 5. Recalls 5 */}
@@ -2553,7 +2792,7 @@ export default function App() {
                         </div>
                         <div>
                           <p className="text-[#72787f] font-bold text-[10px] uppercase">Lobby Active Queue</p>
-                          <p className="font-bold text-lg text-amber-900">{dayAppointments.filter(a => a.status === "CHECKED IN").length} checked-in</p>
+                          <p className="font-bold text-lg text-amber-900">{lobbyCheckedInCount} in clinic queue</p>
                         </div>
                       </div>
                       <button
@@ -2593,7 +2832,10 @@ export default function App() {
                     </div>
                   </div>
 
+                  {clinicalSearchPanel}
+
                   {/* EXPANDED LARGE QUEUE & CLINICAL SHIFT DASHBOARD (Removed Quick Patient Registry) */}
+                  {!searchQuery.trim() && (
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                     {/* Primary Large Queue Section (Col Span 8 on Desktop) */}
                     <div className="lg:col-span-8 space-y-6">
@@ -2702,11 +2944,8 @@ export default function App() {
                                     <td className="p-3.5">
                                       <div 
                                         className="font-serif font-bold text-sm text-[#00334f] hover:text-sky-700 cursor-pointer flex items-center gap-1.5"
-                                        onClick={() => {
-                                          const person = p || stubPatientFromBooking(apt);
-                                          handleStartConsultation(person);
-                                        }}
-                                        title="Click patient name to launch GP Exam Room"
+                                        onClick={() => openBookedPatient(apt, p)}
+                                        title={isVideoBooking(apt) ? "Open Telehealth room and call this patient" : "Click patient name to launch GP Exam Room"}
                                       >
                                         <span>{appointmentPatientName(apt, p)}</span>
                                         <Stethoscope className="w-3.5 h-3.5 text-sky-600 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -2770,24 +3009,28 @@ export default function App() {
                                       {apt.status === "CHECKED IN" && (
                                         <button
                                           onClick={() => {
-                                            handleUpdateAptStatus(apt.id, "IN EXAM ROOM");
                                             const person = p || stubPatientFromBooking(apt);
+                                            if (isVideoBooking(apt)) {
+                                              openBookedPatient(apt, person);
+                                              return;
+                                            }
+                                            handleUpdateAptStatus(apt.id, "IN EXAM ROOM");
                                             handleStartConsultation(person);
                                           }}
                                           className="text-amber-900 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors shadow-xs text-xs font-bold inline-flex items-center gap-1"
                                         >
                                           <Stethoscope className="w-3.5 h-3.5" />
-                                          Call To GP Exam &rarr;
+                                          {isVideoBooking(apt) ? "Open Telehealth →" : "Call To GP Exam →"}
                                         </button>
                                       )}
 
                                       {apt.status === "IN EXAM ROOM" && (
                                         <button
-                                          onClick={() => p && handleStartConsultation(p)}
+                                          onClick={() => openBookedPatient(apt, p)}
                                           className="text-red-700 bg-red-100 hover:bg-red-200 px-3 py-1.5 rounded-lg transition-colors text-xs font-bold inline-flex items-center gap-1"
                                         >
                                           <Stethoscope className="w-3.5 h-3.5" />
-                                          Resume Consult &rarr;
+                                          {isVideoBooking(apt) ? "Resume Telehealth →" : "Resume Consult →"}
                                         </button>
                                       )}
 
@@ -2925,6 +3168,7 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+                  )}
                 </div>
               )
             )}
@@ -2974,9 +3218,14 @@ export default function App() {
                       </button>
                     </div>
                   </div>
+                </div>
 
-                  {/* Filter & Search Bar */}
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+                {clinicalSearchPanel}
+
+                {!searchQuery.trim() && (
+                <>
+                {/* Filter & Search Bar */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
                     {/* Status filter tabs */}
                     <div className="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-lg border">
                       {[
@@ -3018,7 +3267,6 @@ export default function App() {
                       />
                     </div>
                   </div>
-                </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 <div className="lg:col-span-8">
@@ -3185,11 +3433,8 @@ export default function App() {
                                 <td className="p-3">
                                   <div 
                                     className="flex items-start gap-2.5 cursor-pointer group"
-                                    onClick={() => {
-                                      const person = p || stubPatientFromBooking(apt);
-                                      handleStartConsultation(person);
-                                    }}
-                                    title="Click patient name to launch GP Exam Room"
+                                    onClick={() => openBookedPatient(apt, p)}
+                                    title={isVideoBooking(apt) ? "Open Telehealth room and call this patient" : "Click patient name to launch GP Exam Room"}
                                   >
                                     <div className="w-8 h-8 rounded-full bg-[#dee8ff] text-[#00334f] font-bold text-xs flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                                       {(appointmentPatientName(apt, p) || "P").split(" ").map(n => n[0]).join("").slice(0, 2)}
@@ -3260,22 +3505,26 @@ export default function App() {
                                           alert("Check-in confirmed. Starting examination requires Doctor role.");
                                           return;
                                         }
-                                        handleUpdateAptStatus(apt.id, "IN EXAM ROOM");
                                         const person = p || stubPatientFromBooking(apt);
+                                        if (isVideoBooking(apt)) {
+                                          openBookedPatient(apt, person);
+                                          return;
+                                        }
+                                        handleUpdateAptStatus(apt.id, "IN EXAM ROOM");
                                         handleStartConsultation(person);
                                       }}
                                       className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded font-bold transition-colors text-xs shadow-xs"
                                     >
-                                      Call to GP Exam &rarr;
+                                      {isVideoBooking(apt) ? "Open Telehealth →" : "Call to GP Exam →"}
                                     </button>
                                   )}
 
                                   {apt.status === "IN EXAM ROOM" && (
                                     <button
-                                      onClick={() => p && handleStartConsultation(p)}
+                                      onClick={() => openBookedPatient(apt, p)}
                                       className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded font-bold transition-colors text-xs"
                                     >
-                                      Active Exam Room
+                                      {isVideoBooking(apt) ? "Active Telehealth" : "Active Exam Room"}
                                     </button>
                                   )}
 
@@ -3320,6 +3569,8 @@ export default function App() {
                   {clinicCalendar}
                 </div>
                 </div>
+                </>
+                )}
 
               </div>
             )}
@@ -4056,11 +4307,15 @@ export default function App() {
                 patients={hospitalPatients}
                 appointments={tenantAppointments}
                 activePatient={
+                  hospitalPatients.find((p) => p.id === telehealthFocus?.patientId) ||
                   hospitalPatients.find((p) => {
                     const due = tenantAppointments.find((a) => isDueTelehealth(a));
                     return Boolean(due && p.id === due.patientId);
-                  }) || null
+                  }) ||
+                  null
                 }
+                focusPatientId={telehealthFocus?.patientId}
+                focusAppointmentId={telehealthFocus?.appointmentId}
                 sessionDoctorName={sessionUser?.name || "Dr. Priyantha Silva"}
                 drugsDatabase={drugs}
                 onTelehealthSyncSuccess={fetchState}
@@ -4139,20 +4394,29 @@ export default function App() {
                         e.preventDefault();
                         const f = e.currentTarget;
                         const patId = (f.elements.namedItem("patSelect") as HTMLSelectElement).value;
-                        const cat = (f.elements.namedItem("catSelect") as HTMLSelectElement).value;
+                        const testName = (f.elements.namedItem("testSelect") as HTMLSelectElement).value;
+                        const cat = sampleCategoryForTest(testName);
                         if (!patId) {
                           alert("Please select a registered patient.");
                           return;
                         }
+                        const pat = patients.find((p) => p.id === patId);
                         try {
                           const res = await fetch("/api/sample-collections", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ patientId: patId, sampleCategory: cat })
+                            body: JSON.stringify({
+                              patientId: patId,
+                              sampleCategory: cat,
+                              patientName: pat?.name,
+                              testName,
+                              orderedBy: sessionUser?.name || currentRole,
+                            })
                           });
                           if (!res.ok) throw new Error("Could not log collection reference");
                           const data = await res.json();
-                          fetchState();
+                          if (data.state?.sampleCollections) setSampleCollections(data.state.sampleCollections);
+                          else fetchState();
                           alert("Patient clinical sample collection successfully logged!");
                           f.reset();
                         } catch (err: any) {
@@ -4172,11 +4436,13 @@ export default function App() {
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500">Sample Specimen Category</label>
-                        <select name="catSelect" required className="p-2 border rounded w-full text-xs bg-white">
-                          <option value="Blood">Blood Sample Only</option>
-                          <option value="Urinal">Urinal Sample Only</option>
-                          <option value="Both Blood & Urinal">Both Blood & Urinal</option>
+                        <label className="text-[10px] font-bold text-slate-500">Test / Investigation Profile</label>
+                        <select name="testSelect" required className="p-2 border rounded w-full text-xs bg-white">
+                          {PATHOLOGY_INVESTIGATIONS.map((inv) => (
+                            <option key={inv.name} value={inv.name}>
+                              {inv.category}: {inv.name}
+                            </option>
+                          ))}
                         </select>
                       </div>
 
@@ -4187,6 +4453,34 @@ export default function App() {
                         Log Collection Entry
                       </button>
                     </form>
+                  </div>
+
+                  <div className="border border-emerald-100 rounded-lg p-3 bg-emerald-50/40">
+                    <h4 className="text-[10px] font-bold uppercase text-emerald-900 mb-2">Test / Investigation Profile</h4>
+                    <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                      <button
+                        type="button"
+                        onClick={() => setDispatchTestFilter("ALL")}
+                        className={`text-[10px] font-bold px-2 py-1 rounded-full border ${
+                          dispatchTestFilter === "ALL" ? "bg-[#00334f] text-white border-[#00334f]" : "bg-white text-slate-700 border-slate-200"
+                        }`}
+                      >
+                        All tests
+                      </button>
+                      {PATHOLOGY_INVESTIGATIONS.map((inv) => (
+                        <button
+                          key={inv.name}
+                          type="button"
+                          onClick={() => setDispatchTestFilter(inv.name)}
+                          className={`text-[10px] font-bold px-2 py-1 rounded-full border ${
+                            dispatchTestFilter === inv.name ? "bg-[#00334f] text-white border-[#00334f]" : "bg-white text-slate-700 border-slate-200"
+                          }`}
+                          title={inv.category}
+                        >
+                          {inv.name}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   {/* FILTERS & SEARCH */}
@@ -4233,8 +4527,10 @@ export default function App() {
                         <tr className="bg-slate-50 border-b border-slate-100 text-[#00334f] font-bold">
                           <th className="p-3">Reference ID</th>
                           <th className="p-3">Patient Name & File</th>
+                          <th className="p-3">Investigation</th>
                           <th className="p-3">Category</th>
                           <th className="p-3">Collection Details</th>
+                          <th className="p-3">Registered By</th>
                           <th className="p-3">LankaLab Sync Status</th>
                           <th className="p-3">Actions</th>
                         </tr>
@@ -4246,13 +4542,19 @@ export default function App() {
                             const filterEl = document.getElementById("selectedStatusFilter") as HTMLInputElement;
                             const filterStatus = filterEl ? filterEl.value : "ALL";
                             
-                            const matchesSearch = s.patientName.toLowerCase().includes(sq) || s.patientId.toLowerCase().includes(sq) || s.id.toLowerCase().includes(sq);
+                            const matchesSearch = s.patientName.toLowerCase().includes(sq) || s.patientId.toLowerCase().includes(sq) || s.id.toLowerCase().includes(sq) || (s.testName || "").toLowerCase().includes(sq);
                             const matchesStatus = filterStatus === "ALL" || s.status === filterStatus;
+                            const matchesTest = dispatchTestFilter === "ALL" || s.testName === dispatchTestFilter;
                             
-                            return matchesSearch && matchesStatus;
+                            return matchesSearch && matchesStatus && matchesTest;
                           })
                           .map((sample) => (
-                            <tr key={sample.id} className="hover:bg-slate-50 transition-colors">
+                            <tr
+                              key={sample.id}
+                              className={`hover:bg-slate-50 transition-colors ${
+                                highlightSampleId === sample.id ? "bg-amber-50 ring-2 ring-amber-300" : ""
+                              }`}
+                            >
                               <td className="p-3 font-mono font-bold text-slate-400">{sample.id}</td>
                               <td className="p-3">
                                 <div className="font-semibold text-slate-800">{sample.patientName}</div>
@@ -4263,6 +4565,12 @@ export default function App() {
                                     setActiveHubInitialTab("samples");
                                   }
                                 }} className="underline hover:text-[#00334f] text-slate-550 font-bold">{sample.patientId}</button></div>
+                              </td>
+                              <td className="p-3">
+                                <span className="font-bold text-[#00334f]">{sample.testName || "—"}</span>
+                                {sample.orderedBy && (
+                                  <div className="text-[10px] text-slate-500">Ordered by {sample.orderedBy}</div>
+                                )}
                               </td>
                               <td className="p-3">
                                 <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${
@@ -4292,6 +4600,13 @@ export default function App() {
                                 )}
                               </td>
                               <td className="p-3">
+                                {sample.registeredBy ? (
+                                  <span className="font-bold text-emerald-800">{sample.registeredBy}</span>
+                                ) : (
+                                  <span className="text-slate-400 italic">Not registered</span>
+                                )}
+                              </td>
+                              <td className="p-3">
                                 {sample.lankaLabSyncStatus === "SYNCED" ? (
                                   <div className="space-y-1">
                                     <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 border border-emerald-250 rounded inline-block">
@@ -4306,7 +4621,31 @@ export default function App() {
                                 )}
                               </td>
                               <td className="p-3">
-                                <div className="flex gap-2">
+                                <div className="flex gap-2 flex-wrap">
+                                  {!sample.registeredBy && (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        const registrar = sessionUser?.name || currentRole;
+                                        try {
+                                          const r = await fetch(`/api/sample-collections/${sample.id}/register`, {
+                                            method: "POST",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({ registeredBy: registrar }),
+                                          });
+                                          if (!r.ok) throw new Error();
+                                          const data = await r.json();
+                                          if (data.state?.sampleCollections) setSampleCollections(data.state.sampleCollections);
+                                          else fetchState();
+                                        } catch (e) {
+                                          alert("Could not register name.");
+                                        }
+                                      }}
+                                      className="bg-amber-600 hover:bg-amber-700 text-white font-bold p-1 px-3 rounded text-[10px]"
+                                    >
+                                      Register my name
+                                    </button>
+                                  )}
                                   {sample.status === "PENDING" && (
                                     <button
                                       type="button"
@@ -4354,7 +4693,7 @@ export default function App() {
 
                         {sampleCollections.length === 0 && (
                           <tr>
-                            <td colSpan={6} className="text-center py-12 italic text-slate-400">
+                            <td colSpan={8} className="text-center py-12 italic text-slate-400">
                               No specimen collection requests registered on system. Use the builder above to log one.
                             </td>
                           </tr>
@@ -5342,21 +5681,8 @@ export default function App() {
                   currentRole={currentRole}
                   onOpenPatientEverything={(pat) => setActiveDoctorRecordPatient(pat)}
                   onStartConsultation={(pat) => handleStartConsultation(pat)}
-                  onOrderLabTest={(patId, testName, remarks) => {
-                    const pat = patients.find(p => p.id === patId);
-                    const newOrder: LabOrder = {
-                      id: `ord-${Date.now()}`,
-                      patientId: patId,
-                      patientName: pat?.name || "Patient",
-                      testName,
-                      dateOrdered: new Date().toISOString().split("T")[0],
-                      dateCompleted: "",
-                      status: "PENDING",
-                      remarks
-                    };
-                    setLabOrders(prev => [newOrder, ...prev]);
-                    alert(`Lab order for ${testName} successfully queued and synced with LankaLab Ledger!`);
-                  }}
+                  onOrderLabTest={handleHubOrderLabTest}
+                  onMarkLabReviewed={handleMarkLabReviewed}
                 />
               </div>
             )}

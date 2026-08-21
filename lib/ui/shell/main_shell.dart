@@ -87,9 +87,11 @@ class _MainShellState extends State<MainShell> {
         bottomNavigationBar: NavigationBar(
           selectedIndex: _index,
           onDestinationSelected: _goTo,
-          backgroundColor: AppColors.surface,
+          backgroundColor: AppColors.cardBg(context),
           indicatorColor: _index == 2
-              ? const Color(0xFFD1FAE5)
+              ? (AppColors.isDark(context)
+                  ? const Color(0xFF064E3B)
+                  : const Color(0xFFD1FAE5))
               : (_index == 3 || _index == 4)
                   ? AppColors.emerald.withValues(alpha: 0.18)
                   : AppColors.trustBlue.withValues(alpha: 0.12),

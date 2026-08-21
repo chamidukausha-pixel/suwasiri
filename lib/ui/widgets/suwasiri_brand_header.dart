@@ -34,8 +34,8 @@ class SuwasiriBrandHeader extends StatelessWidget {
                   AppLocalizations.of(context).t('appName'),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
-                  style: const TextStyle(
-                    color: AppColors.trustBlueDark,
+                  style: TextStyle(
+                    color: AppColors.ink(context),
                     fontWeight: FontWeight.w800,
                     fontSize: 17,
                   ),
@@ -61,9 +61,9 @@ class SuwasiriBrandHeader extends StatelessWidget {
                 isLabelVisible: unread > 0,
                 backgroundColor: AppColors.emergencyRed,
                 label: Text('$unread'),
-                child: const Icon(
+                child: Icon(
                   Icons.notifications_outlined,
-                  color: AppColors.trustBlueDark,
+                  color: AppColors.ink(context),
                   size: 22,
                 ),
               ),
@@ -133,7 +133,7 @@ class LanguagePill extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              color: selected ? Colors.white : AppColors.slateMuted,
+              color: selected ? Colors.white : AppColors.muted(context),
               fontWeight: FontWeight.w700,
               fontSize: selected ? 10 : 11,
             ),
@@ -145,9 +145,9 @@ class LanguagePill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: AppColors.cardBg(context),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.line(context)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

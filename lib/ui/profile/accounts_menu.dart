@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
+import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/locale/locale_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/appointment.dart';
@@ -46,14 +47,15 @@ class AccountsMenuCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = AppColors.isDark(context);
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: AppColors.cardBg(context),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.line(context)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
+            color: Colors.black.withValues(alpha: dark ? 0.35 : 0.06),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -91,12 +93,12 @@ class AccountsMenuCard extends StatelessWidget {
           const SizedBox(height: 8),
           Container(
             width: double.infinity,
-            color: const Color(0xFFF1F5F9),
+            color: dark ? const Color(0xFF1A1A1A) : const Color(0xFFF1F5F9),
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-            child: const Text(
+            child: Text(
               'SWITCH ACCOUNT',
               style: TextStyle(
-                color: AppColors.slateMuted,
+                color: AppColors.muted(context),
                 fontWeight: FontWeight.w800,
                 fontSize: 11,
                 letterSpacing: 0.9,
@@ -104,11 +106,11 @@ class AccountsMenuCard extends StatelessWidget {
             ),
           ),
           if (familyMembers.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(16),
+            Padding(
+              padding: const EdgeInsets.all(16),
               child: Text(
                 'No family profiles yet',
-                style: TextStyle(color: AppColors.slateMuted),
+                style: TextStyle(color: AppColors.muted(context)),
               ),
             )
           else
@@ -153,7 +155,7 @@ class _MenuRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? AppColors.emergencyRed : AppColors.trustBlueDark;
+    final color = danger ? AppColors.emergencyRed : AppColors.ink(context);
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -173,7 +175,7 @@ class _MenuRow extends StatelessWidget {
               ),
             ),
             if (!danger)
-              const Icon(Icons.chevron_right, color: AppColors.slateMuted),
+              Icon(Icons.chevron_right, color: AppColors.muted(context)),
           ],
         ),
       ),
@@ -189,10 +191,13 @@ class _DarkModeMenuRow extends StatelessWidget {
     return BlocBuilder<LocaleCubit, LocaleState>(
       builder: (context, state) {
         final isDark = state.themeMode == ThemeMode.dark;
+        final accent = AppColors.isDark(context)
+            ? const Color(0xFF3B1F2B)
+            : _kAccentPink;
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-            color: _kAccentPink,
+            color: accent,
             borderRadius: BorderRadius.circular(14),
           ),
           child: Padding(
@@ -201,15 +206,15 @@ class _DarkModeMenuRow extends StatelessWidget {
               children: [
                 Icon(
                   isDark ? Icons.dark_mode : Icons.dark_mode_outlined,
-                  color: _kAccentPinkDeep,
+                  color: isDark ? Colors.white : _kAccentPinkDeep,
                   size: 22,
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Dark Mode',
                     style: TextStyle(
-                      color: AppColors.trustBlueDark,
+                      color: AppColors.ink(context),
                       fontWeight: FontWeight.w700,
                       fontSize: 15,
                     ),
@@ -258,21 +263,27 @@ class _SwitchAccountRow extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         decoration: BoxDecoration(
-          color: active ? _kAccentPink : Colors.transparent,
+          color: active
+              ? (AppColors.isDark(context)
+                  ? const Color(0xFF3B1F2B)
+                  : _kAccentPink)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
           children: [
             CircleAvatar(
               radius: 22,
-              backgroundColor: AppColors.trustBlueSoft,
+              backgroundColor: AppColors.softFill(context),
               backgroundImage:
                   path != null ? FileImage(File(path)) : null,
               child: path == null
                   ? Text(
                       initial,
-                      style: const TextStyle(
-                        color: AppColors.trustBlue,
+                      style: TextStyle(
+                        color: AppColors.isDark(context)
+                            ? Colors.white
+                            : AppColors.trustBlue,
                         fontWeight: FontWeight.w800,
                       ),
                     )
@@ -285,8 +296,8 @@ class _SwitchAccountRow extends StatelessWidget {
                 children: [
                   Text(
                     name,
-                    style: const TextStyle(
-                      color: AppColors.trustBlueDark,
+                    style: TextStyle(
+                      color: AppColors.ink(context),
                       fontWeight: FontWeight.w800,
                       fontSize: 14,
                     ),
@@ -296,8 +307,8 @@ class _SwitchAccountRow extends StatelessWidget {
                     '$subtitle · ${member.relationLabel}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.slateMuted,
+                    style: TextStyle(
+                      color: AppColors.muted(context),
                       fontSize: 12,
                     ),
                   ),
@@ -305,7 +316,13 @@ class _SwitchAccountRow extends StatelessWidget {
               ),
             ),
             if (active)
-              const Icon(Icons.check_circle, color: _kAccentPinkDeep, size: 20),
+              Icon(
+                Icons.check_circle,
+                color: AppColors.isDark(context)
+                    ? Colors.white
+                    : _kAccentPinkDeep,
+                size: 20,
+              ),
           ],
         ),
       ),
@@ -316,25 +333,27 @@ class _SwitchAccountRow extends StatelessWidget {
 class MyProfilePage extends StatelessWidget {
   const MyProfilePage({
     super.key,
-    required this.user,
     required this.onChangePhoto,
     required this.onEditIntake,
-    required this.identityCard,
+    required this.identityCardBuilder,
   });
 
-  final UserProfile user;
   final VoidCallback onChangePhoto;
   final VoidCallback onEditIntake;
-  final Widget identityCard;
+  final Widget Function(UserProfile user) identityCardBuilder;
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AuthCubit>().state.user;
+    if (user == null) {
+      return const Scaffold(body: Center(child: Text('Not signed in')));
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('My Profile')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
-          identityCard,
+          identityCardBuilder(user),
           const SizedBox(height: 14),
           UniqueHealthIdCard(user: user, onEdit: onEditIntake),
           const SizedBox(height: 14),
@@ -342,8 +361,10 @@ class MyProfilePage extends StatelessWidget {
             onTap: onEditIntake,
             child: Row(
               children: [
-                const Icon(Icons.medical_information_outlined,
-                    color: AppColors.trustBlue),
+                Icon(Icons.medical_information_outlined,
+                    color: AppColors.isDark(context)
+                        ? Colors.white
+                        : AppColors.trustBlue),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -351,16 +372,16 @@ class MyProfilePage extends StatelessWidget {
                     children: [
                       Text(
                         HealthIntakeL10n.t(context, 'editIntake'),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w800,
-                          color: AppColors.trustBlueDark,
+                          color: AppColors.ink(context),
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         HealthIntakeL10n.t(context, 'intakeSubtitle'),
-                        style: const TextStyle(
-                          color: AppColors.slateMuted,
+                        style: TextStyle(
+                          color: AppColors.muted(context),
                           fontSize: 12,
                           height: 1.3,
                         ),
@@ -368,7 +389,7 @@ class MyProfilePage extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right, color: AppColors.slateMuted),
+                Icon(Icons.chevron_right, color: AppColors.muted(context)),
               ],
             ),
           ),

@@ -58,13 +58,15 @@ Work both apps in this repo. Align on shared data, not a shared UI framework.
 
 1. **Identity** — same Firebase Auth users (`users/{uid}`) so a patient on mobile is the same person a GP sees on web.
 2. **Appointments (live)** — after checkout in Suwasiri, the booking is written to Firestore `appointments` under the **active patient name** (Chamidu, Sakuni, Denuk). GP Care staff see that name on the calendar, not a generic “Suwasiri patient” label.
-3. **Video consults** — video bookings appear in **Telehealth** from 15 minutes before the slot. The doctor presses **Call start** (next to Record) in the telehealth room. The patient joins from the Suwasiri **Call** tab. No WhatsApp or extra app. Both see and hear each other in `telehealth_sessions/{appointmentId}`.
+3. **Video consults** — clicking a video-booking name on the lobby or doctor dashboard opens the **Telehealth room** (not the GP Exam Room). The doctor presses **Call start**. The patient joins from the Suwasiri **Call** tab. Medicines issued in that room write to Firestore immediately and appear under **Call → E-Prescription**.
 4. **E-prescriptions (live)** — medicines issued in GP Care (exam room **Sync e-Rx to Suwasiri App**, clinical record, or telehealth) write to Firestore `prescriptions`. They show on Suwasiri **Vault → E-Prescription**. During a video consult they also show on **Call → E-Prescription**. After MediLanka / pharmacy collection they leave those sections and appear under **Vault → Issued Medical History**.
 5. **Vaccine history (app → clinic only)** — when the patient taps **Sync Lanka GP Care** in Vault, only vaccine history is written to Firestore `vaccinations`. The GP sees it under Vaccination logs. Labs, notes, and medicines from the app are **not** sent to the doctor.
 6. **Medical certificates (live)** — a certificate issued in GP Care is written to Firestore `medical_certificates` for that patient only (e.g. Chamidu). It appears in Suwasiri **Vault → Medical certificates**. Tap to view, download, or send by email. LankaLab portal sync is not used for certificates.
-7. **Name click** — clicking a booked name (lobby or doctor dashboard) opens the **GP Exam Room**, same as before.
-8. **Roles** — Platform Super Admin (tenants) + Hospital Super Admin (RBAC/staff/branches) + hospital template roles. Mobile remains the patient companion.
-9. **Do not** rewrite the web UI to match Flutter widgets, or the Flutter UI to match the clinic dashboard.
+7. **Name click** — clinic bookings open the **GP Exam Room**. Video bookings open the **Telehealth room** so the doctor can call the patient. Header search filters by **patient name** and shows **that patient only** (click the name to open their details).
+8. **Lobby queue** — receptionist **Check In Now** updates Lobby Active Queue on the doctor dashboard (including Suwasiri App bookings).
+9. **Pathology** — unread reports only; marking a report read lowers the unread patient count. Ordering an investigation notifies **Sample Dispatch Hub**; the receptionist registers their name from the top-bar notification.
+10. **Roles** — Platform Super Admin (tenants) + Hospital Super Admin (RBAC/staff/branches) + hospital template roles. Mobile remains the patient companion.
+11. **Do not** rewrite the web UI to match Flutter widgets, or the Flutter UI to match the clinic dashboard.
 
 **Deploy rules after pull:** `firebase deploy --only firestore:rules` so staff can read `appointments`, `prescriptions`, `vaccinations`, and `medical_certificates`, issue e-Rx and certificates, and both sides can use `telehealth_sessions`.
 

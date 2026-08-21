@@ -65,14 +65,21 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Doctors: clinic-name search + PrimeCare Medical Centre (Dr. Priyantha Silva cardiology, Dr. Anoja Senanayake dermatology) and more named clinics
 - [x] Web lobby + doctor dashboard month calendar (current month/time, prev/next month, click a date for that day’s appointments and patient details)
 - [x] Suwasiri App bookings sync to GP Care calendar (Firestore `appointments`; clinic + video; patient name/time/doctor on the selected date)
-- [x] Clicking a booked name on the GP Care lobby / doctor dashboard opens the **GP Exam Room** (previous consult flow)
+- [x] Clicking a booked name: clinic visit → GP Exam Room; video booking → Telehealth room (doctor can Call start)
+- [x] Header search filters by patient name so the doctor sees only that patient; click opens that file only
+- [x] Doctor dashboard Colombo clock enlarged; Lobby Active Queue counts receptionist Check In Now
+- [x] Pathology shows unread reports; Mark read lowers the unread patient count; Unreviewed tests lists tests under names
+- [x] Pathology order notifies receptionist Sample Dispatch Hub (sidebar + top-bar); click registers receptionist name
+- [x] Test/Investigation Profile catalog shared on Pathology and Sample Dispatch Hub
 - [x] Video consults: Telehealth **Call start** (beside Record) opens in-browser camera/mic to the Suwasiri App Call tab — no WhatsApp
+- [x] Telehealth-issued medicines sync to Suwasiri **Call → E-Prescription**
 - [x] Suwasiri bookings show the real patient name on GP Care (Chamidu / Sakuni / family member)
 - [x] GP Care issued e-Rx syncs to Suwasiri Vault E-Prescription (exam room **Sync e-Rx to Suwasiri App** + save consult); MediLanka send moves them to Issued Medical History
 - [x] GP Care issued medical certificates sync to that patient’s Suwasiri **Vault → Medical certificates** (view / download / email). LankaLab portal sync removed from certificate history.
 - [x] Suwasiri Vault **Sync Lanka GP Care** sends **vaccine history only** to the GP Care vaccination log (not medicines, labs, or notes)
 - [x] Profile: accounts menu (My Profile, Account Settings, Billing & Plans, Help Center, Dark Mode, Switch Account for family)
 - [x] Family Switch Account: Sakuni / Denuk full patient parity (clinic, video, vault, vaccines, billing) under Chamidu login; household Firestore rules deployed
+- [x] Profile: family members can edit details like main applicant; dark mode uses black backgrounds + white text
 
 ## In progress / next
 

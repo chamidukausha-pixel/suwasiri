@@ -127,23 +127,69 @@ abstract final class AppTheme {
   }
 
   static ThemeData dark() {
+    const bg = AppColors.darkCanvas;
+    const card = AppColors.darkSurface;
     final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: AppColors.trustBlue,
+      colorScheme: const ColorScheme.dark(
         primary: AppColors.trustBlue,
         secondary: AppColors.emerald,
         error: AppColors.emergencyRed,
-        brightness: Brightness.dark,
+        surface: card,
+        onPrimary: Colors.white,
+        onSecondary: Colors.white,
+        onSurface: Colors.white,
+        onError: Colors.white,
+      ),
+      scaffoldBackgroundColor: bg,
+      canvasColor: bg,
+      cardColor: card,
+      dividerColor: Colors.white24,
+    );
+
+    final textTheme = GoogleFonts.interTextTheme(base.textTheme).apply(
+      bodyColor: Colors.white,
+      displayColor: Colors.white,
+    ).copyWith(
+      displayLarge: GoogleFonts.inter(
+        fontWeight: FontWeight.w700,
+        color: Colors.white,
+      ),
+      headlineMedium: GoogleFonts.inter(
+        fontWeight: FontWeight.w700,
+        color: Colors.white,
+        fontSize: 26,
+      ),
+      titleLarge: GoogleFonts.inter(
+        fontWeight: FontWeight.w700,
+        color: Colors.white,
+        fontSize: 18,
+      ),
+      bodyLarge: GoogleFonts.inter(
+        color: Colors.white,
+        fontSize: 16,
+        height: 1.45,
+      ),
+      bodyMedium: GoogleFonts.inter(
+        color: Colors.white70,
+        fontSize: 14,
+        height: 1.4,
+      ),
+      labelLarge: GoogleFonts.inter(
+        fontWeight: FontWeight.w600,
+        fontSize: 14,
+        color: Colors.white,
       ),
     );
 
-    final textTheme = GoogleFonts.interTextTheme(base.textTheme);
-
     return base.copyWith(
       textTheme: textTheme,
+      iconTheme: const IconThemeData(color: Colors.white),
+      primaryIconTheme: const IconThemeData(color: Colors.white),
       appBarTheme: AppBarTheme(
+        backgroundColor: bg,
+        foregroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0.5,
         centerTitle: false,
@@ -151,14 +197,21 @@ abstract final class AppTheme {
         titleTextStyle: GoogleFonts.inter(
           fontWeight: FontWeight.w700,
           fontSize: 18,
+          color: Colors.white,
         ),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       cardTheme: CardThemeData(
+        color: card,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Colors.white12),
+          side: const BorderSide(color: Colors.white24),
         ),
+      ),
+      listTileTheme: const ListTileThemeData(
+        textColor: Colors.white,
+        iconColor: Colors.white70,
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -171,11 +224,25 @@ abstract final class AppTheme {
           textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
         ),
       ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.white,
+          minimumSize: const Size(48, 48),
+          side: const BorderSide(color: Colors.white54),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
+        fillColor: card,
+        hintStyle: const TextStyle(color: Colors.white54),
+        labelStyle: const TextStyle(color: Colors.white70),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Colors.white24),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -186,9 +253,61 @@ abstract final class AppTheme {
           borderSide: const BorderSide(color: AppColors.trustBlue, width: 1.5),
         ),
       ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: bg,
+        indicatorColor: AppColors.trustBlue.withValues(alpha: 0.25),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return TextStyle(
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? Colors.white : Colors.white70,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return IconThemeData(
+            color: selected ? Colors.white : Colors.white70,
+          );
+        }),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: bg,
+        selectedItemColor: Colors.white,
+        unselectedItemColor: Colors.white70,
+        type: BottomNavigationBarType.fixed,
+        elevation: 8,
+      ),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: card,
+        titleTextStyle: TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+          fontSize: 18,
+        ),
+        contentTextStyle: TextStyle(color: Colors.white70),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: card,
+        modalBackgroundColor: card,
+      ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
+        backgroundColor: card,
+        contentTextStyle: const TextStyle(color: Colors.white),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return Colors.white;
+          return Colors.white70;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return AppColors.trustBlue;
+          }
+          return Colors.white24;
+        }),
       ),
     );
   }

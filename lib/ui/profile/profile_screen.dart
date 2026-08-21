@@ -97,17 +97,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _openHealthIntake() async {
-    if (!context.read<AuthCubit>().isActiveOwner) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Only the main applicant can edit intake in this prototype.',
-          ),
-        ),
-      );
-      return;
-    }
-
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => const HealthIntakeScreen(editing: true),
@@ -118,7 +107,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _changePhoto() async {
     final l = AppLocalizations.of(context);
-    if (!context.read<AuthCubit>().isActiveOwner) return;
     final user = context.read<AuthCubit>().state.user;
     if (user == null) return;
 
@@ -167,15 +155,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _openMyProfile() {
-    final user = context.read<AuthCubit>().state.user;
-    if (user == null) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => MyProfilePage(
-          user: user,
           onChangePhoto: _changePhoto,
           onEditIntake: _openHealthIntake,
-          identityCard: _IdentityCard(
+          identityCardBuilder: (user) => _IdentityCard(
             userName: user.displayName,
             email: user.email,
             onChangePhoto: _changePhoto,
@@ -515,15 +500,15 @@ class _IdentityCard extends StatelessWidget {
               children: [
                 Text(
                   userName,
-                  style: const TextStyle(
-                    color: AppColors.trustBlueDark,
+                  style: TextStyle(
+                    color: AppColors.ink(context),
                     fontWeight: FontWeight.w800,
                     fontSize: 18,
                   ),
                 ),
                 Text(
                   email,
-                  style: const TextStyle(color: AppColors.slateMuted),
+                  style: TextStyle(color: AppColors.muted(context)),
                 ),
                 const SizedBox(height: 4),
                 MinTap(

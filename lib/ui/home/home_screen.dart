@@ -162,8 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Text(
                   l.t('upcoming'),
-                  style: const TextStyle(
-                    color: AppColors.slateMuted,
+                  style: TextStyle(color: AppColors.muted(context),
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                     letterSpacing: 1.2,
@@ -198,8 +197,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Text(
                   l.t('upcomingVideoConsult'),
-                  style: const TextStyle(
-                    color: AppColors.slateMuted,
+                  style: TextStyle(color: AppColors.muted(context),
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                     letterSpacing: 1.2,
@@ -262,19 +260,19 @@ class _SearchField extends StatelessWidget {
         height: 52,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: AppColors.cardBg(context),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
+          border: Border.all(color: AppColors.line(context)),
         ),
         child: Row(
           children: [
-            const Icon(Icons.search_rounded, color: AppColors.slateMuted),
+            Icon(Icons.search_rounded, color: AppColors.muted(context)),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
                 hint,
-                style: const TextStyle(
-                  color: AppColors.slateMuted,
+                style: TextStyle(
+                  color: AppColors.muted(context),
                   fontSize: 15,
                 ),
               ),
@@ -311,7 +309,7 @@ class _QuickActionCard extends StatelessWidget {
           border: Border.all(color: AppColors.border),
           boxShadow: [
             BoxShadow(
-              color: AppColors.trustBlueDark.withValues(alpha: 0.04),
+              color: AppColors.ink(context).withValues(alpha: 0.04),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -334,8 +332,7 @@ class _QuickActionCard extends StatelessWidget {
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.trustBlueDark,
+              style: TextStyle(color: AppColors.ink(context),
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
                 height: 1.25,

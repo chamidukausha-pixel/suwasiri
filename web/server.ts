@@ -1356,7 +1356,9 @@ app.patch("/api/patients/:id", (req, res) => {
     medicalHistory,
     newVaccineRecord,
     newLabResult,
-    newPrescriptionRecord
+    newPrescriptionRecord,
+    reviewLabResultId,
+    reviewedBy
   } = req.body;
 
   const patIndex = store.patients.findIndex(p => p.id === id);
@@ -1397,6 +1399,15 @@ app.patch("/api/patients/:id", (req, res) => {
 
   if (newPrescriptionRecord) {
     pat.prescriptionsList.unshift(newPrescriptionRecord);
+  }
+
+  if (reviewLabResultId && Array.isArray(pat.labResults)) {
+    const lab = pat.labResults.find((lr: any) => lr.id === reviewLabResultId);
+    if (lab) {
+      lab.doctorReviewed = true;
+      lab.reviewedBy = reviewedBy || "GP";
+      lab.reviewedDate = new Date().toISOString().split("T")[0];
+    }
   }
 
   if (historyEntry) {
@@ -1462,12 +1473,29 @@ app.post("/api/notifications", (req, res) => {
     templateType: templateType || "CUSTOM_ALERT",
     content,
     date: new Date().toISOString().replace("T", " ").substring(0, 16),
-    status: "DELIVERED"
+    status: req.body.status || "DELIVERED",
+    read: Boolean(req.body.read),
+    sampleId: req.body.sampleId || "",
+    testName: req.body.testName || "",
+    registeredBy: req.body.registeredBy || ""
   };
 
   store.notifications.unshift(newLog);
   saveStore(store);
   res.status(201).json({ success: true, notification: newLog, state: store });
+});
+
+app.patch("/api/notifications/:id", (req, res) => {
+  const store = getStore();
+  const item = store.notifications.find((n) => n.id === req.params.id);
+  if (!item) {
+    return res.status(404).json({ error: "Notification not found" });
+  }
+  if (req.body.status) item.status = req.body.status;
+  if (typeof req.body.read === "boolean") item.read = req.body.read;
+  if (req.body.registeredBy) item.registeredBy = req.body.registeredBy;
+  saveStore(store);
+  res.json({ success: true, notification: item, state: store });
 });
 
 // Secure Clinical Chat Logs
@@ -1506,14 +1534,14 @@ app.get("/api/lab-orders", (req, res) => {
 
 app.post("/api/lab-orders", (req, res) => {
   const store = getStore();
-  const { patientId, testName, remarks } = req.body;
+  const { patientId, testName, remarks, sampleCategory, orderedBy, patientName: bodyName } = req.body;
 
   if (!patientId || !testName) {
     return res.status(400).json({ error: "Missing patientId or testName" });
   }
 
   const pat = store.patients.find(p => p.id === patientId);
-  const patientName = pat ? pat.name : "Unknown Patient";
+  const patientName = pat ? pat.name : (bodyName || "Unknown Patient");
 
   const newOrder = {
     id: `order-${Date.now()}`,
@@ -1527,8 +1555,58 @@ app.post("/api/lab-orders", (req, res) => {
   };
 
   store.labOrders.unshift(newOrder);
+
+  if (!store.sampleCollections) store.sampleCollections = [];
+  const newSample = {
+    id: `SC-${Math.floor(1000 + Math.random() * 9000)}`,
+    patientId,
+    patientName,
+    sampleCategory: sampleCategory || "Blood",
+    status: "PENDING",
+    collectedTime: "",
+    deliveredTime: "",
+    deliveryPersonName: "",
+    deliveryPersonPhone: "",
+    deliveryPersonId: "",
+    labName: "",
+    lankaLabSyncStatus: "NOT_SYNCED",
+    lankaLabLedgerKey: "",
+    testName,
+    orderedBy: orderedBy || "Doctor",
+    registeredBy: ""
+  };
+  store.sampleCollections.unshift(newSample);
+  if (pat) {
+    if (!pat.sampleCollections) pat.sampleCollections = [];
+    pat.sampleCollections.unshift(newSample);
+  }
+
+  store.notifications.unshift({
+    id: `notif-${Date.now()}`,
+    patientName,
+    recipient: "Reception / Sample Dispatch Hub",
+    transport: "App Notification",
+    templateType: "PATHOLOGY_ORDER",
+    content: `Doctor ordered ${testName} for ${patientName}. Open Sample Dispatch Hub to register collection.`,
+    date: new Date().toISOString().replace("T", " ").substring(0, 16),
+    status: "UNREAD",
+    read: false,
+    sampleId: newSample.id,
+    testName,
+    registeredBy: ""
+  });
+
+  store.clinicMessages.push({
+    id: `msg-path-${Date.now()}`,
+    sender: "Pathology Hub",
+    senderRole: "System",
+    text: `New pathology investigation "${testName}" ordered for ${patientName}. Awaiting receptionist registration at Sample Dispatch Hub.`,
+    timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
+    channel: "#general-clinical"
+  });
+
   saveStore(store);
-  res.status(201).json({ order: newOrder, state: store });
+  res.status(201).json({ order: newOrder, sample: newSample, state: store });
 });
 
 // Lab Results processing update simulation trigger
@@ -1857,23 +1935,20 @@ app.post("/api/sample-collections", (req, res) => {
   const store = getStore();
   if (!store.sampleCollections) store.sampleCollections = [];
   
-  const { patientId, sampleCategory } = req.body;
+  const { patientId, sampleCategory, patientName: bodyName, testName, orderedBy } = req.body;
   if (!patientId || !sampleCategory) {
     return res.status(400).json({ error: "Missing patientId or sampleCategory" });
   }
 
   const patIndex = store.patients.findIndex(p => p.id === patientId);
-  if (patIndex === -1) {
-    return res.status(404).json({ error: "Patient not found" });
-  }
-
-  const pat = store.patients[patIndex];
-  if (!pat.sampleCollections) pat.sampleCollections = [];
+  const pat = patIndex !== -1 ? store.patients[patIndex] : null;
+  const patientName = pat ? pat.name : (bodyName || "Unknown Patient");
+  if (pat && !pat.sampleCollections) pat.sampleCollections = [];
 
   const newSample = {
     id: `SC-${Math.floor(1000 + Math.random() * 9000)}`,
     patientId,
-    patientName: pat.name,
+    patientName,
     sampleCategory,
     status: "PENDING",
     collectedTime: "",
@@ -1883,24 +1958,52 @@ app.post("/api/sample-collections", (req, res) => {
     deliveryPersonId: "",
     labName: "",
     lankaLabSyncStatus: "NOT_SYNCED",
-    lankaLabLedgerKey: ""
+    lankaLabLedgerKey: "",
+    testName: testName || "",
+    orderedBy: orderedBy || "",
+    registeredBy: ""
   };
 
   store.sampleCollections.unshift(newSample);
-  pat.sampleCollections.unshift(newSample);
+  if (pat) pat.sampleCollections.unshift(newSample);
 
   // Add a clinic team notification
   store.clinicMessages.push({
     id: `msg-sc-${Date.now()}`,
     sender: "Diagnostics Hub System",
     senderRole: "System",
-    text: `New laboratory order logged: ${sampleCategory} sample requested for citizen patient ${pat.name} (ID: ${patientId}). Status: PENDING COLLECTION.`,
+    text: `New laboratory order logged: ${sampleCategory} sample requested for citizen patient ${patientName} (ID: ${patientId}). Status: PENDING COLLECTION.`,
     timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
     channel: "#general-clinical"
   });
 
   saveStore(store);
   res.status(201).json({ sample: newSample, state: store });
+});
+
+app.post("/api/sample-collections/:id/register", (req, res) => {
+  const store = getStore();
+  if (!store.sampleCollections) store.sampleCollections = [];
+  const sample = store.sampleCollections.find((s) => s.id === req.params.id);
+  if (!sample) {
+    return res.status(404).json({ error: "Sample collection details not found" });
+  }
+  const registeredBy = req.body.registeredBy || "Reception";
+  sample.registeredBy = registeredBy;
+  const pat = store.patients.find((p) => p.id === sample.patientId);
+  if (pat && Array.isArray(pat.sampleCollections)) {
+    const row = pat.sampleCollections.find((ps) => ps.id === sample.id);
+    if (row) row.registeredBy = registeredBy;
+  }
+  store.notifications.forEach((n) => {
+    if (n.sampleId === sample.id) {
+      n.registeredBy = registeredBy;
+      n.read = true;
+      n.status = "READ";
+    }
+  });
+  saveStore(store);
+  res.json({ sample, state: store });
 });
 
 // MARK SAMPLE AS COLLECTED
