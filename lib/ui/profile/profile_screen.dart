@@ -246,11 +246,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
-                    'Now using $label — Vault, doctors, vaccines & payments are hers/his only',
+                    'Switched to $label — Home, Vault, doctors & vaccines use this account',
                   ),
                 ),
               );
-              _openMyProfile();
             },
             onAddMember: () => _showAddFamilyMemberSheet(context),
             onSignOut: _logout,
