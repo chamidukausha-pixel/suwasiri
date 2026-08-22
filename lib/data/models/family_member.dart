@@ -18,7 +18,28 @@ class FamilyMember extends Equatable {
   final String relationLabel;
   final UserProfile profile;
 
+  Map<String, dynamic> toMap() => {
+        'key': key,
+        'relationLabel': relationLabel,
+        'profile': {
+          'id': profile.id,
+          ...profile.toMap(),
+        },
+      };
+
+  factory FamilyMember.fromMap(Map<String, dynamic> map) {
+    final raw = map['profile'];
+    final profileMap = raw is Map
+        ? Map<String, dynamic>.from(raw)
+        : <String, dynamic>{};
+    final id = profileMap['id'] as String? ?? '';
+    return FamilyMember(
+      key: map['key'] as String? ?? 'member',
+      relationLabel: map['relationLabel'] as String? ?? 'Family',
+      profile: UserProfile.fromMap(id, profileMap),
+    );
+  }
+
   @override
   List<Object?> get props => [key, relationLabel, profile];
 }
-

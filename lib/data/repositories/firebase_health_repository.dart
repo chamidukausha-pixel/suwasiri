@@ -312,6 +312,7 @@ class FirebaseHealthRepository implements HealthRepository {
     required DateTime slot,
     required String ceylonHealthId,
     String vaccineName = '',
+    String patientName = '',
   }) async {
     ClinicFacility? clinic;
     for (final c in VaccineCatalog.clinics) {
@@ -328,18 +329,22 @@ class FirebaseHealthRepository implements HealthRepository {
       ceylonHealthId: ceylonHealthId,
       status: 'confirmed',
       vaccineName: vaccineName,
+      patientName: patientName,
       address: clinic?.address ?? '',
       bookedAt: DateTime.now(),
     );
     await _vaccinations.doc(booking.id).set({
       'patientId': patientId,
+      'patientName': patientName,
       ...booking.toMap(),
     });
     await pushNotification(
       AppNotification(
         id: _uuid.v4(),
         title: 'Vaccine booked',
-        body: '$facilityName — ${slot.toLocal()}',
+        body: patientName.isEmpty
+            ? '$facilityName — ${slot.toLocal()}'
+            : '$patientName · $facilityName — ${slot.toLocal()}',
         timestamp: DateTime.now(),
         type: NotificationPayloadType.vaccine,
       ),

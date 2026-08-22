@@ -238,8 +238,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
             familyMembers: members,
             activeKey: activeKey,
             isOwnerActive: context.read<AuthCubit>().isActiveOwner,
-            onSelectMember: (key) =>
-                context.read<AuthCubit>().selectFamilyMember(key),
+            onSelectMember: (key) async {
+              await context.read<AuthCubit>().selectFamilyMember(key);
+              if (!context.mounted) return;
+              final active = context.read<AuthCubit>().state.user;
+              final label = active?.displayName ?? 'profile';
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'Now using $label — Vault, doctors, vaccines & payments are hers/his only',
+                  ),
+                ),
+              );
+              _openMyProfile();
+            },
             onAddMember: () => _showAddFamilyMemberSheet(context),
             onSignOut: _logout,
           ),
@@ -251,7 +263,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
 Future<void> _showAddFamilyMemberSheet(BuildContext context) async {
   final auth = context.read<AuthCubit>();
-  final owner = auth.state.user;
+  final owners = auth.state.familyMembers.where((m) => m.key == 'owner').toList();
+  final owner = owners.isNotEmpty
+      ? owners.first.profile
+      : auth.state.user;
   if (owner == null) return;
 
   DateTime? dob = DateTime(DateTime.now().year - 2, DateTime.now().month, 1);
@@ -322,18 +337,19 @@ Future<void> _showAddFamilyMemberSheet(BuildContext context) async {
 
             final distinct = UserProfile(
               id: '${ownerId}_$key',
-              name: profile.name,
+              name: name,
               email: profile.email,
               nic: profile.nic,
               mobileNo: profile.mobileNo,
               bloodGroup: profile.bloodGroup,
               region: profile.region,
               dateOfBirth: profile.dateOfBirth,
-              emergencyContacts: profile.emergencyContacts,
+              emergencyContacts: const [],
               ceylonHealthId:
                   'CH-${key.toUpperCase()}-${('${ownerId}_$key'.hashCode.abs() % 1000000)}',
-              barcodeNumber: profile.barcodeNumber,
-              healthIntake: profile.healthIntake,
+              barcodeNumber: null,
+              // Never inherit main applicant intake — GP Care uses displayName.
+              healthIntake: null,
             ).withEnsuredBarcode();
 
             await auth.upsertFamilyMember(
@@ -344,6 +360,11 @@ Future<void> _showAddFamilyMemberSheet(BuildContext context) async {
             );
             if (!context.mounted) return;
             Navigator.of(ctx).pop();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Switched to $name — bookings & vault use this profile'),
+              ),
+            );
           }
 
           return Padding(

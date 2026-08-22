@@ -101,6 +101,7 @@ class VaccineBooking extends Equatable {
     required this.ceylonHealthId,
     required this.status,
     this.vaccineName = '',
+    this.patientName = '',
     this.address = '',
     this.latitude,
     this.longitude,
@@ -114,6 +115,7 @@ class VaccineBooking extends Equatable {
   final String ceylonHealthId;
   final String status;
   final String vaccineName;
+  final String patientName;
   final String address;
   final double? latitude;
   final double? longitude;
@@ -140,6 +142,7 @@ class VaccineBooking extends Equatable {
         'ceylonHealthId': ceylonHealthId,
         'status': status,
         'vaccineName': vaccineName,
+        'patientName': patientName,
         'address': address,
         'latitude': latitude,
         'longitude': longitude,
@@ -155,6 +158,7 @@ class VaccineBooking extends Equatable {
       ceylonHealthId: map['ceylonHealthId'] as String? ?? '',
       status: map['status'] as String? ?? 'confirmed',
       vaccineName: map['vaccineName'] as String? ?? '',
+      patientName: map['patientName'] as String? ?? '',
       address: map['address'] as String? ?? '',
       latitude: (map['latitude'] as num?)?.toDouble(),
       longitude: (map['longitude'] as num?)?.toDouble(),
@@ -171,6 +175,7 @@ class VaccineBooking extends Equatable {
         ceylonHealthId,
         status,
         vaccineName,
+        patientName,
         address,
         latitude,
         longitude,

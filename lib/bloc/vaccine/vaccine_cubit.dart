@@ -291,6 +291,7 @@ class VaccineCubit extends Cubit<VaccineState> {
   Future<void> book({
     required String patientId,
     required String ceylonHealthId,
+    String patientName = '',
   }) async {
     final clinic = state.selectedClinic;
     final slot = state.selectedSlot;
@@ -307,6 +308,7 @@ class VaccineCubit extends Cubit<VaccineState> {
       slot: slot,
       ceylonHealthId: ceylonHealthId,
       vaccineName: state.immunizationTarget,
+      patientName: patientName,
     );
     List<VaccineProtocol>? protocols;
     try {

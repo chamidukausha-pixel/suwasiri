@@ -109,6 +109,7 @@ import {
   subscribeSuwasiriPatientCharts,
   type SuwasiriChartPatch,
 } from "./sync/suwasiriPatientChart";
+import { subscribeSuwasiriVaccinePatients } from "./sync/suwasiriVaccinations";
 import { PATHOLOGY_INVESTIGATIONS, sampleCategoryForTest } from "./catalogs/pathologyInvestigations";
 
 export interface DrugFormularyItem {
@@ -451,10 +452,14 @@ export default function App() {
   const [clinicAppointments, setAppointments] = useState<Appointment[]>([]);
   const [suwasiriAppointments, setSuwasiriAppointments] = useState<Appointment[]>([]);
   const [suwasiriPatients, setSuwasiriPatients] = useState<Patient[]>([]);
+  const [suwasiriVaccinePatients, setSuwasiriVaccinePatients] = useState<Patient[]>([]);
   const [suwasiriCharts, setSuwasiriCharts] = useState<Record<string, SuwasiriChartPatch>>({});
   const patients = useMemo(
     () =>
-      mergePatients(clinicPatients, suwasiriPatients).map((p) => {
+      mergePatients(
+        clinicPatients,
+        mergePatients(suwasiriPatients, suwasiriVaccinePatients)
+      ).map((p) => {
         const patched = applySuwasiriChart(p, suwasiriCharts[p.id]);
         if (!patched.labResults?.length) return patched;
         return {
@@ -466,7 +471,7 @@ export default function App() {
           ),
         };
       }),
-    [clinicPatients, suwasiriPatients, suwasiriCharts, reviewedLabKeys]
+    [clinicPatients, suwasiriPatients, suwasiriVaccinePatients, suwasiriCharts, reviewedLabKeys]
   );
   const appointments = useMemo(
     () => mergeAppointments(clinicAppointments, suwasiriAppointments),
@@ -767,20 +772,33 @@ export default function App() {
     if (!authUser || !isFirebaseConfigured()) {
       setSuwasiriAppointments([]);
       setSuwasiriPatients([]);
+      setSuwasiriVaccinePatients([]);
       return;
     }
-    return subscribeSuwasiriAppointments((apts, pats) => {
+    const unsubAppt = subscribeSuwasiriAppointments((apts, pats) => {
       setSuwasiriAppointments(apts);
       setSuwasiriPatients(pats);
     });
+    const unsubVax = subscribeSuwasiriVaccinePatients((pats) => {
+      setSuwasiriVaccinePatients(pats);
+    });
+    return () => {
+      unsubAppt?.();
+      unsubVax?.();
+    };
   }, [authUser?.uid]);
 
   const suwasiriPatientIdsKey = useMemo(
     () =>
-      [...new Set(suwasiriAppointments.map((a) => a.patientId).filter(Boolean))]
+      [
+        ...new Set([
+          ...suwasiriAppointments.map((a) => a.patientId),
+          ...suwasiriVaccinePatients.map((p) => p.id),
+        ].filter(Boolean)),
+      ]
         .sort()
         .join(","),
-    [suwasiriAppointments]
+    [suwasiriAppointments, suwasiriVaccinePatients]
   );
 
   useEffect(() => {

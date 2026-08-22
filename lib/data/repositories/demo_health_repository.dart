@@ -387,6 +387,7 @@ class DemoHealthRepository implements HealthRepository {
     required DateTime slot,
     required String ceylonHealthId,
     String vaccineName = '',
+    String patientName = '',
   }) async {
     // Multi-stage validation simulation
     await Future<void>.delayed(const Duration(milliseconds: 400)); // handshake
@@ -407,6 +408,7 @@ class DemoHealthRepository implements HealthRepository {
       ceylonHealthId: ceylonHealthId,
       status: 'confirmed',
       vaccineName: vaccineName,
+      patientName: patientName,
       address: clinic?.address ?? '',
       bookedAt: DateTime.now(),
     );
@@ -417,6 +419,7 @@ class DemoHealthRepository implements HealthRepository {
     list.add({
       'id': booking.id,
       'patientId': patientId,
+      'patientName': patientName,
       ...booking.toMap(),
     });
     await _prefs.setString(_kBookings, jsonEncode(list));

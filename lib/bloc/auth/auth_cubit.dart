@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/models/user_profile.dart';
 import '../../data/models/family_member.dart';
@@ -63,7 +66,7 @@ class AuthState extends Equatable {
 }
 
 class AuthCubit extends Cubit<AuthState> {
-  AuthCubit(this._auth) : super(const AuthState()) {
+  AuthCubit(this._auth, this._prefs) : super(const AuthState()) {
     _auth.authStateChanges().listen((user) async {
       if (user == null) {
         emit(const AuthState(status: AuthStatus.unauthenticated));
@@ -75,11 +78,37 @@ class AuthCubit extends Cubit<AuthState> {
   }
 
   final AuthRepository _auth;
+  final SharedPreferences _prefs;
 
   // Prototype keys for in-app family member selection.
   static const String _kOwner = 'owner';
   static const String _kWife = 'wife';
   static const String _kChild = 'child';
+
+  String _familyStoreKey(String ownerId) => 'suwasiri_family_$ownerId';
+
+  List<FamilyMember> _loadSavedMembers(String ownerId) {
+    final raw = _prefs.getString(_familyStoreKey(ownerId));
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list
+          .whereType<Map>()
+          .map((e) => FamilyMember.fromMap(Map<String, dynamic>.from(e)))
+          .where((m) => m.key != _kOwner && m.profile.id.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> _persistMembers(String ownerId, List<FamilyMember> members) async {
+    final extras = members.where((m) => m.key != _kOwner).toList();
+    await _prefs.setString(
+      _familyStoreKey(ownerId),
+      jsonEncode(extras.map((m) => m.toMap()).toList()),
+    );
+  }
 
   Future<void> _initFamilyMembers({required UserProfile owner}) async {
     // Family profiles under Chamidu's Firebase account.
@@ -113,23 +142,36 @@ class AuthCubit extends Cubit<AuthState> {
       ceylonHealthId: 'CH-CHILD-${childId.hashCode.abs() % 1000000}',
     ).withEnsuredBarcode();
 
-    final members = <FamilyMember>[
-      FamilyMember(
+    final byKey = <String, FamilyMember>{
+      _kOwner: FamilyMember(
         key: _kOwner,
         relationLabel: 'Main Applicant',
         profile: owner,
       ),
-      FamilyMember(
+      _kWife: FamilyMember(
         key: _kWife,
         relationLabel: 'Wife',
         profile: wife,
       ),
-      FamilyMember(
+      _kChild: FamilyMember(
         key: _kChild,
         relationLabel: 'Child',
         profile: child,
       ),
-    ];
+    };
+
+    // Restore Manel Ranjani and any other added members (and name edits).
+    for (final saved in _loadSavedMembers(owner.id)) {
+      byKey[saved.key] = saved;
+    }
+
+    final members = byKey.values.toList();
+    // Keep Main Applicant first, then stable order by key.
+    members.sort((a, b) {
+      if (a.key == _kOwner) return -1;
+      if (b.key == _kOwner) return 1;
+      return a.key.compareTo(b.key);
+    });
 
     emit(AuthState(
       status: AuthStatus.authenticated,
@@ -199,6 +241,10 @@ class AuthCubit extends Cubit<AuthState> {
       user: selectAfter ? ensured : state.user,
       activeFamilyKey: selectAfter ? key : state.activeFamilyKey,
     ));
+    final oid = ownerUid;
+    if (oid != null) {
+      await _persistMembers(oid, updated);
+    }
   }
 
   Future<void> bootstrap() async {
@@ -285,6 +331,10 @@ class AuthCubit extends Cubit<AuthState> {
           familyMembers: updated,
           ownerUid: state.ownerUid,
         ));
+        final oid = ownerUid;
+        if (oid != null) {
+          await _persistMembers(oid, updated);
+        }
       } else {
         await _initFamilyMembers(owner: ensured);
       }

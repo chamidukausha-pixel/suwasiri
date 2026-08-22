@@ -559,6 +559,7 @@ class VaccineBookingSheet extends StatelessWidget {
                                 patientId: user.id,
                                 ceylonHealthId:
                                     user.ceylonHealthId ?? 'CH-UNKNOWN',
+                                patientName: user.displayName,
                               );
                             },
                       style: FilledButton.styleFrom(
