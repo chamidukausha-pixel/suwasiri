@@ -115,7 +115,7 @@ class TelehealthCallSession {
         'offer': {'sdp': offer.sdp, 'type': offer.type},
         'answer': null,
         'doctorJoined': true,
-        'status': 'connecting',
+        'status': 'ringing',
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
       onStatus('calling');

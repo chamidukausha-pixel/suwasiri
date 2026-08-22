@@ -279,15 +279,23 @@ Future<void> _showAddFamilyMemberSheet(BuildContext context) async {
           }
 
           String keyForRelation(String r) {
-            return switch (r) {
+            final base = switch (r) {
               'Wife' => 'wife',
               'Mother' => 'mother',
               'Father' => 'father',
               "Wife's Mother" => 'wife_mother',
               "Wife's Father" => 'wife_father',
               'Child' => 'child',
-              _ => 'custom',
+              _ => 'member',
             };
+            final taken = auth.state.familyMembers.map((m) => m.key).toSet();
+            if (!taken.contains(base)) return base;
+            // Unique key so Manel Ranjani etc. never overwrite Sakuni/Denuk.
+            var i = 2;
+            while (taken.contains('${base}_$i')) {
+              i++;
+            }
+            return '${base}_$i';
           }
 
           Future<void> onSave() async {

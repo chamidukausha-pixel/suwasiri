@@ -32,10 +32,38 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     context.read<NotificationCubit>().load();
+    final schedule = context.read<ScheduleCubit>();
+    schedule.onVideoReminder = (appt) {
+      if (!mounted) return;
+      context.read<NotificationCubit>().load();
+      showDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Video consult reminder'),
+          content: Text(
+            '${appt.doctorName} starts in about 5 minutes.\nOpen Call to answer when the doctor rings from Lanka GP Care.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _goTo(2);
+              },
+              child: const Text('Open Call'),
+            ),
+          ],
+        ),
+      );
+    };
     final authState = context.read<AuthCubit>().state;
     final user = authState.user;
     if (user != null) {
-      context.read<ScheduleCubit>().watch(user.id);
+      schedule.watch(user.id);
     }
   }
 

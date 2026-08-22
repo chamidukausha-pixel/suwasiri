@@ -2,13 +2,23 @@ import 'dart:async';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/catalogs/patient_health_samples.dart';
+import '../../data/models/previous_medical_folder.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../data/services/lab_assistant_replies.dart';
+import '../../data/services/previous_medical_store.dart';
 
-enum HealthHistoryTab { medicines, labs, vaccines, certificates, notes }
+enum HealthHistoryTab {
+  medicines,
+  labs,
+  vaccines,
+  certificates,
+  notes,
+  previousHistory,
+}
 
 enum VaultFilter { labs, medicines, history }
 
@@ -19,6 +29,7 @@ class VaultState extends Equatable {
     this.treatmentNotes = const [],
     this.vaccineHistory = const [],
     this.certificates = const [],
+    this.previousMedical = const [],
     this.unlocked = false,
     this.loading = false,
     this.syncingLankaLab = false,
@@ -37,6 +48,7 @@ class VaultState extends Equatable {
   final List<TreatmentNote> treatmentNotes;
   final List<VaccineHistoryEntry> vaccineHistory;
   final List<DoctorCertificate> certificates;
+  final List<PreviousMedicalFolder> previousMedical;
   final bool unlocked;
   final bool loading;
   final bool syncingLankaLab;
@@ -64,6 +76,7 @@ class VaultState extends Equatable {
     List<TreatmentNote>? treatmentNotes,
     List<VaccineHistoryEntry>? vaccineHistory,
     List<DoctorCertificate>? certificates,
+    List<PreviousMedicalFolder>? previousMedical,
     bool? unlocked,
     bool? loading,
     bool? syncingLankaLab,
@@ -84,6 +97,7 @@ class VaultState extends Equatable {
       treatmentNotes: treatmentNotes ?? this.treatmentNotes,
       vaccineHistory: vaccineHistory ?? this.vaccineHistory,
       certificates: certificates ?? this.certificates,
+      previousMedical: previousMedical ?? this.previousMedical,
       unlocked: unlocked ?? this.unlocked,
       loading: loading ?? this.loading,
       syncingLankaLab: syncingLankaLab ?? this.syncingLankaLab,
@@ -106,6 +120,7 @@ class VaultState extends Equatable {
         treatmentNotes,
         vaccineHistory,
         certificates,
+        previousMedical,
         unlocked,
         loading,
         syncingLankaLab,
@@ -121,11 +136,13 @@ class VaultState extends Equatable {
 }
 
 class VaultCubit extends Cubit<VaultState> {
-  VaultCubit(this._health) : super(const VaultState());
+  VaultCubit(this._health, this._prefs) : super(const VaultState());
 
   final HealthRepository _health;
+  final SharedPreferences _prefs;
   StreamSubscription<List<Prescription>>? _rxSub;
   StreamSubscription<List<DoctorCertificate>>? _certSub;
+  String? _patientId;
 
   Future<void> unlock(Future<bool> Function() biometric) async {
     final ok = await biometric();
@@ -149,6 +166,7 @@ class VaultCubit extends Cubit<VaultState> {
   }
 
   Future<void> load(String patientId) async {
+    _patientId = patientId;
     emit(state.copyWith(loading: true));
 
     List<VaultReport> reports = const [];
@@ -176,6 +194,9 @@ class VaultCubit extends Cubit<VaultState> {
         if (!reportIds.contains(s.id)) s,
     ]..sort((a, b) => b.date.compareTo(a.date));
 
+    final previous =
+        await PreviousMedicalStore.load(_prefs, patientId);
+
     emit(state.copyWith(
       reports: mergedReports,
       prescriptions: rx,
@@ -190,8 +211,46 @@ class VaultCubit extends Cubit<VaultState> {
         patientId: patientId,
         stored: const [],
       ),
+      previousMedical: previous,
       loading: false,
     ));
+  }
+
+  Future<void> addPreviousMedicalFolder({
+    required String title,
+    String notes = '',
+    int? eventYear,
+  }) async {
+    final pid = _patientId;
+    if (pid == null) return;
+    final folder = PreviousMedicalStore.create(
+      patientId: pid,
+      title: title,
+      notes: notes,
+      eventYear: eventYear,
+    );
+    final next = [folder, ...state.previousMedical];
+    await PreviousMedicalStore.save(_prefs, pid, next);
+    emit(state.copyWith(previousMedical: next));
+  }
+
+  Future<void> updatePreviousMedicalFolder(PreviousMedicalFolder folder) async {
+    final pid = _patientId;
+    if (pid == null) return;
+    final updated = folder.copyWith(updatedAt: DateTime.now());
+    final next = state.previousMedical
+        .map((f) => f.id == updated.id ? updated : f)
+        .toList();
+    await PreviousMedicalStore.save(_prefs, pid, next);
+    emit(state.copyWith(previousMedical: next));
+  }
+
+  Future<void> deletePreviousMedicalFolder(String id) async {
+    final pid = _patientId;
+    if (pid == null) return;
+    final next = state.previousMedical.where((f) => f.id != id).toList();
+    await PreviousMedicalStore.save(_prefs, pid, next);
+    emit(state.copyWith(previousMedical: next));
   }
 
   Future<void> syncAll(String patientId) async {
@@ -238,6 +297,7 @@ class VaultCubit extends Cubit<VaultState> {
     unawaited(_certSub?.cancel());
     _rxSub = null;
     _certSub = null;
+    _patientId = null;
     emit(VaultState(unlocked: state.unlocked));
   }
 

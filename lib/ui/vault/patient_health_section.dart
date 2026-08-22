@@ -16,6 +16,7 @@ import '../widgets/sheet_close_bar.dart';
 import 'certificate_form_view.dart';
 import 'lab_report_detail_sheet.dart';
 import 'prescription_form_view.dart';
+import 'previous_medical_history_panel.dart';
 
 /// Pending e-prescriptions only — shown above AI Lab Assistant in Vault.
 class VaultEPrescriptionSection extends StatelessWidget {
@@ -301,7 +302,19 @@ class IssuedMedicalHistorySection extends StatelessWidget {
                     context.read<VaultCubit>().setHealthTab(HealthHistoryTab.notes),
               ),
             ),
-            const Expanded(child: SizedBox()),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _CategoryTile(
+                icon: Icons.folder_shared_outlined,
+                title: 'Previous medical history',
+                count: state.previousMedical.length,
+                color: const Color(0xFF7C3AED),
+                selected: state.healthTab == HealthHistoryTab.previousHistory,
+                onTap: () => context
+                    .read<VaultCubit>()
+                    .setHealthTab(HealthHistoryTab.previousHistory),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 14),
@@ -313,6 +326,8 @@ class IssuedMedicalHistorySection extends StatelessWidget {
           _VaccinesList(entries: vaccines)
         else if (state.healthTab == HealthHistoryTab.certificates)
           _CertificatesList(certificates: certificates)
+        else if (state.healthTab == HealthHistoryTab.previousHistory)
+          const PreviousMedicalHistoryPanel()
         else
           _NotesList(notes: notes),
       ],

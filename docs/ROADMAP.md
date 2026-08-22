@@ -20,7 +20,8 @@ Prioritized next work. Move items to **Done** in [STATUS.md](STATUS.md) when shi
 
 1. Real Phone Auth (Firebase) instead of OTP `123456`
 2. Vault PDF/image upload via Firebase Storage
-3. Telehealth/Call: live WebRTC to GP Care is wired (STUN); a TURN server may be needed on some mobile networks
+3. Telehealth/Call: GP Care doctor start sets `status: ringing`; Suwasiri shows Answer + local/remote video; 5‑min video reminder via ScheduleCubit
+4. Vault: Previous Medical History folders (gallery/camera + notes) per family patient id
 4. Live PharmaCare API (replace notification-only portal handoff)
 5. Payment tokens → real gateway if required
 

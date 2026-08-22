@@ -80,6 +80,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Profile: accounts menu (My Profile, Account Settings, Billing & Plans, Help Center, Dark Mode, Switch Account for family)
 - [x] Family Switch Account: Sakuni / Denuk full patient parity (clinic, video, vault, vaccines, billing) under Chamidu login; household Firestore rules deployed
 - [x] Profile: family members can edit details like main applicant; dark mode uses black backgrounds + white text
+- [x] Home search bar removed; video consult 5‑min reminder + notification; Call Answer for GP Care ringing; Vault Previous Medical History folders; unique family member profiles
 
 ## In progress / next
 
