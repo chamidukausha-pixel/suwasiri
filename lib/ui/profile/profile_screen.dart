@@ -726,12 +726,15 @@ class _CommunicationCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
-            // ignore: deprecated_member_use
-            value: reminderOffset,
+            key: const ValueKey('profile-reminder-offset'),
+            initialValue: offsets.contains(reminderOffset)
+                ? reminderOffset
+                : offsets.first,
             decoration: const InputDecoration(isDense: true),
-            items: offsets
-                .map((o) => DropdownMenuItem(value: o, child: Text(o)))
-                .toList(),
+            items: [
+              for (final o in offsets)
+                DropdownMenuItem(value: o, child: Text(o)),
+            ],
             onChanged: (v) {
               if (v != null) onOffset(v);
             },

@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../catalogs/doctor_catalog.dart';
+import '../catalogs/doctor_schedule_slots.dart';
 import '../catalogs/gp_care_clinic_map.dart';
 import '../catalogs/patient_health_samples.dart';
 import '../catalogs/vaccine_catalog.dart';
@@ -31,6 +32,8 @@ class FirebaseHealthRepository implements HealthRepository {
       _db.collection('vaccinations');
   CollectionReference<Map<String, dynamic>> get _appointments =>
       _db.collection('appointments');
+  CollectionReference<Map<String, dynamic>> get _appointmentSlots =>
+      _db.collection('appointment_slots');
   CollectionReference<Map<String, dynamic>> get _notifications =>
       _db.collection('notifications');
   CollectionReference<Map<String, dynamic>> get _prescriptions =>
@@ -419,6 +422,40 @@ class FirebaseHealthRepository implements HealthRepository {
     });
   }
 
+  List<DateTime> _bookedFromDocs(
+    Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final out = <DateTime>[];
+    for (final d in docs) {
+      final data = d.data();
+      final status = (data['status'] as String? ?? '').toLowerCase();
+      if (status == AppointmentStatus.cancelled.name ||
+          status == 'cancelled' ||
+          status == 'completed') {
+        continue;
+      }
+      final raw = data['timeSlot'] as String?;
+      final slot = DateTime.tryParse(raw ?? '');
+      if (slot != null) out.add(slot);
+    }
+    return out;
+  }
+
+  @override
+  Future<List<DateTime>> getDoctorBookedSlots(String doctorId) async {
+    final snap =
+        await _appointments.where('doctorId', isEqualTo: doctorId).get();
+    return _bookedFromDocs(snap.docs);
+  }
+
+  @override
+  Stream<List<DateTime>> watchDoctorBookedSlots(String doctorId) {
+    return _appointments
+        .where('doctorId', isEqualTo: doctorId)
+        .snapshots()
+        .map((snap) => _bookedFromDocs(snap.docs));
+  }
+
   @override
   Future<Appointment> bookAppointment({
     required String patientId,
@@ -431,8 +468,10 @@ class FirebaseHealthRepository implements HealthRepository {
     String? paymentMethod,
   }) async {
     final gp = GpCareClinicMap.resolve(doctor.hospital);
+    final apptId = _uuid.v4();
+    final lockId = DoctorScheduleSlots.slotLockId(doctor.id, slot);
     final appt = Appointment(
-      id: _uuid.v4(),
+      id: apptId,
       patientId: patientId,
       doctorId: doctor.id,
       doctorName: doctor.name,
@@ -451,7 +490,41 @@ class FirebaseHealthRepository implements HealthRepository {
       paymentMethod: paymentMethod,
       feeLkr: doctor.feeLkr,
     );
-    await _appointments.doc(appt.id).set(appt.toMap());
+
+    final lockRef = _appointmentSlots.doc(lockId);
+    final apptRef = _appointments.doc(apptId);
+
+    try {
+      await _db.runTransaction((tx) async {
+        final existing = await tx.get(lockRef);
+        if (existing.exists) {
+          throw SlotUnavailableException();
+        }
+        tx.set(lockRef, {
+          'doctorId': doctor.id,
+          'doctorName': doctor.name,
+          'timeSlot': slot.toIso8601String(),
+          'date': gpCareDateKey(slot),
+          'time': gpCareTimeLabel(slot),
+          'appointmentId': apptId,
+          'patientId': patientId,
+          'patientName': patientName,
+          'source': 'suwasiri_app',
+          'createdAt': DateTime.now().toIso8601String(),
+        });
+        tx.set(apptRef, appt.toMap());
+      });
+    } on SlotUnavailableException {
+      rethrow;
+    } catch (e) {
+      // Concurrent create can surface as permission / already-exists style errors.
+      final msg = e.toString().toLowerCase();
+      if (msg.contains('already') || msg.contains('exists')) {
+        throw SlotUnavailableException();
+      }
+      rethrow;
+    }
+
     await pushNotification(
       AppNotification(
         id: _uuid.v4(),

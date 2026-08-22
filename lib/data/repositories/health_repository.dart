@@ -59,6 +59,11 @@ abstract class HealthRepository {
   Future<List<Doctor>> getDoctors({String query = ''});
   Future<List<Appointment>> getAppointments(String patientId);
   Stream<List<Appointment>> watchAppointments(String patientId);
+
+  /// Booked consult minutes for [doctorId] (upcoming only), synced from Firestore.
+  Future<List<DateTime>> getDoctorBookedSlots(String doctorId);
+  Stream<List<DateTime>> watchDoctorBookedSlots(String doctorId);
+
   Future<Appointment> bookAppointment({
     required String patientId,
     required Doctor doctor,

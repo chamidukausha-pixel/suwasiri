@@ -82,6 +82,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Profile: family members can edit details like main applicant; dark mode uses black backgrounds + white text
 - [x] Home search bar removed; video consult 5‑min reminder + notification; Call Answer for GP Care ringing; Vault Previous Medical History folders; unique family member profiles
 - [x] Previous medical photos: tap to view + pinch zoom; Switch Account opens member profile; appointments/vaccines write member patientName for GP Care
+- [x] Doctor booking UI matches mockup (sage dates, coral times, reason chips); 6‑month date window; Available/Booked sync with GP Care
 
 ## In progress / next
 

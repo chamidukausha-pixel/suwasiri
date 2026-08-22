@@ -1,7 +1,9 @@
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
+  setDoc,
   updateDoc,
   type Unsubscribe,
 } from "firebase/firestore";
@@ -243,4 +245,119 @@ export async function updateSuwasiriAppointmentStatus(
   if (!isFirebaseConfigured() || !appointmentId) return;
   const db = getFirebaseDb();
   await updateDoc(doc(db, "appointments", appointmentId), { status });
+}
+
+/** Map GP Care staff id / name → Suwasiri doctor catalog id (shared slot locks). */
+export function suwasiriDoctorCatalogId(opts: {
+  staffUserId?: string;
+  doctorName?: string;
+}): string {
+  const id = (opts.staffUserId || "").toLowerCase();
+  const name = (opts.doctorName || "").toLowerCase();
+  if (id.includes("silva") || name.includes("priyantha silva")) {
+    return "d-priyantha-silva";
+  }
+  if (id.includes("anoja") || name.includes("anoja")) {
+    return "d-anoja-senanayake";
+  }
+  if (name.includes("kasun") || name.includes("jayawardena")) {
+    return "d-kasun-jayawardena";
+  }
+  return id || "gp-care-doctor";
+}
+
+function slotLockId(doctorId: string, dateKey: string, timeLabel: string): string {
+  const match = timeLabel.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  let hours = 9;
+  let minutes = 0;
+  if (match) {
+    hours = Number(match[1]) % 12;
+    if (match[3].toUpperCase() === "PM") hours += 12;
+    minutes = Number(match[2]);
+  }
+  const hh = String(hours).padStart(2, "0");
+  const mm = String(minutes).padStart(2, "0");
+  return `${doctorId}_${dateKey}_${hh}-${mm}`;
+}
+
+function timeSlotIso(dateKey: string, timeLabel: string): string {
+  const match = timeLabel.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  let hours = 9;
+  let minutes = 0;
+  if (match) {
+    hours = Number(match[1]) % 12;
+    if (match[3].toUpperCase() === "PM") hours += 12;
+    minutes = Number(match[2]);
+  }
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1, hours, minutes, 0, 0).toISOString();
+}
+
+/**
+ * Clinic books a slot into the same Firestore collections as Suwasiri App,
+ * so mobile shows the time as Booked and cannot double-book.
+ */
+export async function bookGpCareSlotToFirestore(opts: {
+  patientId: string;
+  patientName: string;
+  patientEmail?: string;
+  patientPhone?: string;
+  date: string;
+  time: string;
+  reason: string;
+  doctorId: string;
+  doctorName: string;
+  hospitalId?: string;
+  branchId?: string;
+  clinicName?: string;
+}): Promise<{ ok: true; appointmentId: string } | { ok: false; reason: string }> {
+  if (!isFirebaseConfigured()) {
+    return { ok: false, reason: "Firebase not configured" };
+  }
+  const db = getFirebaseDb();
+  const lockId = slotLockId(opts.doctorId, opts.date, opts.time);
+  const lockRef = doc(db, "appointment_slots", lockId);
+  const existing = await getDoc(lockRef);
+  if (existing.exists()) {
+    return { ok: false, reason: "This doctor date/time is already booked" };
+  }
+  const appointmentId = `gp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const iso = timeSlotIso(opts.date, opts.time);
+  await setDoc(lockRef, {
+    doctorId: opts.doctorId,
+    doctorName: opts.doctorName,
+    timeSlot: iso,
+    date: opts.date,
+    time: opts.time,
+    appointmentId,
+    patientId: opts.patientId,
+    patientName: opts.patientName,
+    source: "gp_care",
+    createdAt: new Date().toISOString(),
+  });
+  await setDoc(doc(db, "appointments", appointmentId), {
+    patientId: opts.patientId,
+    patientName: opts.patientName,
+    patientEmail: opts.patientEmail || "",
+    patientPhone: opts.patientPhone || "",
+    doctorId: opts.doctorId,
+    doctorName: opts.doctorName,
+    specialty: "",
+    timeSlot: iso,
+    date: opts.date,
+    time: opts.time,
+    reason: opts.reason,
+    type: "Standard GP Consult",
+    isTelehealth: false,
+    status: "upcoming",
+    consultMode: "clinic",
+    hospital: opts.clinicName || "PrimeCare Medical Centre - Colombo Central",
+    clinicName: opts.clinicName || "PrimeCare Medical Centre - Colombo Central",
+    hospitalId: opts.hospitalId || HOSPITAL_PRIMECARE,
+    branchId: opts.branchId || BRANCH_COLOMBO,
+    source: "gp_care",
+    paymentStatus: "PENDING",
+    bookedAt: new Date().toISOString(),
+  });
+  return { ok: true, appointmentId };
 }

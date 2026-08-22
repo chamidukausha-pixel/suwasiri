@@ -94,6 +94,7 @@ import { signOutFirebase, staffForAuthUser, subscribeAuth } from "./firebaseAuth
 import type { User } from "firebase/auth";
 import {
   appointmentPatientName,
+  bookGpCareSlotToFirestore,
   compareAppointmentTime,
   isDueTelehealth,
   isVideoBooking,
@@ -101,6 +102,7 @@ import {
   mergePatients,
   stubPatientFromBooking,
   subscribeSuwasiriAppointments,
+  suwasiriDoctorCatalogId,
   updateSuwasiriAppointmentStatus,
 } from "./sync/suwasiriAppointments";
 import { issuePrescriptionsToSuwasiri } from "./sync/suwasiriPrescriptions";
@@ -1089,6 +1091,31 @@ export default function App() {
     e.preventDefault();
     if (!newAptPatientId || !newAptReason) return;
     try {
+      const patient = patients.find((p) => p.id === newAptPatientId);
+      const doctorName = sessionUser?.name || "Dr. Priyantha Silva";
+      const doctorId = suwasiriDoctorCatalogId({
+        staffUserId: sessionUser?.id,
+        doctorName,
+      });
+      const slotResult = await bookGpCareSlotToFirestore({
+        patientId: newAptPatientId,
+        patientName: patient?.name || "Patient",
+        patientEmail: patient?.email,
+        patientPhone: patient?.phone,
+        date: newAptDate,
+        time: newAptTime,
+        reason: newAptReason,
+        doctorId,
+        doctorName,
+        hospitalId: patient?.hospitalId,
+        branchId: patient?.branchId,
+        clinicName: patient?.medicalCenter,
+      });
+      if (!slotResult.ok) {
+        alert(slotResult.reason);
+        return;
+      }
+
       const res = await fetch("/api/appointments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1104,9 +1131,10 @@ export default function App() {
       setAppointments(data.state.appointments);
       setBilling(data.state.billing);
       setShowAptModal(false);
-      alert("Appointment registered successfully and billing invoice raised!");
+      alert("Appointment registered — synced to Suwasiri App slot calendar.");
     } catch (err) {
       console.error(err);
+      alert("Could not book slot. It may already be taken.");
     }
   };
 

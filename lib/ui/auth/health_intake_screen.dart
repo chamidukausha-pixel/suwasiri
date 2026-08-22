@@ -127,9 +127,11 @@ class _HealthIntakeScreenState extends State<HealthIntakeScreen> {
 
     _dob = h.dateOfBirth ?? user?.dateOfBirth;
     _recentVax = h.mostRecentVaccinationDate;
-    _sex = h.sex.isNotEmpty ? h.sex : null;
-    _blood = user?.bloodGroup;
-    _region = user?.region;
+    _sex = const {'female', 'male', 'other'}.contains(h.sex) ? h.sex : null;
+    _blood = AppConstants.canonicalBloodGroup(user?.bloodGroup);
+    _region = AppConstants.mohDistricts.contains(user?.region)
+        ? user?.region
+        : null;
   }
 
   @override
@@ -270,7 +272,7 @@ class _HealthIntakeScreenState extends State<HealthIntakeScreen> {
       name: intake.fullName,
       nic: _nic.text.trim(),
       mobileNo: intake.contactDetails,
-      bloodGroup: _blood,
+      bloodGroup: AppConstants.canonicalBloodGroup(_blood),
       region: _region,
       dateOfBirth: intake.dateOfBirth,
       emergencyContacts: [
@@ -443,8 +445,10 @@ class _HealthIntakeScreenState extends State<HealthIntakeScreen> {
         Text('${_t('sex')} *', style: _labelStyle),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          // ignore: deprecated_member_use
-          value: _sex,
+          key: const ValueKey('health-intake-sex'),
+          initialValue: const {'female', 'male', 'other'}.contains(_sex)
+              ? _sex
+              : null,
           decoration: const InputDecoration(isDense: true),
           items: [
             DropdownMenuItem(value: 'female', child: Text(_t('sexFemale'))),
@@ -456,22 +460,26 @@ class _HealthIntakeScreenState extends State<HealthIntakeScreen> {
         const SizedBox(height: 12),
         _field(_t('nicNo'), _nic, required: true),
         DropdownButtonFormField<String>(
-          // ignore: deprecated_member_use
-          value: _blood,
+          key: const ValueKey('health-intake-blood'),
+          initialValue: AppConstants.canonicalBloodGroup(_blood),
           decoration: InputDecoration(labelText: '${_t('bloodGroup')} *'),
-          items: AppConstants.bloodGroups
-              .map((d) => DropdownMenuItem(value: d, child: Text(d)))
-              .toList(),
+          items: [
+            for (final g in AppConstants.bloodGroups)
+              DropdownMenuItem(value: g, child: Text(g)),
+          ],
           onChanged: (v) => setState(() => _blood = v),
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          // ignore: deprecated_member_use
-          value: _region,
+          key: const ValueKey('health-intake-region'),
+          initialValue: AppConstants.mohDistricts.contains(_region)
+              ? _region
+              : null,
           decoration: InputDecoration(labelText: _t('mohDistrict')),
-          items: AppConstants.mohDistricts
-              .map((d) => DropdownMenuItem(value: d, child: Text(d)))
-              .toList(),
+          items: [
+            for (final d in AppConstants.mohDistricts)
+              DropdownMenuItem(value: d, child: Text(d)),
+          ],
           onChanged: (v) => setState(() => _region = v),
         ),
         const SizedBox(height: 12),

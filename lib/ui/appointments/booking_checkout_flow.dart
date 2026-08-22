@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
@@ -11,12 +12,14 @@ import '../../bloc/notification/notification_cubit.dart';
 import '../../bloc/schedule/schedule_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/map_launcher.dart';
+import '../../data/catalogs/doctor_schedule_slots.dart';
 import '../../data/models/appointment.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/sheet_close_bar.dart';
+import 'booking_confirm_step.dart';
 
 enum _PayChannel { card, bankSlip }
 enum _CheckoutStep { confirm, pay }
@@ -45,9 +48,9 @@ Future<void> showBookingCheckoutFlow(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    backgroundColor: Colors.white,
+    backgroundColor: const Color(0xFFFAF9F7),
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
     builder: (_) => _BookingCheckoutSheet(doctor: doctor),
   );
@@ -165,6 +168,10 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
   String? _slipPath;
   String? _slipName;
   bool _paying = false;
+  bool _slotsLoading = true;
+  List<DateTime> _bookedSlots = const [];
+  StreamSubscription<List<DateTime>>? _bookedSub;
+  String _visitReason = 'Follow up';
 
   final _nameCtrl = TextEditingController();
   final _cardCtrl = TextEditingController();
@@ -173,47 +180,54 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
 
   static const _venueFee = 350;
 
-  static const _times = [
-    TimeOfDay(hour: 9, minute: 30),
-    TimeOfDay(hour: 10, minute: 0),
-    TimeOfDay(hour: 11, minute: 15),
-    TimeOfDay(hour: 13, minute: 0),
-    TimeOfDay(hour: 14, minute: 30),
-    TimeOfDay(hour: 15, minute: 30),
-    TimeOfDay(hour: 16, minute: 15),
-    TimeOfDay(hour: 17, minute: 45),
-  ];
+  List<TimeOfDay> get _times => DoctorScheduleSlots.times;
 
   int get _consultFee => widget.doctor.feeLkr;
   int get _total => _consultFee + _venueFee;
 
-  List<DateTime> get _dates {
-    final now = DateTime.now();
-    return List.generate(7, (i) {
-      final d = now.add(Duration(days: i + 1));
-      return DateTime(d.year, d.month, d.day);
-    });
+  List<DateTime> get _dates => DoctorScheduleSlots.upcomingDates();
+
+  DateTime get _slotDateTime =>
+      DoctorScheduleSlots.combine(_selectedDate, _selectedTime);
+
+  bool _isBooked(TimeOfDay t) {
+    final slot = DoctorScheduleSlots.combine(_selectedDate, t);
+    return DoctorScheduleSlots.isTaken(slot, _bookedSlots);
   }
 
-  DateTime get _slotDateTime => DateTime(
-        _selectedDate.year,
-        _selectedDate.month,
-        _selectedDate.day,
-        _selectedTime.hour,
-        _selectedTime.minute,
-      );
+  void _ensureSelectedTimeAvailable() {
+    if (!_isBooked(_selectedTime)) return;
+    for (final t in _times) {
+      if (!_isBooked(t)) {
+        _selectedTime = t;
+        return;
+      }
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _selectedDate = _dates[2];
-    _selectedTime = _times.last;
+    _selectedDate = _dates.length > 3 ? _dates[3] : _dates.first;
+    _selectedTime = _times.first;
     final user = context.read<AuthCubit>().state.user;
     _nameCtrl.text = user?.name ?? '';
+    _bookedSub = context
+        .read<HealthRepository>()
+        .watchDoctorBookedSlots(widget.doctor.id)
+        .listen((booked) {
+      if (!mounted) return;
+      setState(() {
+        _bookedSlots = booked;
+        _slotsLoading = false;
+        _ensureSelectedTimeAvailable();
+      });
+    });
   }
 
   @override
   void dispose() {
+    unawaited(_bookedSub?.cancel());
     _nameCtrl.dispose();
     _cardCtrl.dispose();
     _expiryCtrl.dispose();
@@ -276,6 +290,16 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
   }
 
   Future<void> _completeBooking({required String paymentMethod}) async {
+    if (_isBooked(_selectedTime)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'That time is already booked for this doctor. Pick an available slot.',
+          ),
+        ),
+      );
+      return;
+    }
     final health = context.read<HealthRepository>();
     final user = context.read<AuthCubit>().state.user!;
     setState(() => _paying = true);
@@ -307,6 +331,10 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
           consultMode: _mode,
         ),
       );
+    } on SlotUnavailableException catch (e) {
+      if (!mounted) return;
+      setState(() => _paying = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } catch (e) {
       if (!mounted) return;
       setState(() => _paying = false);
@@ -322,7 +350,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 220),
         child: _step == _CheckoutStep.confirm
-            ? _ConfirmStep(
+            ? BookingConfirmStep(
                 key: const ValueKey('confirm'),
                 doctor: widget.doctor,
                 mode: _mode,
@@ -330,14 +358,34 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
                 times: _times,
                 selectedDate: _selectedDate,
                 selectedTime: _selectedTime,
+                bookedSlots: _bookedSlots,
+                slotsLoading: _slotsLoading,
+                visitReason: _visitReason,
                 consultFee: _consultFee,
-                venueFee: _venueFee,
-                total: _total,
                 onClose: () => Navigator.pop(context),
                 onMode: (m) => setState(() => _mode = m),
-                onDate: (d) => setState(() => _selectedDate = d),
-                onTime: (t) => setState(() => _selectedTime = t),
-                onProceed: () => setState(() => _step = _CheckoutStep.pay),
+                onDate: (d) => setState(() {
+                  _selectedDate = d;
+                  _ensureSelectedTimeAvailable();
+                }),
+                onTime: (t) {
+                  if (_isBooked(t)) return;
+                  setState(() => _selectedTime = t);
+                },
+                onReason: (r) => setState(() => _visitReason = r),
+                onProceed: () {
+                  if (_isBooked(_selectedTime)) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Pick an available time — this slot is already booked.',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  setState(() => _step = _CheckoutStep.pay);
+                },
               )
             : _PayStep(
                 key: const ValueKey('pay'),
@@ -374,347 +422,6 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
                 },
               ),
       ),
-    );
-  }
-}
-
-class _ConfirmStep extends StatelessWidget {
-  const _ConfirmStep({
-    super.key,
-    required this.doctor,
-    required this.mode,
-    required this.dates,
-    required this.times,
-    required this.selectedDate,
-    required this.selectedTime,
-    required this.consultFee,
-    required this.venueFee,
-    required this.total,
-    required this.onClose,
-    required this.onMode,
-    required this.onDate,
-    required this.onTime,
-    required this.onProceed,
-  });
-
-  final Doctor doctor;
-  final ConsultMode mode;
-  final List<DateTime> dates;
-  final List<TimeOfDay> times;
-  final DateTime selectedDate;
-  final TimeOfDay selectedTime;
-  final int consultFee;
-  final int venueFee;
-  final int total;
-  final VoidCallback onClose;
-  final ValueChanged<ConsultMode> onMode;
-  final ValueChanged<DateTime> onDate;
-  final ValueChanged<TimeOfDay> onTime;
-  final VoidCallback onProceed;
-
-  String _fmtTime(TimeOfDay t) {
-    final dt = DateTime(2026, 1, 1, t.hour, t.minute);
-    return DateFormat('hh:mm a').format(dt);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final money = NumberFormat.decimalPattern();
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: AppColors.trustBlueSoft,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                l.t('confirmAppointment'),
-                style: const TextStyle(
-                  color: AppColors.trustBlue,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 11,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-            const Spacer(),
-            SheetCloseActions(onClose: onClose),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Text(
-          doctor.name,
-          style: const TextStyle(
-            color: AppColors.trustBlueDark,
-            fontWeight: FontWeight.w800,
-            fontSize: 22,
-          ),
-        ),
-        Text(
-          '${doctor.specialty} Consultation',
-          style: const TextStyle(color: AppColors.slateMuted, fontSize: 14),
-        ),
-        const SizedBox(height: 18),
-        Text(
-          l.t('consultationMode'),
-          style: const TextStyle(
-            color: AppColors.trustBlueDark,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _ModeCard(
-                selected: mode == ConsultMode.clinic,
-                icon: Icons.location_on_outlined,
-                label: l.t('clinicConsult'),
-                onTap: () => onMode(ConsultMode.clinic),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _ModeCard(
-                selected: mode == ConsultMode.video,
-                icon: Icons.videocam_outlined,
-                label: l.t('onlineVideoConsult'),
-                onTap: () => onMode(ConsultMode.video),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 18),
-        Row(
-          children: [
-            Text(
-              l.t('availableDates'),
-              style: const TextStyle(
-                color: AppColors.trustBlueDark,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              l.t('nextDays'),
-              style: const TextStyle(color: AppColors.slateMuted, fontSize: 12),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 40,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: dates.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
-            itemBuilder: (_, i) {
-              final d = dates[i];
-              final selected = d == selectedDate;
-              return MinTap(
-                enforceMinSize: false,
-                onTap: () => onDate(d),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: selected ? AppColors.trustBlue : const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    DateFormat('MMM d').format(d),
-                    style: TextStyle(
-                      color: selected ? Colors.white : AppColors.trustBlueDark,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 18),
-        Text(
-          l.t('availableSlots'),
-          style: const TextStyle(
-            color: AppColors.trustBlueDark,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: times.map((t) {
-            final selected = t.hour == selectedTime.hour &&
-                t.minute == selectedTime.minute;
-            return MinTap(
-              enforceMinSize: false,
-              onTap: () => onTime(t),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? AppColors.trustBlueDark
-                      : Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: selected ? AppColors.trustBlueDark : AppColors.border,
-                  ),
-                ),
-                child: Text(
-                  _fmtTime(t),
-                  style: TextStyle(
-                    color: selected ? Colors.white : AppColors.trustBlueDark,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 18),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(
-            children: [
-              _PriceRow(
-                label: l.t('consultationFeesLabel'),
-                value: 'LKR ${money.format(consultFee)}',
-              ),
-              const SizedBox(height: 8),
-              _PriceRow(
-                label: l.t('venueServiceCharge'),
-                value: 'LKR ${money.format(venueFee)}',
-              ),
-              const Divider(height: 20),
-              _PriceRow(
-                label: l.t('estimatedTotal'),
-                value: 'LKR ${money.format(total)}',
-                bold: true,
-                valueColor: AppColors.emerald,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: FilledButton(
-            onPressed: onProceed,
-            child: Text(
-              l.t('proceedSecurePayment'),
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ModeCard extends StatelessWidget {
-  const _ModeCard({
-    required this.selected,
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final bool selected;
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return MinTap(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.trustBlueSoft : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected ? AppColors.trustBlue : AppColors.border,
-            width: selected ? 1.6 : 1,
-          ),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              color: selected ? AppColors.trustBlue : AppColors.slateMuted,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: selected
-                    ? AppColors.trustBlueDark
-                    : AppColors.slateMuted,
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PriceRow extends StatelessWidget {
-  const _PriceRow({
-    required this.label,
-    required this.value,
-    this.bold = false,
-    this.valueColor,
-  });
-
-  final String label;
-  final String value;
-  final bool bold;
-  final Color? valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(
-              color: AppColors.trustBlueDark,
-              fontWeight: bold ? FontWeight.w800 : FontWeight.w500,
-              fontSize: bold ? 13 : 13,
-            ),
-          ),
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            color: valueColor ?? AppColors.slateMuted,
-            fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-            fontSize: bold ? 16 : 13,
-          ),
-        ),
-      ],
     );
   }
 }

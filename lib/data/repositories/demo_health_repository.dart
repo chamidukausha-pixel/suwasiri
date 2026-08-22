@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../catalogs/doctor_catalog.dart';
+import '../catalogs/doctor_schedule_slots.dart';
 import '../catalogs/gp_care_clinic_map.dart';
 import '../catalogs/patient_health_samples.dart';
 import '../catalogs/vaccine_catalog.dart';
@@ -481,10 +482,21 @@ class DemoHealthRepository implements HealthRepository {
         .toList();
   }
 
+  Future<List<Appointment>> _allAppointments() async {
+    final raw = _prefs.getString(_kAppts);
+    if (raw == null) return const [];
+    final list = jsonDecode(raw) as List<dynamic>;
+    return list.map((e) {
+      final m = Map<String, dynamic>.from(e as Map);
+      final id = m.remove('id') as String;
+      return Appointment.fromMap(id, m);
+    }).toList();
+  }
+
   @override
   Future<List<Appointment>> getAppointments(String patientId) async {
-    final raw = _prefs.getString(_kAppts);
-    if (raw == null) {
+    final all = await _allAppointments();
+    if (all.isEmpty) {
       return [
         Appointment(
           id: 'a0',
@@ -498,12 +510,7 @@ class DemoHealthRepository implements HealthRepository {
         ),
       ];
     }
-    final list = jsonDecode(raw) as List<dynamic>;
-    return list.map((e) {
-      final m = Map<String, dynamic>.from(e as Map);
-      final id = m.remove('id') as String;
-      return Appointment.fromMap(id, m);
-    }).where((a) => a.patientId == patientId).toList()
+    return all.where((a) => a.patientId == patientId).toList()
       ..sort((a, b) => a.timeSlot.compareTo(b.timeSlot));
   }
 
@@ -512,6 +519,26 @@ class DemoHealthRepository implements HealthRepository {
     yield await getAppointments(patientId);
     await for (final _ in _apptChanges.stream) {
       yield await getAppointments(patientId);
+    }
+  }
+
+  @override
+  Future<List<DateTime>> getDoctorBookedSlots(String doctorId) async {
+    final all = await _allAppointments();
+    return all
+        .where((a) =>
+            a.doctorId == doctorId &&
+            a.status != AppointmentStatus.cancelled &&
+            a.status != AppointmentStatus.completed)
+        .map((a) => a.timeSlot)
+        .toList();
+  }
+
+  @override
+  Stream<List<DateTime>> watchDoctorBookedSlots(String doctorId) async* {
+    yield await getDoctorBookedSlots(doctorId);
+    await for (final _ in _apptChanges.stream) {
+      yield await getDoctorBookedSlots(doctorId);
     }
   }
 
@@ -527,6 +554,10 @@ class DemoHealthRepository implements HealthRepository {
     String? paymentMethod,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 500));
+    final taken = await getDoctorBookedSlots(doctor.id);
+    if (DoctorScheduleSlots.isTaken(slot, taken)) {
+      throw SlotUnavailableException();
+    }
     final gp = GpCareClinicMap.resolve(doctor.hospital);
     final appt = Appointment(
       id: _uuid.v4(),
@@ -548,11 +579,11 @@ class DemoHealthRepository implements HealthRepository {
       paymentMethod: paymentMethod,
       feeLkr: doctor.feeLkr,
     );
-    final existing = await getAppointments(patientId);
-    final all = [...existing, appt];
+    final all = await _allAppointments();
+    final next = [...all, appt];
     await _prefs.setString(
       _kAppts,
-      jsonEncode(all.map((a) => {'id': a.id, ...a.toMap()}).toList()),
+      jsonEncode(next.map((a) => {'id': a.id, ...a.toMap()}).toList()),
     );
     _apptChanges.add(null);
     await pushNotification(

@@ -41,11 +41,21 @@ service cloud.firestore {
       // Patients write their own / family-member bookings. Any signed-in GP Care
       // staff can read so clinic / video slots appear on the shared calendar.
       allow create: if isSignedIn()
-        && isHouseholdPatient(request.resource.data.patientId);
+        && (isHouseholdPatient(request.resource.data.patientId)
+            || request.resource.data.source == 'gp_care');
       allow read: if isSignedIn();
       allow update, delete: if isSignedIn()
         && (isHouseholdPatient(resource.data.patientId)
             || request.resource.data.patientId == resource.data.patientId);
+    }
+
+    // One doc per doctor + date + time — prevents double booking across
+    // Suwasiri App and Lanka GP Care (same Firestore).
+    match /appointment_slots/{slotId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && !exists(/databases/$(database)/documents/appointment_slots/$(slotId));
+      allow update, delete: if isSignedIn();
     }
 
     // WebRTC signaling for Suwasiri App ↔ GP Care telehealth (no extra devices).

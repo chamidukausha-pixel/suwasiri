@@ -46,4 +46,15 @@ abstract final class AppConstants {
     'O+',
     'O-',
   ];
+
+  /// Maps stored / typed blood groups onto [bloodGroups], or null if unknown.
+  static String? canonicalBloodGroup(String? raw) {
+    if (raw == null) return null;
+    final n = raw.trim().toUpperCase().replaceAll(RegExp(r'\s+'), '');
+    if (n.isEmpty) return null;
+    for (final g in bloodGroups) {
+      if (g.toUpperCase() == n) return g;
+    }
+    return null;
+  }
 }
