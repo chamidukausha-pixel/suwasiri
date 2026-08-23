@@ -183,7 +183,7 @@ class AuthCubit extends Cubit<AuthState> {
     ));
 
     // Publish household Unique Health IDs so GP Care can look them up.
-    for (const m in members) {
+    for (final m in members) {
       try {
         await _auth.updateProfile(m.profile.withEnsuredBarcode());
       } catch (_) {}
