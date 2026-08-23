@@ -114,27 +114,25 @@ class Appointment extends Equatable {
   DateTime get bookedStamp =>
       bookedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
 
-  /// Call tab: clinic cards until slot + 45m; video until slot + 3h.
+  /// Call tab: video consult stays until 1 hour after the booked start.
   bool get isActiveSlot {
     if (status != AppointmentStatus.upcoming) return false;
-    final window =
-        isVideo ? const Duration(hours: 3) : const Duration(minutes: 45);
-    return DateTime.now().isBefore(timeSlot.add(window));
+    return DateTime.now().isBefore(BookingExpiry.hidesAtAppointment(timeSlot));
   }
 
-  /// Patient may join the GP Care room from 15 minutes before the slot.
+  /// Patient may join the GP Care room from 15 minutes before until +1 hour.
   bool get canJoinGpCareCall {
     if (!isVideo || status != AppointmentStatus.upcoming) return false;
     final now = DateTime.now();
     final open = timeSlot.subtract(const Duration(minutes: 15));
-    final close = timeSlot.add(const Duration(hours: 3));
+    final close = BookingExpiry.hidesAtAppointment(timeSlot);
     return !now.isBefore(open) && now.isBefore(close);
   }
 
-  /// Home blue / purple cards stay until local midnight after the slot date.
+  /// Home blue / purple cards hide 1 hour after the booked start time.
   bool isVisibleOnHome([DateTime? now]) {
     if (status != AppointmentStatus.upcoming) return false;
-    return BookingExpiry.isVisibleOnHome(timeSlot, now);
+    return BookingExpiry.isAppointmentVisibleOnHome(timeSlot, now);
   }
 
   Map<String, dynamic> toMap() => {

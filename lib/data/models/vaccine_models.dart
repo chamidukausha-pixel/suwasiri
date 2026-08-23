@@ -124,7 +124,7 @@ class VaccineBooking extends Equatable {
   /// Home green card stays until local midnight after the slot date.
   bool isVisibleOnHome([DateTime? now]) {
     if (status != 'confirmed') return false;
-    return BookingExpiry.isVisibleOnHome(slot, now);
+    return BookingExpiry.isVaccineVisibleOnHome(slot, now);
   }
 
   String get placeLabel {

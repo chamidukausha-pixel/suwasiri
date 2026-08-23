@@ -82,7 +82,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Profile: family members can edit details like main applicant; dark mode uses black backgrounds + white text
 - [x] Home search bar removed; video consult 5‑min reminder + notification; Call Answer for GP Care ringing; Vault Previous Medical History folders; unique family member profiles
 - [x] Previous medical photos: tap to view + pinch zoom; Switch Account opens member profile; appointments/vaccines write member patientName for GP Care
-- [x] Doctor booking UI matches mockup (sage dates, coral times, reason chips); 6‑month date window; Available/Booked sync with GP Care
+- [x] Home doctor bookings (clinic + video) hide 1 hour after slot; Call page dual pane patient|doctor; works per family switch
 - [x] GP Care Clinical Calculators: search registered patient, click name for current details, edit/save; history reloads in the suite
 - [x] Recalls & Reminders live on Receptionist / Front Desk; SMS/email via registered phone/email; completing a recall drops the active count (e.g. 5 → 4)
 - [x] Reception **Book scheduler appointment slot**: drag working doctors, sage dates, coral times, 6‑month window; in-person → Suwasiri Home **blue** card, video → **purple** card; doctor + receptionist calendars show the name on that date

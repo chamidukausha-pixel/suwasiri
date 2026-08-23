@@ -184,17 +184,20 @@ class ScheduleCubit extends Cubit<ScheduleState> {
     _midnightTick?.cancel();
     final now = DateTime.now();
     DateTime? next;
-    void consider(DateTime slot) {
-      final hide = BookingExpiry.hidesAt(slot);
+    void consider(DateTime hide) {
       if (!hide.isAfter(now)) return;
       if (next == null || hide.isBefore(next!)) next = hide;
     }
 
     for (final a in state.appointments) {
-      if (a.status == AppointmentStatus.upcoming) consider(a.timeSlot);
+      if (a.status == AppointmentStatus.upcoming) {
+        consider(BookingExpiry.hidesAtAppointment(a.timeSlot));
+      }
     }
     for (final b in state.vaccineBookings) {
-      if (b.status == 'confirmed') consider(b.slot);
+      if (b.status == 'confirmed') {
+        consider(BookingExpiry.hidesAtVaccine(b.slot));
+      }
     }
     if (next == null) return;
     var wait = next!.difference(now) + const Duration(milliseconds: 300);

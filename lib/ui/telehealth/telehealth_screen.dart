@@ -5,7 +5,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -14,6 +13,7 @@ import '../../bloc/notification/notification_cubit.dart';
 import '../../bloc/schedule/schedule_cubit.dart';
 import '../../bloc/vault/vault_cubit.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/booking_expiry.dart';
 import '../../data/catalogs/doctor_catalog.dart';
 import '../../data/models/appointment.dart';
 import '../../data/models/vault_report.dart';
@@ -25,6 +25,7 @@ import '../widgets/common_widgets.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/suwasiri_brand_header.dart';
 import 'prescription_detail_sheet.dart';
+import 'telehealth_dual_video_stage.dart';
 
 class TelehealthScreen extends StatefulWidget {
   const TelehealthScreen({super.key, this.isActive = true});
@@ -66,7 +67,6 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   bool _showAllTips = false;
   bool _muted = false;
   bool _camOff = false;
-  bool _showAiOverlay = true;
   bool _rxUpdating = true;
   String? _sessionId;
   List<Prescription> _sessionRx = [];
@@ -318,9 +318,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     final now = DateTime.now();
     final untilStart = appt.timeSlot.difference(now);
     if (!untilStart.isNegative) return untilStart;
-    final untilEnd = appt.timeSlot
-        .add(Duration(hours: appt.isVideo ? 3 : 0, minutes: appt.isVideo ? 0 : 45))
-        .difference(now);
+    final untilEnd = BookingExpiry.hidesAtAppointment(appt.timeSlot).difference(now);
     return untilEnd.isNegative ? Duration.zero : untilEnd;
   }
 
@@ -338,7 +336,6 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
       _sessionRx = const [];
       _rxUpdating = true;
       _remaining = _remainingFor(appt);
-      _showAiOverlay = true;
       _muted = false;
       _camOff = false;
       _cameraReady = false;
@@ -696,12 +693,13 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
               ),
             )
           else ...[
-            _VideoStage(
+            TelehealthDualVideoStage(
               muted: _muted,
               camOff: _camOff,
               camera: _camera,
               cameraReady: _cameraReady,
-              showAiOverlay: _showAiOverlay && !_liveConnected,
+              patientName:
+                  context.watch<AuthCubit>().state.user?.displayName ?? 'You',
               doctorName: _doctorName,
               liveConnected: _liveConnected,
               joiningLive: _joiningLive,
@@ -717,12 +715,6 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
                 if (live != null) unawaited(live.setMuted(next));
               },
               onCam: _toggleCamera,
-              onAi: () => setState(() => _showAiOverlay = !_showAiOverlay),
-              onShare: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(l.t('shareSimulated'))),
-                );
-              },
               onEnd: _endCall,
               onJoinLive: _joinGpCareCall,
               onAnswerCall: _joinGpCareCall,
@@ -780,462 +772,6 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     ), // SafeArea
     ), // ScheduleCubit listener
     ); // AuthCubit listener
-  }
-}
-
-class _VideoStage extends StatelessWidget {
-  const _VideoStage({
-    required this.muted,
-    required this.camOff,
-    required this.camera,
-    required this.cameraReady,
-    required this.showAiOverlay,
-    required this.doctorName,
-    required this.liveConnected,
-    required this.joiningLive,
-    required this.canJoinLive,
-    required this.incomingRinging,
-    required this.liveStatus,
-    required this.localRenderer,
-    required this.remoteRenderer,
-    required this.onMute,
-    required this.onCam,
-    required this.onAi,
-    required this.onShare,
-    required this.onEnd,
-    required this.onJoinLive,
-    required this.onAnswerCall,
-  });
-
-  final bool muted;
-  final bool camOff;
-  final CameraController? camera;
-  final bool cameraReady;
-  final bool showAiOverlay;
-  final String doctorName;
-  final bool liveConnected;
-  final bool joiningLive;
-  final bool canJoinLive;
-  final bool incomingRinging;
-  final String liveStatus;
-  final RTCVideoRenderer? localRenderer;
-  final RTCVideoRenderer? remoteRenderer;
-  final VoidCallback onMute;
-  final VoidCallback onCam;
-  final VoidCallback onAi;
-  final VoidCallback onShare;
-  final VoidCallback onEnd;
-  final VoidCallback onJoinLive;
-  final VoidCallback onAnswerCall;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-
-    return Container(
-      height: 340,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.trustBlueDark.withValues(alpha: 0.12),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Doctor / remote GP Care video
-          if (liveConnected && remoteRenderer != null)
-            RTCVideoView(
-              remoteRenderer!,
-              objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-            )
-          else
-            DecoratedBox(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF4A6FA5),
-                  Color(0xFF2C4A6E),
-                  Color(0xFF1A2F45),
-                ],
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 120,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF5B8DEF),
-                    border: Border.all(color: Colors.white24, width: 3),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.25),
-                        blurRadius: 16,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.medical_services_rounded,
-                    size: 56,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  doctorName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 17,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  joiningLive || liveStatus == 'waiting'
-                      ? l.t('waitingForGpCare')
-                      : liveConnected
-                          ? l.t('gpCareConnected')
-                          : l.t('gpCareLive'),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.75),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 48),
-              ],
-            ),
-          ),
-          Positioned(
-            top: 14,
-            left: 14,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.emergencyRed,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    l.t('recSecure'),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 10,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                ),
-                if (liveConnected) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      l.t('gpRoomCamActive'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          Positioned(
-            top: 14,
-            right: 14,
-            child: Container(
-              width: 96,
-              height: 128,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A2332),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.white24),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (!camOff &&
-                      localRenderer != null &&
-                      (joiningLive || liveConnected))
-                    RTCVideoView(
-                      localRenderer!,
-                      mirror: true,
-                      objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                    )
-                  else if (!camOff &&
-                      cameraReady &&
-                      camera != null &&
-                      camera!.value.isInitialized)
-                    FittedBox(
-                      fit: BoxFit.cover,
-                      clipBehavior: Clip.hardEdge,
-                      child: SizedBox(
-                        width: camera!.value.previewSize?.height ?? 96,
-                        height: camera!.value.previewSize?.width ?? 128,
-                        child: CameraPreview(camera!),
-                      ),
-                    )
-                  else
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          camOff ? Icons.videocam_off : Icons.person,
-                          color: Colors.white70,
-                          size: 30,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          camOff ? l.t('cameraOff') : l.t('patientCamera'),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      color: Colors.black54,
-                      child: Text(
-                        l.t('patientCamera'),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (incomingRinging && !liveConnected)
-            Positioned(
-              left: 16,
-              right: 16,
-              bottom: 78,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '$doctorName is calling via Lanka GP Care…',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  FilledButton.icon(
-                    onPressed: joiningLive ? null : onAnswerCall,
-                    icon: Icon(
-                      joiningLive ? Icons.hourglass_top : Icons.call,
-                    ),
-                    label: Text(
-                      joiningLive ? l.t('waitingForGpCare') : 'Answer call',
-                    ),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.onlineGreen,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else if (canJoinLive && !liveConnected)
-            Positioned(
-              left: 16,
-              right: 16,
-              bottom: 78,
-              child: FilledButton.icon(
-                onPressed: joiningLive ? null : onJoinLive,
-                icon: Icon(joiningLive ? Icons.hourglass_top : Icons.videocam),
-                label: Text(
-                  joiningLive ? l.t('waitingForGpCare') : l.t('joinGpCareVideo'),
-                ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.trustBlueDark,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
-            )
-          else if (!canJoinLive && !liveConnected)
-            Positioned(
-              left: 16,
-              right: 110,
-              bottom: 78,
-              child: Text(
-                l.t('videoCallOpensAt'),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          if (showAiOverlay)
-            Positioned(
-              left: 14,
-              right: 110,
-              top: 54,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.trustBlue.withValues(alpha: 0.94),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.trustBlue.withValues(alpha: 0.35),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.auto_awesome,
-                            color: Colors.white, size: 16),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            l.t('aiTranslateTitle'),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 11,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      l.t('aiTranslateBody'),
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.95),
-                        fontSize: 12,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 16,
-            child: Center(
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: const Color(0xE61A2332),
-                  borderRadius: BorderRadius.circular(36),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _CallControl(
-                      icon: muted ? Icons.mic_off : Icons.mic_none_rounded,
-                      onTap: onMute,
-                    ),
-                    const SizedBox(width: 10),
-                    _CallControl(
-                      icon: camOff ? Icons.videocam_off : Icons.videocam,
-                      onTap: onCam,
-                    ),
-                    const SizedBox(width: 10),
-                    _CallControl(
-                      icon: Icons.auto_awesome,
-                      onTap: onAi,
-                      color: AppColors.trustBlue,
-                    ),
-                    const SizedBox(width: 10),
-                    _CallControl(
-                      icon: Icons.file_upload_outlined,
-                      onTap: onShare,
-                    ),
-                    const SizedBox(width: 10),
-                    _CallControl(
-                      icon: Icons.phone_disabled_rounded,
-                      onTap: onEnd,
-                      color: const Color(0xFF3A4454),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CallControl extends StatelessWidget {
-  const _CallControl({
-    required this.icon,
-    required this.onTap,
-    this.color = const Color(0xFF2A3444),
-  });
-
-  final IconData icon;
-  final VoidCallback onTap;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: color,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Icon(icon, color: Colors.white, size: 22),
-        ),
-      ),
-    );
   }
 }
 
