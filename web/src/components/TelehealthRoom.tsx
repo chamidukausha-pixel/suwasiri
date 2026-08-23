@@ -160,6 +160,8 @@ export default function TelehealthRoom({
   const filteredFormulary = formulary.filter((d) => {
     const matchesCat = medCategoryFilter === "All" || d.category === medCategoryFilter;
     if (!matchesCat) return false;
+    if (telehealthMedsList.some((m) => m.drug.toLowerCase().includes(d.name.toLowerCase()))) return false;
+    if (selectedDrugName === d.name) return false;
     if (!drugSearchQuery.trim()) return true;
     const q = drugSearchQuery.toLowerCase();
     return (
@@ -343,7 +345,14 @@ export default function TelehealthRoom({
   };
 
   const openVideoPatient = (apt: Appointment) => {
-    const patient = patients.find((p) => p.id === apt.patientId) || stubPatientFromBooking(apt);
+    const existing = patients.find((p) => p.id === apt.patientId);
+    const displayName = appointmentPatientName(apt, existing);
+    const patient: Patient = {
+      ...(existing || stubPatientFromBooking(apt)),
+      name: displayName,
+      phone: existing?.phone || apt.patientPhone || "",
+      email: existing?.email || apt.patientEmail || "",
+    };
     setSelectedPat(patient);
     setTelehealthNotes(patient.notes || "");
     onSelectVideoPatient?.(patient, apt.id);
@@ -973,11 +982,20 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
                       key={drug.name}
                       type="button"
                       onClick={() => {
-                        setSelectedDrugName(drug.name);
-                        setDrugSearchQuery(drug.name);
-                        setDoseInstr(drug.defaultDose || doseInstr);
-                        setDoseDays(drug.defaultDays || doseDays);
-                        setDoseMeal(drug.defaultMeal || doseMeal);
+                        const days = drug.defaultDays || doseDays;
+                        const line = {
+                          drug: drug.name,
+                          instructions: drug.defaultDose || doseInstr,
+                          duration: String(days).includes("day") ? String(days) : `${days} days`,
+                          meal: drug.defaultMeal || doseMeal,
+                        };
+                        setTelehealthMedsList((prev) =>
+                          prev.some((m) => m.drug === line.drug && m.instructions === line.instructions)
+                            ? prev
+                            : [...prev, line]
+                        );
+                        setSelectedDrugName("");
+                        setDrugSearchQuery("");
                         setShowDrugDropdown(false);
                       }}
                       className="w-full text-left p-2.5 hover:bg-emerald-50 text-xs"

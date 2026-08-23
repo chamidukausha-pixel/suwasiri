@@ -1603,7 +1603,8 @@ app.patch("/api/patients/:id", (req, res) => {
     lastDiastolicBp,
     waistCm,
     clinicalCalculations,
-    observationsHistory
+    observationsHistory,
+    history,
   } = req.body;
 
   const patIndex = store.patients.findIndex(p => p.id === id);
@@ -1641,6 +1642,7 @@ app.patch("/api/patients/:id", (req, res) => {
   if (waistCm !== undefined) pat.waistCm = Number(waistCm);
   if (Array.isArray(clinicalCalculations)) pat.clinicalCalculations = clinicalCalculations;
   if (Array.isArray(observationsHistory)) pat.observationsHistory = observationsHistory;
+  if (Array.isArray(history)) pat.history = history;
 
   if (newVaccineRecord) {
     pat.vaccineRecords.push(newVaccineRecord);
@@ -2220,7 +2222,21 @@ app.post("/api/sample-collections", (req, res) => {
   store.sampleCollections.unshift(newSample);
   if (pat) pat.sampleCollections.unshift(newSample);
 
-  // Add a clinic team notification
+  store.notifications.unshift({
+    id: `notif-sc-${Date.now()}`,
+    patientName,
+    recipient: "Reception / Sample Dispatch Hub",
+    transport: "App Notification",
+    templateType: "PATHOLOGY_ORDER",
+    content: `Doctor ordered ${testName || sampleCategory} (${sampleCategory}) for ${patientName}. Open Sample Dispatch Hub to register collection.`,
+    date: new Date().toISOString().replace("T", " ").substring(0, 16),
+    status: "UNREAD",
+    read: false,
+    sampleId: newSample.id,
+    testName: testName || sampleCategory,
+    registeredBy: ""
+  });
+
   store.clinicMessages.push({
     id: `msg-sc-${Date.now()}`,
     sender: "Diagnostics Hub System",

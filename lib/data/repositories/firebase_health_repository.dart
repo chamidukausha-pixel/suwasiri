@@ -410,9 +410,27 @@ class FirebaseHealthRepository implements HealthRepository {
 
   @override
   Future<List<Doctor>> getDoctors({String query = ''}) async {
+    final merged = [..._doctors];
+    try {
+      final snap = await _db.collection('clinic_doctors').get();
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        if (data['active'] == false) continue;
+        final clinicDoc = Doctor.fromMap(doc.id, data);
+        if (clinicDoc.name.isEmpty) continue;
+        final idx = merged.indexWhere((d) =>
+            d.name.toLowerCase() == clinicDoc.name.toLowerCase() &&
+            d.hospital.toLowerCase() == clinicDoc.hospital.toLowerCase());
+        if (idx >= 0) {
+          merged[idx] = clinicDoc;
+        } else {
+          merged.add(clinicDoc);
+        }
+      }
+    } catch (_) {}
     final q = query.trim().toLowerCase();
-    if (q.isEmpty) return _doctors;
-    return _doctors
+    if (q.isEmpty) return merged;
+    return merged
         .where((d) =>
             d.name.toLowerCase().contains(q) ||
             d.specialty.toLowerCase().contains(q) ||

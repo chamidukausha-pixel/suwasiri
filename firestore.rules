@@ -95,6 +95,11 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    match /clinic_doctors/{doctorId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
+    }
+
     match /consultation_notes/{noteId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn();

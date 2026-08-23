@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Building2, Plus, ShieldAlert, UserCheck, Users } from "lucide-react";
 import type { Branch, Hospital, RoleDefinition, StaffMembership, StaffProvider, StaffUser } from "../types";
+import { GP_CARE_DOCTOR_CATEGORIES } from "../sync/suwasiriClinicDoctors";
 
 interface Props {
   hospitals: Hospital[];
@@ -18,6 +19,7 @@ interface Props {
     roleName: string;
     branchIds: string[];
     phone?: string;
+    specialty?: string;
   }) => Promise<void> | void;
 }
 
@@ -40,6 +42,7 @@ export default function PlatformConsoleView({
   const [staffEmail, setStaffEmail] = useState("");
   const [staffPhone, setStaffPhone] = useState("");
   const [staffRole, setStaffRole] = useState("Doctor");
+  const [staffSpecialty, setStaffSpecialty] = useState("General Practitioner");
   const [staffBranches, setStaffBranches] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -150,7 +153,7 @@ export default function PlatformConsoleView({
                           {hospitalStaff.map((s) => (
                             <div key={s.id} className="bg-white border rounded-lg px-3 py-2 text-xs flex flex-wrap justify-between gap-2">
                               <span className="font-bold text-slate-900">{s.name}</span>
-                              <span className="text-slate-500">{s.role} · {s.email}</span>
+                              <span className="text-slate-500">{s.role}{s.specialty ? ` · ${s.specialty}` : ""} · {s.email}</span>
                             </div>
                           ))}
                         </div>
@@ -171,6 +174,7 @@ export default function PlatformConsoleView({
                             roleName: staffRole,
                             branchIds: staffBranches.length ? staffBranches : hospitalBranches.map((b) => b.id),
                             phone: staffPhone.trim() || undefined,
+                            specialty: staffRole === "Doctor" ? staffSpecialty : undefined,
                           });
                           setStaffName("");
                           setStaffEmail("");
@@ -209,6 +213,17 @@ export default function PlatformConsoleView({
                             <option key={name} value={name}>{name}</option>
                           ))}
                         </select>
+                        {staffRole === "Doctor" && (
+                          <select
+                            value={staffSpecialty}
+                            onChange={(e) => setStaffSpecialty(e.target.value)}
+                            className="border rounded-lg px-3 py-1.5 text-xs sm:col-span-2"
+                          >
+                            {GP_CARE_DOCTOR_CATEGORIES.map((cat) => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                          </select>
+                        )}
                       </div>
                       <div className="flex flex-wrap gap-1">
                         {hospitalBranches.map((b) => {

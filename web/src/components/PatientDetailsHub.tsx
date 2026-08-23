@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { Patient, VaccineRecord, LabResult, PrescriptionRecord, LabOrder, SampleCollection, MedicalCertificateRecord } from "../types";
 import { issueMedicalCertificateToSuwasiri } from "../sync/suwasiriCertificates";
+import { SAMPLE_COLLECTION_CATEGORIES } from "../catalogs/pathologyInvestigations";
 
 interface Props {
   patient: Patient;
@@ -81,7 +82,7 @@ export default function PatientDetailsHub({
   const [draftingErr, setDraftingErr] = useState("");
 
   // Sample collection States
-  const [newSampleCategory, setNewSampleCategory] = useState<"Blood" | "Urinal" | "Both Blood & Urinal">("Blood");
+  const [newSampleCategory, setNewSampleCategory] = useState<string>(SAMPLE_COLLECTION_CATEGORIES[0]);
   const [loggingSample, setLoggingSample] = useState(false);
   const [dispatchName, setDispatchName] = useState("");
   const [dispatchPhone, setDispatchPhone] = useState("");
@@ -267,7 +268,10 @@ export default function PatientDetailsHub({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           patientId: patient.id,
-          sampleCategory: newSampleCategory
+          sampleCategory: newSampleCategory,
+          testName: newSampleCategory,
+          orderedBy: currentRole,
+          patientName: patient.name,
         })
       });
       if (!res.ok) throw new Error("Could not log sample selection core reference");
@@ -655,6 +659,24 @@ export default function PatientDetailsHub({
                   )}
                 </div>
               </div>
+
+              {(patient.history || []).length > 0 && (
+                <div>
+                  <h3 className="font-bold text-xs uppercase text-slate-500 tracking-wider mb-2">Consultation & calculator visits</h3>
+                  <div className="space-y-1.5">
+                    {patient.history.map((visit, index) => (
+                      <div key={`${visit.date}-${index}`} className="bg-white border p-3 rounded text-xs">
+                        <div className="flex justify-between gap-2">
+                          <span className="font-bold text-[#00334f]">{visit.reason}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">{visit.date}</span>
+                        </div>
+                        <p className="text-slate-600 mt-1">{visit.notes}</p>
+                        <p className="text-[10px] text-slate-400 mt-1">{visit.doctor}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* SECTION: CLINIC ISSUED MEDICINES & SUWASIRI PORTAL AUTO-SYNC */}
               <div className="border bg-[#ebf5f3]/50 border-emerald-200/60 p-4 rounded-lg space-y-3.5">
@@ -1468,9 +1490,9 @@ export default function PatientDetailsHub({
                       onChange={(e: any) => setNewSampleCategory(e.target.value)}
                       className="p-2 border rounded w-full text-xs"
                     >
-                      <option value="Blood">Blood Sample</option>
-                      <option value="Urinal">Urinal Sample</option>
-                      <option value="Both Blood & Urinal">Both Blood & Urinal</option>
+                      {SAMPLE_COLLECTION_CATEGORIES.map((cat) => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
