@@ -56,7 +56,7 @@ import {
 
 import { 
   Patient, Appointment, Alert, Task, Billing, VaccineRecord, LabResult, PrescriptionRecord, LabOrder, NotificationLog, ClinicMessage, Expense,
-  Hospital, Branch, RoleDefinition, StaffMembership, StaffUser, StaffProvider, MedicalCertificateRecord
+  Hospital, Branch, RoleDefinition, StaffMembership, StaffUser, StaffProvider, MedicalCertificateRecord, PatientAccessRequest, AuditLogEntry
 } from "./types";
 
 import ClinicMonthCalendar, { LiveColomboClock } from "./components/ClinicMonthCalendar";
@@ -71,6 +71,8 @@ import PatientDetailsHub from "./components/PatientDetailsHub";
 import DoctorClinicalRecordModal from "./components/DoctorClinicalRecordModal";
 import ClinicalCalculatorsModal from "./components/ClinicalCalculatorsModal";
 import RecallsDashboard from "./components/RecallsDashboard";
+import ReceptionBookingScheduler from "./components/ReceptionBookingScheduler";
+import type { ReceptionBookPayload } from "./components/ReceptionBookingScheduler";
 import PatientPortalView from "./components/PatientPortalView";
 import PracticeManagerView from "./components/PracticeManagerView";
 import SystemAdminView from "./components/SystemAdminView";
@@ -83,6 +85,7 @@ import ReportsAnalyticsView from "./components/ReportsAnalyticsView";
 import { RecallRecord, ClinicalDocument } from "./types";
 import {
   BRANCH_COLOMBO,
+  DEFAULT_STAFF_DIRECTORY,
   HOSPITAL_PRIMECARE,
   canViewHospitalWideCharts,
   defaultTabFor,
@@ -106,6 +109,8 @@ import {
   updateSuwasiriAppointmentStatus,
 } from "./sync/suwasiriAppointments";
 import { issuePrescriptionsToSuwasiri } from "./sync/suwasiriPrescriptions";
+import { lookupSuwasiriHealthId, patientVisibleAtHospital } from "./sync/suwasiriHealthId";
+import { saveConsultationNote } from "./sync/suwasiriConsultSync";
 import {
   applySuwasiriChart,
   subscribeSuwasiriPatientCharts,
@@ -444,6 +449,7 @@ export default function App() {
   const [memberships, setMemberships] = useState<StaffMembership[]>([]);
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [staffDirectory, setStaffDirectory] = useState<StaffProvider[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
 
   // Navigation tab routing
   const [activeTab, setActiveTab] = useState<string>("dashboard");
@@ -488,6 +494,10 @@ export default function App() {
   const [labOrders, setLabOrders] = useState<LabOrder[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [sampleCollections, setSampleCollections] = useState<any[]>([]);
+  const [patientAccessRequests, setPatientAccessRequests] = useState<PatientAccessRequest[]>([]);
+  const [accessActionPatient, setAccessActionPatient] = useState<Patient | null>(null);
+  const [accessActionType, setAccessActionType] = useState<"DELETE" | "BLOCK">("DELETE");
+  const [accessActionComment, setAccessActionComment] = useState("");
   const [loading, setLoading] = useState<boolean>(true);
 
   const staffMatch = authUser && !loading ? staffForAuthUser(authUser, staffUsers) : undefined;
@@ -660,6 +670,16 @@ export default function App() {
     return { year: n.getFullYear(), month: n.getMonth() };
   });
   const [selectedClinicDate, setSelectedClinicDate] = useState(() => formatDateKey(new Date()));
+  const [selectedBillingDate, setSelectedBillingDate] = useState(() => formatDateKey(new Date()));
+  const [billingCalendarMonth, setBillingCalendarMonth] = useState(() => {
+    const n = new Date();
+    return { year: n.getFullYear(), month: n.getMonth() };
+  });
+  const [selectedAuditDate, setSelectedAuditDate] = useState(() => formatDateKey(new Date()));
+  const [auditCalendarMonth, setAuditCalendarMonth] = useState(() => {
+    const n = new Date();
+    return { year: n.getFullYear(), month: n.getMonth() };
+  });
 
   // GP Exam Room Medication Search Bar states
   const [medSearchQuery, setMedSearchQuery] = useState<string>("");
@@ -677,6 +697,8 @@ export default function App() {
   const [newAptReason, setNewAptReason] = useState<string>("General Health Checkup");
   const [newAptStatus, setNewAptStatus] = useState<Appointment["status"]>("SCHEDULED");
   const [newAptDate, setNewAptDate] = useState<string>(formatDateKey(new Date()));
+  const [bookingRecallId, setBookingRecallId] = useState<string | null>(null);
+  const [bookingMode, setBookingMode] = useState<"book" | "walkin">("book");
 
   // Consultation active desk states
   const [consultNotes, setConsultNotes] = useState<string>("");
@@ -729,7 +751,7 @@ export default function App() {
   const [ledgerCategoryFilter, setLedgerCategoryFilter] = useState<string>("all");
 
   // Secure clinic chat active channel
-  const [activeChannel, setActiveChannel] = useState<string>("#general-clinical");
+  const [activeChannel, setActiveChannel] = useState<string>("#clinic-team");
 
   // Fetch initial client-server state
   const fetchState = async () => {
@@ -748,12 +770,17 @@ export default function App() {
       setLabOrders(data.labOrders || []);
       setExpenses(data.expenses || []);
       setSampleCollections(data.sampleCollections || []);
+      setPatientAccessRequests(data.patientAccessRequests || []);
       setHospitals(data.hospitals || []);
       setBranches(data.branches || []);
-      setRoleDefs(data.roles || []);
+      setRoleDefs((data.roles || []).map((r: RoleDefinition) =>
+        r.name === "Receptionist" ? { ...r, canManageRecalls: true } : r
+      ));
       setMemberships(data.memberships || []);
       setStaffUsers(data.staffUsers || []);
       setStaffDirectory(data.staffDirectory || []);
+      if (Array.isArray(data.recalls) && data.recalls.length) setRecalls(data.recalls);
+      if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
       
       // Auto-set first patient id for appointment book dropdown
       if (data.patients && data.patients.length > 0) {
@@ -867,8 +894,18 @@ export default function App() {
 
   const hospitalRoles = roleDefs.filter((r) => r.hospitalId === sessionHospitalId);
   const hospitalStaff = staffDirectory.filter((s) => s.hospitalId === sessionHospitalId);
+  const workingDoctors = hospitalStaff.filter(
+    (s) => s.active && /doctor|medical officer/i.test(s.role || "")
+  );
+  const activeRecallCount = recalls.filter(
+    (r) => r.status !== "COMPLETED" && r.status !== "CANCELLED"
+  ).length;
   const hospitalBranches = branches.filter((b) => b.hospitalId === sessionHospitalId);
-  const hospitalPatients = patients.filter((p) => (p.hospitalId || HOSPITAL_PRIMECARE) === sessionHospitalId);
+  const hospitalPatients = patients.filter((p) =>
+    patientVisibleAtHospital(p, sessionHospitalId) &&
+    p.accessStatus !== "DELETED" &&
+    p.accessStatus !== "BLOCKED"
+  );
   const tenantAppointments = appointments.filter((a) => {
     if (a.hospitalId) return a.hospitalId === sessionHospitalId;
     const p = patients.find((pt) => pt.id === a.patientId);
@@ -884,6 +921,22 @@ export default function App() {
     acc[a.date] = (acc[a.date] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
+  const dayBookedAppointments = tenantAppointments.filter((a) => a.date === selectedBillingDate);
+  const dayBilling = billing.filter((inv) =>
+    dayBookedAppointments.some(
+      (a) => (inv.patientId && a.patientId === inv.patientId) || a.patientName === inv.patientName
+    )
+  );
+  const jumpToBillingToday = () => {
+    const n = new Date();
+    setBillingCalendarMonth({ year: n.getFullYear(), month: n.getMonth() });
+    setSelectedBillingDate(formatDateKey(n));
+  };
+  const jumpToAuditToday = () => {
+    const n = new Date();
+    setAuditCalendarMonth({ year: n.getFullYear(), month: n.getMonth() });
+    setSelectedAuditDate(formatDateKey(n));
+  };
   const jumpToToday = () => {
     const n = new Date();
     setCalendarMonth({ year: n.getFullYear(), month: n.getMonth() });
@@ -950,12 +1003,58 @@ export default function App() {
   };
 
   const persistStaffDirectory = async (next: StaffProvider[]) => {
+    const hospitalId = next[0]?.hospitalId || sessionHospitalId;
     await fetch("/api/tenancy/staff-directory", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ hospitalId: sessionHospitalId, staffDirectory: next }),
+      body: JSON.stringify({ hospitalId, staffDirectory: next }),
     });
-    setStaffDirectory((prev) => [...prev.filter((s) => s.hospitalId !== sessionHospitalId), ...next]);
+    setStaffDirectory((prev) => [...prev.filter((s) => s.hospitalId !== hospitalId), ...next]);
+  };
+
+  const persistMemberships = async (next: StaffMembership[]) => {
+    const res = await fetch("/api/tenancy/memberships", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ memberships: next }),
+    });
+    const data = await res.json();
+    if (data.memberships) setMemberships(data.memberships);
+  };
+
+  const persistRecalls = async (next: RecallRecord[]) => {
+    setRecalls(next);
+    await fetch("/api/recalls", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recalls: next }),
+    }).catch(() => undefined);
+  };
+
+  const logAudit = async (entry: Partial<AuditLogEntry>) => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    const payload = {
+      timestamp,
+      user: sessionUser?.name || String(currentRole),
+      role: currentRole === "Doctor" || currentRole === "Receptionist" || currentRole === "Nurse" || currentRole === "Admin"
+        ? currentRole
+        : "Doctor",
+      ...entry,
+    };
+    try {
+      const res = await fetch("/api/audit-logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.auditLogs) setAuditLogs(data.auditLogs);
+      else if (data.log) setAuditLogs((prev) => [data.log, ...prev]);
+    } catch {
+      /* ignore */
+    }
   };
 
   const persistBranches = async (action: "create" | "update" | "delete", payload: any) => {
@@ -1087,54 +1186,209 @@ export default function App() {
   };
 
   // Appointment creation
+  const bookClinicSlot = async (opts: {
+    patientId: string;
+    date: string;
+    time: string;
+    reason: string;
+    doctorName?: string;
+    consultMode?: "clinic" | "video";
+    specialty?: string;
+    status?: Appointment["status"];
+  }) => {
+    const patient = patients.find((p) => p.id === opts.patientId);
+    const doctorName = opts.doctorName || sessionUser?.name || "Dr. Priyantha Silva";
+    const doctorId = suwasiriDoctorCatalogId({
+      staffUserId: sessionUser?.id,
+      doctorName,
+    });
+    const video = opts.consultMode === "video";
+    const slotResult = await bookGpCareSlotToFirestore({
+      patientId: opts.patientId,
+      patientName: patient?.name || "Patient",
+      patientEmail: patient?.email,
+      patientPhone: patient?.phone,
+      date: opts.date,
+      time: opts.time,
+      reason: opts.reason,
+      doctorId,
+      doctorName,
+      hospitalId: patient?.hospitalId,
+      branchId: patient?.branchId,
+      clinicName: patient?.medicalCenter,
+      specialty: opts.specialty,
+      consultMode: opts.consultMode || "clinic",
+      isTelehealth: video,
+    });
+    if (slotResult.ok === false) {
+      throw new Error(slotResult.reason);
+    }
+
+    const res = await fetch("/api/appointments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        patientId: opts.patientId,
+        time: opts.time,
+        reason: opts.reason,
+        status: opts.status || "SCHEDULED",
+        date: opts.date,
+        doctorName,
+        type: video ? "Telehealth Video" : "Standard GP Consult",
+        isTelehealth: video,
+        consultMode: video ? "video" : "clinic",
+        patientName: patient?.name,
+        source: "gp_care",
+      })
+    });
+    const data = await res.json();
+    if (data.state?.appointments) setAppointments(data.state.appointments);
+    if (data.state?.billing) setBilling(data.state.billing);
+    return slotResult;
+  };
+
   const handleCreateAppointment = async (e: FormEvent) => {
     e.preventDefault();
     if (!newAptPatientId || !newAptReason) return;
     try {
-      const patient = patients.find((p) => p.id === newAptPatientId);
-      const doctorName = sessionUser?.name || "Dr. Priyantha Silva";
-      const doctorId = suwasiriDoctorCatalogId({
-        staffUserId: sessionUser?.id,
-        doctorName,
-      });
-      const slotResult = await bookGpCareSlotToFirestore({
+      await bookClinicSlot({
         patientId: newAptPatientId,
-        patientName: patient?.name || "Patient",
-        patientEmail: patient?.email,
-        patientPhone: patient?.phone,
         date: newAptDate,
         time: newAptTime,
         reason: newAptReason,
-        doctorId,
-        doctorName,
-        hospitalId: patient?.hospitalId,
-        branchId: patient?.branchId,
-        clinicName: patient?.medicalCenter,
+        status: newAptStatus,
       });
-      if (!slotResult.ok) {
-        alert(slotResult.reason);
-        return;
-      }
-
-      const res = await fetch("/api/appointments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          patientId: newAptPatientId,
-          time: newAptTime,
-          reason: newAptReason,
-          status: newAptStatus,
-          date: newAptDate
-        })
-      });
-      const data = await res.json();
-      setAppointments(data.state.appointments);
-      setBilling(data.state.billing);
       setShowAptModal(false);
       alert("Appointment registered — synced to Suwasiri App slot calendar.");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Could not book slot. It may already be taken.");
+      alert(err?.message || "Could not book slot. It may already be taken.");
+    }
+  };
+
+  const handleSchedulerConfirm = async (payload: ReceptionBookPayload) => {
+    await bookClinicSlot({
+      patientId: payload.patientId,
+      date: payload.date,
+      time: payload.time,
+      reason: payload.reason,
+      doctorName: payload.doctorName,
+      consultMode: payload.consultMode,
+      specialty: payload.specialty,
+      status: payload.isWalkInOverflow ? "CHECKED IN" : "SCHEDULED",
+    });
+    if (bookingRecallId) {
+      setRecalls((prev) => prev.map((r) => r.id === bookingRecallId ? {
+        ...r,
+        status: "BOOKED",
+        assignedDoctor: payload.doctorName,
+      } : r));
+      setBookingRecallId(null);
+    }
+    setShowAptModal(false);
+    setBookingMode("book");
+    const when = `${payload.date} at ${payload.time}`;
+    if (payload.isWalkInOverflow) {
+      alert(`${when}: walk-in added at the end of this session. Change their queue place in Lobby if needed.`);
+      return;
+    }
+    alert(
+      payload.consultMode === "video"
+        ? `Video consult booked for ${when}. It will show on the patient's Suwasiri Home purple card and on this clinic calendar on that date.`
+        : `In-person visit booked for ${when}. It will show on the patient's Suwasiri Home blue card and on this clinic calendar on that date.`
+    );
+  };
+
+  const handleSyncUniqueHealthId = async (raw: string) => {
+    const input = raw.trim();
+    if (!input) return;
+    setBarcodeLoading(true);
+    try {
+      let patient = await lookupSuwasiriHealthId(input);
+      if (patient) {
+        const res = await fetch("/api/patients", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: patient.id,
+            name: patient.name,
+            age: patient.age,
+            gender: patient.gender,
+            bloodType: patient.bloodType,
+            allergies: patient.allergies,
+            phone: patient.phone,
+            email: patient.email,
+            notes: patient.notes,
+            medicalHistory: patient.medicalHistory,
+            medicalCenter: activeHospital?.name || patient.medicalCenter,
+            hospitalId: sessionHospitalId || HOSPITAL_PRIMECARE,
+            branchId: sessionBranchId || BRANCH_COLOMBO,
+            suwasiriBarcode: patient.suwasiriBarcode || input.toUpperCase(),
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.state?.patients) setPatients(data.state.patients);
+          patient = data.patient || patient;
+        } else {
+          setPatients((prev) => prev.some((p) => p.id === patient!.id) ? prev : [patient!, ...prev]);
+        }
+        setBarcodeSearchText("");
+        setActiveHubInitialTab("history");
+        setActiveHubPatient(patient);
+        alert(`Synced ${patient.name} from Unique Health ID ${input} into ${activeHospital?.name || "this clinic"} only.`);
+        return;
+      }
+      const res = await fetch(`/api/suwasiri/barcode/${encodeURIComponent(input)}`);
+      if (!res.ok) throw new Error("Health ID not found on Suwasiri.");
+      const data = await res.json();
+      if (data.state?.patients) setPatients(data.state.patients);
+      setBarcodeSearchText("");
+      alert(`Loaded patient "${data.patient.name}" into the clinic registry.`);
+      setActiveHubPatient(data.patient);
+    } catch (err: any) {
+      alert("Could not sync Unique Health ID: " + err.message);
+    } finally {
+      setBarcodeLoading(false);
+    }
+  };
+
+  const persistCalculatorPatient = async (updated: Patient) => {
+    setPatients((prev) => prev.map((p) => p.id === updated.id ? { ...p, ...updated } : p));
+    setSuwasiriPatients((prev) => prev.map((p) => p.id === updated.id ? { ...p, ...updated } : p));
+    setActiveDoctorRecordPatient(updated);
+    try {
+      const res = await fetch(`/api/patients/${updated.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          age: updated.age,
+          gender: updated.gender,
+          phone: updated.phone,
+          email: updated.email,
+          bloodType: updated.bloodType,
+          allergies: updated.allergies,
+          medicalHistory: updated.medicalHistory,
+          heightCm: updated.heightCm,
+          weightKg: updated.weightKg,
+          lastSystolicBp: updated.lastSystolicBp,
+          lastDiastolicBp: updated.lastDiastolicBp,
+          waistCm: updated.waistCm,
+          clinicalCalculations: updated.clinicalCalculations,
+          observationsHistory: updated.observationsHistory,
+          historyEntry: {
+            reason: "Clinical Decision Calculators Suite",
+            doctor: sessionUser?.name || "GP",
+            notes: updated.history?.[0]?.notes || "Calculator details updated",
+          },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.state?.patients) setPatients(data.state.patients);
+      }
+    } catch (err) {
+      console.warn("Calculator patient persist:", err);
     }
   };
 
@@ -1427,6 +1681,13 @@ export default function App() {
       }
 
       alert(`Consultation records locked securely. Digitally signed SLMC e-Prescription issued: ${rxNum} and synced to Suwasiri Vault → E-Prescription.`);
+      void logAudit({
+        action: "Saved consultation and sealed e-prescription",
+        category: "PRESCRIPTION",
+        patientId: selectedConsultPatient.id,
+        patientName: selectedConsultPatient.name,
+        details: `Medicines: ${consultMedsList.join("; ") || "None"}. Notes: ${consultNotes || "—"}. Rx ${rxNum}.`,
+      });
       setActiveReceiptRx({ patient: savedPatient, prescription: newPrescriptionRecord });
 
       setActiveHubInitialTab("prescriptions");
@@ -1615,11 +1876,65 @@ export default function App() {
   };
 
   // Clinic Messaging team chat handler
+  const openClinicalHubWithHistory = (patient: Patient) => {
+    setActiveHubInitialTab("history");
+    setActiveHubPatient(patient);
+    const history = (patient.medicalHistory || []).join("; ") || "No previous history on file.";
+    void saveConsultationNote({
+      patientId: patient.id,
+      patientName: patient.name,
+      doctor: sessionUser?.name || currentRole,
+      clinicName: activeHospital?.name || patient.medicalCenter,
+      body: `Clinical Record Hub opened for ${patient.name}. History: ${history}`,
+    });
+  };
+
+  const submitPatientAccessRequest = async () => {
+    if (!accessActionPatient || !accessActionComment.trim()) {
+      alert("Please write a comment explaining why this patient should be deleted or blocked.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/patient-access-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientId: accessActionPatient.id,
+          type: accessActionType,
+          comment: accessActionComment.trim(),
+          requestedBy: sessionUser?.name || currentRole,
+          hospitalId: sessionHospitalId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Request failed");
+      if (data.state?.patients) setPatients(data.state.patients);
+      if (data.state?.patientAccessRequests) setPatientAccessRequests(data.state.patientAccessRequests);
+      setAccessActionPatient(null);
+      setAccessActionComment("");
+      alert("Sent to admin for approval. The patient stays visible until an administrator reviews this request.");
+    } catch (err: any) {
+      alert(err.message || "Could not submit request.");
+    }
+  };
+
+  const reviewPatientAccessRequest = async (id: string, status: "APPROVED" | "REJECTED") => {
+    try {
+      const res = await fetch(`/api/patient-access-requests/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status, reviewedBy: sessionUser?.name || currentRole }),
+      });
+      const data = await res.json();
+      if (data.state?.patients) setPatients(data.state.patients);
+      if (data.state?.patientAccessRequests) setPatientAccessRequests(data.state.patientAccessRequests);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handlePostSecureClinicChat = async (text: string, channel: string) => {
-    let sName = "Dr. Priyantha Silva";
-    if (currentRole === "Hospital Super Admin" || currentRole === "Admin" || currentRole === "Practice Manager") sName = sessionUser?.name || "Ms. Sandamali Jayasekara";
-    else if (currentRole === "Receptionist") sName = sessionUser?.name || "Mr. Thusitha Perera";
-    else sName = sessionUser?.name || "Dr. Priyantha Silva";
+    const sName = sessionUser?.name || currentRole;
 
     try {
       const res = await fetch("/api/clinical-chat", {
@@ -1696,6 +2011,13 @@ export default function App() {
       if (data.state?.notifications) setNotifications(data.state.notifications);
       if (data.state?.clinicMessages) setClinicMessages(data.state.clinicMessages);
       alert(`Pathology order for "${testName}" sent to Sample Dispatch Hub. Reception will be notified.`);
+      void logAudit({
+        action: "Ordered pathology investigation",
+        category: "PATHOLOGY",
+        patientId,
+        patientName: pat?.name,
+        details: `Lab test issued: ${testName}. ${remarks || ""}`.trim(),
+      });
     } catch (err) {
       console.error(err);
       alert("Could not dispatch the pathology order.");
@@ -1709,6 +2031,17 @@ export default function App() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reviewLabResultId: labResultId, reviewedBy: sessionUser?.name || currentRole }),
+      });
+      const pat = patients.find((p) => p.id === patientId);
+      const lab = pat?.labResults?.find((l) => l.id === labResultId);
+      void logAudit({
+        action: "Reviewed pathology result",
+        category: "PATHOLOGY",
+        patientId,
+        patientName: pat?.name,
+        details: lab
+          ? `Reviewed ${lab.testName}: ${lab.result}. ${lab.remarks || ""}`
+          : `Reviewed lab result ${labResultId}.`,
       });
     } catch (err) {
       console.error(err);
@@ -1958,13 +2291,14 @@ export default function App() {
 
   // Name-first registry filter: searching a patient name shows only that person
   const filteredPatients = patients.filter(p => {
-    if ((p.hospitalId || HOSPITAL_PRIMECARE) !== sessionHospitalId) return false;
+    if (!patientVisibleAtHospital(p, sessionHospitalId)) return false;
+    if (p.accessStatus === "DELETED" || p.accessStatus === "BLOCKED") return false;
     if (!isPlatformSA && !canViewHospitalWideCharts(activeRole) && (p.branchId || BRANCH_COLOMBO) !== sessionBranchId) return false;
     if (focusedSearchPatientId) return p.id === focusedSearchPatientId;
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase().trim();
     const nameHits = patients.filter((x) => {
-      if ((x.hospitalId || HOSPITAL_PRIMECARE) !== sessionHospitalId) return false;
+      if (!patientVisibleAtHospital(x, sessionHospitalId)) return false;
       return x.name.toLowerCase().includes(query);
     });
     if (nameHits.length > 0) {
@@ -2132,7 +2466,7 @@ export default function App() {
         <nav className="flex-1 px-4 mt-4 space-y-1 overflow-y-auto">
           {!isPatientOnly && (
           <>
-          {(canOpen("dashboard") || canOpen("clinical") || canOpen("pathology") || canOpen("documents") || canOpen("ai_features") || canOpen("calculators") || canOpen("recalls") || canOpen("patients") || canOpen("telehealth")) && (
+          {(canOpen("dashboard") || canOpen("clinical") || canOpen("pathology") || canOpen("documents") || canOpen("ai_features") || canOpen("calculators") || canOpen("telehealth")) && (
           <div className="pb-1">
             <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider px-2">Clinical Core (Doctor Portal)</span>
           </div>
@@ -2227,6 +2561,26 @@ export default function App() {
           </button>
           )}
 
+          {canOpen("telehealth") && (
+          <button
+            onClick={() => requestTab("telehealth")}
+            className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
+              activeTab === "telehealth"
+                ? "text-[#00334f] bg-[#e7eeff] font-bold shadow-xs"
+                : "text-[#72787f] hover:text-[#00334f] hover:bg-[#f0f3ff]"
+            }`}
+          >
+            <Video className="w-4 h-4 mr-3" />
+            <span className="text-[13px] font-medium">Telehealth Room</span>
+          </button>
+          )}
+
+          {(canOpen("calendar") || canOpen("billing") || canOpen("sampleCollection") || canOpen("chat") || canOpen("recalls") || canOpen("patients")) && (
+          <div className="pt-2 pb-1 border-t border-slate-100">
+            <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider px-2">Receptionist & Front Desk</span>
+          </div>
+          )}
+
           {canOpen("recalls") && (
           <button
             onClick={() => requestTab("recalls")}
@@ -2238,6 +2592,11 @@ export default function App() {
           >
             <Bell className="w-4 h-4 mr-3 text-red-500" />
             <span className="text-[13px] font-medium">Recalls & Reminders</span>
+            {activeRecallCount > 0 && (
+              <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center">
+                {activeRecallCount}
+              </span>
+            )}
           </button>
           )}
 
@@ -2253,26 +2612,6 @@ export default function App() {
             <Users className="w-4 h-4 mr-3" />
             <span className="text-[13px] font-medium">Patient Clinical Records</span>
           </button>
-          )}
-
-          {canOpen("telehealth") && (
-          <button
-            onClick={() => requestTab("telehealth")}
-            className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
-              activeTab === "telehealth"
-                ? "text-[#00334f] bg-[#e7eeff] font-bold shadow-xs"
-                : "text-[#72787f] hover:text-[#00334f] hover:bg-[#f0f3ff]"
-            }`}
-          >
-            <Video className="w-4 h-4 mr-3" />
-            <span className="text-[13px] font-medium">Telehealth Room</span>
-          </button>
-          )}
-
-          {(canOpen("calendar") || canOpen("billing") || canOpen("sampleCollection") || canOpen("chat")) && (
-          <div className="pt-2 pb-1 border-t border-slate-100">
-            <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider px-2">Receptionist & Front Desk</span>
-          </div>
           )}
 
           {canOpen("calendar") && (
@@ -2458,6 +2797,7 @@ export default function App() {
                 setNewAptPatientId(patients[0].id);
               }
               setNewAptDate(selectedClinicDate);
+              setBookingMode("book");
               setShowAptModal(true);
             }}
             className="w-full bg-[#00334f] text-white py-2.5 px-3 font-bold text-xs rounded shadow hover:bg-[#0c4a6e] transition-all flex items-center justify-center cursor-pointer active:scale-95"
@@ -2794,7 +3134,7 @@ export default function App() {
                           <span className="text-[10px] uppercase font-bold tracking-wider">Recalls</span>
                           <Bell className="w-4 h-4 text-rose-600 group-hover:scale-110 transition-transform" />
                         </div>
-                        <div className="text-2xl font-black text-rose-900">{recalls.length || 5}</div>
+                        <div className="text-2xl font-black text-rose-900">{activeRecallCount}</div>
                         <p className="text-[10px] text-rose-700 mt-0.5">Diabetes & CST</p>
                       </div>
 
@@ -3247,6 +3587,7 @@ export default function App() {
                         onClick={() => {
                           if (patients.length > 0) setNewAptPatientId(patients[0].id);
                           setNewAptDate(selectedClinicDate);
+                          setBookingMode("book");
                           setShowAptModal(true);
                         }}
                         className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3.5 py-2 text-xs font-bold rounded flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
@@ -3256,11 +3597,16 @@ export default function App() {
                       </button>
 
                       <button
-                        onClick={() => setShowPatientModal(true)}
+                        onClick={() => {
+                          if (patients.length > 0) setNewAptPatientId(patients[0].id);
+                          setNewAptDate(selectedClinicDate);
+                          setBookingMode("walkin");
+                          setShowAptModal(true);
+                        }}
                         className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 px-3 py-2 text-xs font-bold rounded flex items-center gap-1.5 transition-all cursor-pointer"
                       >
                         <UserPlus className="w-4 h-4 text-emerald-600" />
-                        Fast Walk-In
+                        Check walk-in availability
                       </button>
                     </div>
                   </div>
@@ -3626,8 +3972,8 @@ export default function App() {
               <div className="bg-white p-6 border rounded space-y-4">
                 <div className="flex justify-between items-center pb-2 border-b">
                   <div>
-                    <h2 className="font-serif font-bold text-lg text-[#00334f]">Clinical registry files and past histories</h2>
-                    <p className="text-xs text-slate-500 font-sans">Double click any health card profile below to view vaccine records, lab results, and print past e-prescriptions.</p>
+                    <h2 className="font-serif font-bold text-lg text-[#00334f]">Patient Clinical Records — Front Desk</h2>
+                    <p className="text-xs text-slate-500 font-sans">Sync a caller’s Unique Health ID, then check walk-in availability or open their file.</p>
                   </div>
                   <button
                     onClick={() => setShowPatientModal(true)}
@@ -3660,44 +4006,22 @@ export default function App() {
                         SUWASIRI LIVE
                       </div>
                       <h3 className="font-serif font-extrabold text-xs text-emerald-800">
-                        Suwasiri Mobile App Barcode System Sync Gateway
+                        Suwasiri Unique Health ID sync
                       </h3>
                     </div>
-                    <span className="text-[10px] text-slate-500 font-medium">Type a barcode to automatically sync all patient details from Suwasiri portal</span>
+                    <span className="text-[10px] text-slate-500 font-medium">Enter the number from the patient’s Unique Health ID card, then Sync to Portal</span>
                   </div>
 
                   <form onSubmit={async (e) => {
                     e.preventDefault();
-                    const input = barcodeSearchText.trim();
-                    if (!input) return;
-                    setBarcodeLoading(true);
-                    try {
-                      const res = await fetch(`/api/suwasiri/barcode/${encodeURIComponent(input)}`);
-                      if (!res.ok) throw new Error("Could not sync barcode from Suwasiri mobile app server.");
-                      const data = await res.json();
-                      
-                      // Auto state sync
-                      if (data.state && data.state.patients) {
-                        setPatients(data.state.patients);
-                      }
-                      if (data.state && data.state.clinicMessages) {
-                        setClinicMessages(data.state.clinicMessages);
-                      }
-                      setBarcodeSearchText("");
-                      alert(`⚡ Sync Success! Loaded patient "${data.patient.name}" directly from Suwasiri portal. Zero manual entry needed!`);
-                      setActiveHubPatient(data.patient);
-                    } catch (err: any) {
-                      alert("Error loading barcode: " + err.message);
-                    } finally {
-                      setBarcodeLoading(false);
-                    }
+                    await handleSyncUniqueHealthId(barcodeSearchText);
                   }} className="flex flex-col sm:flex-row gap-2">
                     <div className="relative flex-1">
                       <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600 w-4.5 h-4.5" />
                       <input
                         type="text"
                         required
-                        placeholder="Type Suwasiri Mobile App Barcode (e.g. SWSR-9912, SWSR-4451, SWSR-1085, SWSR-3022 or enter a custom code)"
+                        placeholder="Unique Health ID (e.g. SW3C6F5B5A27 for Chamidu, SW6CF9340271 for Sakuni)"
                         className="w-full pl-10 pr-4 py-2 border border-emerald-300 rounded text-xs bg-white text-emerald-900 placeholder-emerald-600/40 font-bold tracking-wider uppercase focus:ring-1 focus:ring-emerald-500 outline-none"
                         value={barcodeSearchText}
                         onChange={(e) => setBarcodeSearchText(e.target.value)}
@@ -3724,12 +4048,10 @@ export default function App() {
 
                   {/* Sample suggestions */}
                   <div className="flex items-center gap-2 flex-wrap text-[10px]">
-                    <span className="text-emerald-800 font-bold uppercase tracking-wider text-[8px]">Available Demo Barcodes:</span>
+                    <span className="text-emerald-800 font-bold uppercase tracking-wider text-[8px]">Try a Unique Health ID:</span>
                     {[
-                      { code: "SWSR-9912", name: "Sahan" },
-                      { code: "SWSR-4451", name: "Nimani" },
-                      { code: "SWSR-1085", name: "Dilhan" },
-                      { code: "SWSR-3022", name: "Kavindi" }
+                      { code: "SW3C6F5B5A27", name: "Chamidu" },
+                      { code: "SW6CF9340271", name: "Sakuni" },
                     ].map((item) => (
                       <button
                         key={item.code}
@@ -3744,6 +4066,24 @@ export default function App() {
                 </div>
 
                 {/* Grids list */}
+                {(isPlatformSA || Boolean(activeRole?.canManageUsers)) && patientAccessRequests.filter((r) => r.status === "PENDING" && r.hospitalId === sessionHospitalId).length > 0 && (
+                  <div className="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-2">
+                    <h3 className="text-xs font-bold text-amber-900 uppercase">Admin approval — delete / block requests</h3>
+                    {patientAccessRequests.filter((r) => r.status === "PENDING" && r.hospitalId === sessionHospitalId).map((r) => (
+                      <div key={r.id} className="bg-white border rounded p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                        <div>
+                          <p className="font-bold text-[#00334f]">{r.type} · {r.patientName}</p>
+                          <p className="text-slate-600 mt-0.5">“{r.comment}” — {r.requestedBy}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => reviewPatientAccessRequest(r.id, "APPROVED")} className="bg-emerald-700 text-white px-3 py-1 rounded font-bold">Approve</button>
+                          <button type="button" onClick={() => reviewPatientAccessRequest(r.id, "REJECTED")} className="bg-slate-200 text-slate-800 px-3 py-1 rounded font-bold">Reject</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {filteredPatients.map((pat) => (
                     <div
@@ -3770,6 +4110,11 @@ export default function App() {
                                 ⚡ SUWASIRI {pat.suwasiriBarcode}
                               </span>
                             )}
+                            {pat.accessStatus?.startsWith("PENDING") && (
+                              <span className="bg-amber-100 text-amber-900 text-[8px] font-bold px-1.5 py-0.5 rounded border border-amber-300">
+                                Awaiting admin: {pat.accessStatus === "PENDING_BLOCK" ? "block" : "delete"}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -3780,21 +4125,46 @@ export default function App() {
                         <p><span className="text-slate-400">Immunization Sequence:</span> {pat.vaccineRecords?.length || 0} Dose(s) logged</p>
                       </div>
 
-                      <div className="flex justify-between items-center text-[10px] text-slate-500 pt-2 border-t">
+                      <div className="flex justify-between items-center text-[10px] text-slate-500 pt-2 border-t gap-2">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleCheckInWalkIn(pat);
+                            setNewAptPatientId(pat.id);
+                            setNewAptDate(formatDateKey(new Date()));
+                            setBookingMode("walkin");
+                            setShowAptModal(true);
                           }}
                           className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 active:scale-95 cursor-pointer"
                         >
                           <Clock className="w-3 h-3" />
-                          Check-in Walk-In
+                          Check walk-in availability
                         </button>
-                        <div className="flex items-center gap-1 hover:text-[#00334f]">
-                          <span>View health profile</span>
-                          <ArrowRight className="w-3 h-3 text-[#00334f]" />
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAccessActionPatient(pat);
+                              setAccessActionType("BLOCK");
+                              setAccessActionComment("");
+                            }}
+                            className="text-amber-800 bg-amber-50 border border-amber-200 px-2 py-1 rounded font-bold"
+                          >
+                            Block
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAccessActionPatient(pat);
+                              setAccessActionType("DELETE");
+                              setAccessActionComment("");
+                            }}
+                            className="text-rose-800 bg-rose-50 border border-rose-200 px-2 py-1 rounded font-bold"
+                          >
+                            Delete
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -3839,10 +4209,7 @@ export default function App() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => {
-                            setActiveHubInitialTab("mc");
-                            setActiveHubPatient(selectedConsultPatient);
-                          }}
+                          onClick={() => openClinicalHubWithHistory(selectedConsultPatient)}
                           className="bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 rounded-md font-extrabold text-[10px] uppercase tracking-wider shrink-0 transition-all flex items-center gap-1 cursor-pointer self-start sm:self-auto shadow-sm active:scale-95"
                         >
                           View Clinical Hub (MC Section) &rarr;
@@ -4352,18 +4719,28 @@ export default function App() {
               <TelehealthRoom
                 patients={hospitalPatients}
                 appointments={tenantAppointments}
+                sessionDate={selectedClinicDate}
+                formulary={SRI_LANKA_GP_DRUGS}
                 activePatient={
                   hospitalPatients.find((p) => p.id === telehealthFocus?.patientId) ||
-                  hospitalPatients.find((p) => {
-                    const due = tenantAppointments.find((a) => isDueTelehealth(a));
-                    return Boolean(due && p.id === due.patientId);
-                  }) ||
                   null
                 }
                 focusPatientId={telehealthFocus?.patientId}
                 focusAppointmentId={telehealthFocus?.appointmentId}
                 sessionDoctorName={sessionUser?.name || "Dr. Priyantha Silva"}
                 drugsDatabase={drugs}
+                onSelectVideoPatient={(pat, appointmentId) => {
+                  setTelehealthFocus({ patientId: pat.id, appointmentId });
+                }}
+                onSealConsultation={(pat, medicines, notes) => {
+                  void logAudit({
+                    action: "Sealed telehealth e-prescription",
+                    category: "PRESCRIPTION",
+                    patientId: pat.id,
+                    patientName: pat.name,
+                    details: `Video consult notes: ${notes || "—"}. Medicines: ${medicines.join("; ") || "None"}.`,
+                  });
+                }}
                 onTelehealthSyncSuccess={fetchState}
                 onUpdatePatientMedications={(patId, newMedications) => {
                   setPatients(prev => prev.map(p => p.id === patId ? { ...p, currentMedications: newMedications } : p));
@@ -4371,8 +4748,9 @@ export default function App() {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ currentMedications: newMedications })
-                  }).then(() => fetchState());
+                  }).catch(() => undefined);
                 }}
+                onOpenClinicalHub={openClinicalHubWithHistory}
                 onInvitePatient={(pName, phone, transport, token) => {
                   // Post sent invite to server notification log history
                   fetch("/api/notifications", {
@@ -4394,7 +4772,14 @@ export default function App() {
                   fetch(`/api/patients/${patId}`, {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ notes })
+                    body: JSON.stringify({
+                      notes,
+                      historyEntry: {
+                        reason: "Telehealth consultation",
+                        notes,
+                        doctor: sessionUser?.name || "Dr. Priyantha Silva",
+                      },
+                    })
                   }).then(() => fetchState());
                 }}
               />
@@ -4405,6 +4790,8 @@ export default function App() {
               <SecureClinicChat
                 messages={clinicMessages}
                 currentRole={currentRole}
+                currentUserName={sessionUser?.name || currentRole}
+                staffNames={hospitalStaff.map((s) => s.name).filter(Boolean)}
                 activeChannel={activeChannel}
                 setActiveChannel={setActiveChannel}
                 onPostMessage={handlePostSecureClinicChat}
@@ -4710,7 +5097,6 @@ export default function App() {
                                       Collected
                                     </button>
                                   )}
-
                                   {sample.status === "COLLECTED" && (
                                     <button
                                       type="button"
@@ -4726,7 +5112,24 @@ export default function App() {
                                       Delivered
                                     </button>
                                   )}
-
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (!window.confirm("Delete this sample dispatch item? Click OK for yes, Cancel for no.")) return;
+                                      try {
+                                        const r = await fetch(`/api/sample-collections/${sample.id}`, { method: "DELETE" });
+                                        if (!r.ok) throw new Error();
+                                        const data = await r.json();
+                                        if (data.state?.sampleCollections) setSampleCollections(data.state.sampleCollections);
+                                        else fetchState();
+                                      } catch {
+                                        alert("Could not delete this item.");
+                                      }
+                                    }}
+                                    className="bg-rose-600 hover:bg-rose-700 text-white font-bold p-1 px-3 rounded text-[10px]"
+                                  >
+                                    Delete
+                                  </button>
                                   {sample.status === "DELIVERED" && (
                                     <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
                                       ✓ Complete
@@ -5140,10 +5543,28 @@ export default function App() {
 
             {/* TAB: RECEIPTS & INVOICES */}
             {activeTab === "billing" && (
-              <div className="bg-white p-6 border rounded space-y-6">
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+                <div className="xl:col-span-4">
+                  <ClinicMonthCalendar
+                    year={billingCalendarMonth.year}
+                    month={billingCalendarMonth.month}
+                    selectedDate={selectedBillingDate}
+                    todayKey={todayKey}
+                    countsByDate={appointmentCountsByDate}
+                    onSelectDate={setSelectedBillingDate}
+                    onChangeMonth={(year, month) => setBillingCalendarMonth({ year, month })}
+                    onJumpToToday={jumpToBillingToday}
+                  />
+                  <p className="text-[11px] text-slate-500 mt-2 px-1">
+                    Click a date to show invoices only for patients booked that day. Reception can view and download bank slips uploaded from the Suwasiri app.
+                  </p>
+                </div>
+              <div className="xl:col-span-8 bg-white p-6 border rounded space-y-6">
                 <div>
                   <h2 className="font-serif font-bold text-lg text-[#00334f]">Invoices & Billing Panel</h2>
-                  <p className="text-xs text-slate-500">Verify payments, manage consultation fees and print medical receipts (Rs).</p>
+                  <p className="text-xs text-slate-500">
+                    {formatLongDate(selectedBillingDate)} — booked patients only ({dayBilling.length} invoice{dayBilling.length === 1 ? "" : "s"}).
+                  </p>
                 </div>
 
                 <div className="border rounded overflow-hidden">
@@ -5160,20 +5581,28 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {billing.map(invoice => (
+                      {dayBilling.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="p-6 text-center text-slate-400 italic">
+                            No invoices for patients booked on {formatLongDate(selectedBillingDate)}.
+                          </td>
+                        </tr>
+                      )}
+                      {dayBilling.map(invoice => (
                         <tr key={invoice.id} className="hover:bg-slate-50">
                           <td className="p-3 font-semibold text-slate-500">{invoice.id}</td>
                           <td className="p-3">
                             <div className="flex items-center gap-3">
                               {invoice.suwasiriReceiptUrl ? (
+                                <div className="flex flex-col items-center gap-1 shrink-0">
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setSelectedReceiptUrl(invoice.suwasiriReceiptUrl || null);
                                     setSelectedReceiptPatientName(invoice.patientName);
                                   }}
-                                  className="w-10 h-10 border-2 border-emerald-500 rounded overflow-hidden hover:opacity-85 transition-opacity relative shrink-0 cursor-pointer shadow active:scale-95 group bg-slate-100"
-                                  title="Click to view full receipt"
+                                  className="w-10 h-10 border-2 border-emerald-500 rounded overflow-hidden hover:opacity-85 transition-opacity relative cursor-pointer shadow active:scale-95 group bg-slate-100"
+                                  title="Click to view bank slip"
                                 >
                                   <img
                                     src={invoice.suwasiriReceiptUrl}
@@ -5185,6 +5614,15 @@ export default function App() {
                                     VIEW
                                   </div>
                                 </button>
+                                <a
+                                  href={invoice.suwasiriReceiptUrl}
+                                  download={`suwasiri-slip-${invoice.id}`}
+                                  className="text-[8px] font-bold text-sky-800 hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  Download slip
+                                </a>
+                                </div>
                               ) : (
                                 <div className={`flex flex-col gap-0.5 items-center justify-center w-10 h-10 border rounded shrink-0 relative ${invoice.paidBySuwasiri ? 'border-dashed border-rose-400 bg-rose-50 text-rose-500 animate-pulse' : 'border-dashed border-slate-300 bg-slate-50 text-slate-400'}`} title={invoice.paidBySuwasiri ? "Suwasiri Paid - upload receipt required!" : "No receipt uploaded"}>
                                   <Upload className="w-3.5 h-3.5 text-current" />
@@ -5197,7 +5635,17 @@ export default function App() {
                               <div className="flex flex-col gap-1">
                                 <span className="font-bold text-slate-700">{invoice.patientName}</span>
                                 <div className="flex flex-wrap gap-1.5 items-center">
-                                  {invoice.paidBySuwasiri && (
+                                  {invoice.paidBySuwasiri && invoice.suwasiriReceiptUrl && (
+                                    <span className="inline-flex bg-sky-700 text-white text-[8px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                      Paid by manual via Suwasiri
+                                    </span>
+                                  )}
+                                  {invoice.paidBySuwasiri && !invoice.suwasiriReceiptUrl && (
+                                    <span className="inline-flex bg-emerald-600 text-white text-[8px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                      ⚡ Paid by Suwasiri
+                                    </span>
+                                  )}
+                                  {invoice.paymentMethod === "Suwasiri Pay" && !invoice.paidBySuwasiri && (
                                     <span className="inline-flex bg-emerald-600 text-white text-[8px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
                                       ⚡ Paid by Suwasiri
                                     </span>
@@ -5290,7 +5738,11 @@ export default function App() {
                                 </>
                               ) : (
                                 <span className="text-emerald-700 font-extrabold text-[10px] flex items-center gap-1">
-                                  ✓ Settled {invoice.paidBySuwasiri && <span className="text-[10px] text-emerald-600 italic font-medium font-sans">(Suwasiri)</span>}
+                                  ✓ Settled {invoice.paidBySuwasiri && invoice.suwasiriReceiptUrl
+                                    ? <span className="text-[10px] text-sky-700 italic font-medium font-sans">(manual via Suwasiri)</span>
+                                    : invoice.paidBySuwasiri
+                                    ? <span className="text-[10px] text-emerald-600 italic font-medium font-sans">(Suwasiri)</span>
+                                    : null}
                                 </span>
                               )}
                             </div>
@@ -5300,6 +5752,7 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
+              </div>
               </div>
             )}
 
@@ -5636,11 +6089,15 @@ export default function App() {
                   {/* Render the embedded clinical calculators component */}
                   <div className="bg-slate-50 p-6 rounded-xl border">
                     <ClinicalCalculatorsModal 
-                      patient={activeDoctorRecordPatient || patients[0]} 
+                      patient={activeDoctorRecordPatient || patients[0]}
+                      patients={patients}
+                      calculatedBy={sessionUser?.name || "GP"}
+                      embedded
                       onClose={() => setActiveTab("dashboard")} 
                       onSaveToConsultation={(resultText) => {
                         alert("Calculator result copied to clinical consultation clipboard:\n\n" + resultText);
                       }}
+                      onPersistPatient={persistCalculatorPatient}
                     />
                   </div>
                 </div>
@@ -5655,19 +6112,23 @@ export default function App() {
                   recalls={recalls}
                   onSendNotification={(recallId, method) => {
                     const rec = recalls.find(r => r.id === recallId);
-                    if (rec) {
-                      setRecalls(prev => prev.map(r => r.id === recallId ? {
-                        ...r,
-                        status: "SMS_SENT",
-                        lastContactedDate: new Date().toISOString().split("T")[0],
-                        contactMethod: method as any
-                      } : r));
-                      alert(`⚡ Transmission successful: Dispatched ${method} recall reminder to ${rec.patientName} (${rec.patientPhone || rec.patientEmail})!`);
-                    }
+                    const live = rec ? patients.find(p => p.id === rec.patientId) : undefined;
+                    if (!rec) return;
+                    const next = recalls.map((r) => r.id === recallId ? {
+                      ...r,
+                      status: (method === "Email" ? "EMAIL_SENT" : "SMS_SENT") as RecallRecord["status"],
+                      lastContactedDate: new Date().toISOString().split("T")[0],
+                      contactMethod: method as RecallRecord["contactMethod"],
+                      patientPhone: live?.phone || rec.patientPhone,
+                      patientEmail: live?.email || rec.patientEmail,
+                    } : r);
+                    void persistRecalls(next);
                   }}
                   onBookAppointment={(recall) => {
                     setNewAptPatientId(recall.patientId);
-                    setNewAptReason(`Preventive Recall: ${recall.category}`);
+                    setNewAptReason("Follow up");
+                    setBookingRecallId(recall.id);
+                    setBookingMode("book");
                     setShowAptModal(true);
                   }}
                   onCreateRecall={(newRecall) => {
@@ -5685,15 +6146,22 @@ export default function App() {
                       notes: newRecall.notes || "Preventive screening reminder",
                       assignedDoctor: newRecall.assignedDoctor || "Dr. Priyantha Silva"
                     };
-                    setRecalls(prev => [record, ...prev]);
+                    const next = [record, ...recalls];
+                    void persistRecalls(next);
                     alert(`Created preventive recall for ${record.patientName} under ${record.category}!`);
                   }}
                   onMarkComplete={(recallId) => {
-                    setRecalls(prev => prev.map(r => r.id === recallId ? {
-                      ...r,
-                      status: "COMPLETED"
-                    } : r));
-                    alert("Recall successfully marked as completed!");
+                    setRecalls((prev) => {
+                      const next = prev.map((r) => r.id === recallId ? { ...r, status: "COMPLETED" as const } : r);
+                      const remaining = next.filter((r) => r.status !== "COMPLETED" && r.status !== "CANCELLED");
+                      const done = prev.find((r) => r.id === recallId);
+                      const catLeft = remaining.filter((r) => r.category === done?.category).length;
+                      void persistRecalls(next);
+                      alert(
+                        `Recall completed${done ? ` for ${done.patientName}` : ""}. All active recalls: ${remaining.length}. ${done?.category || "Category"} now ${catLeft}.`
+                      );
+                      return next;
+                    });
                   }}
                 />
               </div>
@@ -5759,6 +6227,8 @@ export default function App() {
                 staffUsers={staffUsers}
                 memberships={memberships}
                 roles={roleDefs}
+                branches={branches}
+                staffDirectory={staffDirectory}
                 onCreateHospital={async (name) => {
                   const res = await fetch("/api/tenancy/hospitals", {
                     method: "POST",
@@ -5781,6 +6251,25 @@ export default function App() {
                   if (data.hospital) {
                     setHospitals((prev) => prev.map((h) => (h.id === data.hospital.id ? data.hospital : h)));
                   }
+                }}
+                onCreateStaff={async (payload) => {
+                  const res = await fetch("/api/tenancy/staff", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) {
+                    alert(data.error || "Could not add staff");
+                    return;
+                  }
+                  if (data.staffUser) {
+                    setStaffUsers((prev) =>
+                      prev.some((u) => u.id === data.staffUser.id) ? prev : [...prev, data.staffUser]
+                    );
+                  }
+                  if (data.membership) setMemberships((prev) => [...prev, data.membership]);
+                  if (data.staff) setStaffDirectory((prev) => [...prev, data.staff]);
                 }}
               />
             )}
@@ -5814,6 +6303,12 @@ export default function App() {
                   roles={hospitalRoles}
                   canEditRbac={canEditRbac}
                   isPlatformSA={isPlatformSA}
+                  staffList={staffDirectory}
+                  hospitals={hospitals}
+                  branches={branches}
+                  memberships={memberships}
+                  onSaveStaff={persistStaffDirectory}
+                  onSaveMemberships={persistMemberships}
                   onSaveRoles={persistRoles}
                   onAddRole={addHospitalRole}
                   onRemoveRole={removeHospitalRole}
@@ -5824,7 +6319,19 @@ export default function App() {
             {/* TAB: MEDICO-LEGAL AUDIT LOG TRAIL */}
             {activeTab === "audit_logs" && (
               <div className="space-y-6">
-                <AuditLogView patients={hospitalPatients} />
+                <AuditLogView
+                  patients={hospitalPatients}
+                  logs={auditLogs}
+                  labOrders={labOrders}
+                  selectedDate={selectedAuditDate}
+                  todayKey={todayKey}
+                  calendarYear={auditCalendarMonth.year}
+                  calendarMonth={auditCalendarMonth.month}
+                  countsByDate={appointmentCountsByDate}
+                  onSelectDate={setSelectedAuditDate}
+                  onChangeMonth={(year, month) => setAuditCalendarMonth({ year, month })}
+                  onJumpToToday={jumpToAuditToday}
+                />
               </div>
             )}
 
@@ -5891,7 +6398,11 @@ export default function App() {
                   appointments={appointments}
                   recalls={recalls}
                   onBookAppointment={(apt) => {
-                    handleCreateAppointment({ preventDefault: () => {} } as any);
+                    if (apt.patientId) setNewAptPatientId(apt.patientId);
+                    if (apt.date) setNewAptDate(apt.date);
+                    if (apt.reason) setNewAptReason(String(apt.reason));
+                    setBookingMode("book");
+                    setShowAptModal(true);
                   }}
                   onCancelAppointment={(aptId) => {
                     handleUpdateAptStatus(aptId, "CANCELLED");
@@ -5930,92 +6441,27 @@ export default function App() {
 
       {/* MODAL: SCHEDULER BOOKER */}
       {showAptModal && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center z-50 p-4 animate-in fade-in">
-          <div className="bg-white border rounded shadow-2xl max-w-md w-full p-6">
-            <h3 className="font-serif font-bold text-[#00334f] text-base mb-4">Book scheduler appointment slot</h3>
-            
-            <form onSubmit={handleCreateAppointment} className="space-y-4 text-xs font-semibold">
-              <div className="space-y-1">
-                <label className="block text-slate-500 uppercase">Patient Name ID</label>
-                <select
-                  required
-                  className="w-full p-2 border bg-white rounded outline-none"
-                  value={newAptPatientId}
-                  onChange={(e) => setNewAptPatientId(e.target.value)}
-                >
-                  <option value="">-- Choose Patient --</option>
-                  {patients.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} (ID: {p.id})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="block text-slate-500 uppercase">Time slot</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 10:30 AM"
-                    className="w-full p-1.5 border rounded"
-                    value={newAptTime}
-                    onChange={(e) => setNewAptTime(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-slate-500 uppercase">Date</label>
-                  <input
-                    type="date"
-                    required
-                    className="w-full p-1.5 border rounded"
-                    value={newAptDate}
-                    onChange={(e) => setNewAptDate(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-slate-500 uppercase">Symptom Complaint reason</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Cough control, BP check"
-                  className="w-full p-1.5 border rounded"
-                  value={newAptReason}
-                  onChange={(e) => setNewAptReason(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-slate-500 uppercase">Status</label>
-                <select
-                  className="w-full p-1.5 border bg-white rounded outline-none"
-                  value={newAptStatus}
-                  onChange={(e) => setNewAptStatus(e.target.value as any)}
-                >
-                  <option value="SCHEDULED">Scheduled</option>
-                  <option value="CHECKED IN">Checked In</option>
-                </select>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <button
-                  type="button"
-                  onClick={() => setShowAptModal(false)}
-                  className="px-4 py-1.5 border text-slate-600 rounded font-bold hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-[#00334f] text-white px-4 py-1.5 rounded font-bold"
-                >
-                  Confirm slot
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <ReceptionBookingScheduler
+          patients={patients}
+          doctors={workingDoctors.length > 0 ? workingDoctors : DEFAULT_STAFF_DIRECTORY.filter((s) => /doctor|medical officer/i.test(s.role))}
+          appointments={appointments}
+          initialPatientId={newAptPatientId}
+          initialDate={newAptDate}
+          initialReason={newAptReason}
+          includeToday={bookingMode === "walkin"}
+          walkInMode={bookingMode === "walkin"}
+          walkInOverflowUsed={appointments.filter((a) =>
+            a.date === newAptDate &&
+            a.status !== "CANCELLED" &&
+            /walk-in overflow/i.test(a.reason || "")
+          ).length}
+          onClose={() => {
+            setShowAptModal(false);
+            setBookingRecallId(null);
+            setBookingMode("book");
+          }}
+          onConfirm={handleSchedulerConfirm}
+        />
       )}
 
       {/* MODAL: REGISTER PATIENT */}
@@ -6267,6 +6713,34 @@ export default function App() {
                 <Eye className="w-3.5 h-3.5" />
                 Open In New Tab
               </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {accessActionPatient && (
+        <div className="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-3 shadow-xl">
+            <h3 className="font-serif font-bold text-[#00334f]">
+              {accessActionType === "BLOCK" ? "Block" : "Delete"} {accessActionPatient.name}
+            </h3>
+            <p className="text-xs text-slate-600">
+              Reception must explain what happened. An administrator at this clinic must approve before the file is removed or blocked.
+            </p>
+            <textarea
+              rows={4}
+              value={accessActionComment}
+              onChange={(e) => setAccessActionComment(e.target.value)}
+              placeholder="Comment: why lock or delete this patient?"
+              className="w-full text-xs border rounded p-2 outline-none focus:border-[#00334f]"
+            />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setAccessActionPatient(null)} className="px-3 py-1.5 text-xs font-bold bg-slate-100 rounded">
+                Cancel
+              </button>
+              <button type="button" onClick={() => void submitPatientAccessRequest()} className="px-3 py-1.5 text-xs font-bold bg-[#00334f] text-white rounded">
+                Send to admin
+              </button>
             </div>
           </div>
         </div>
@@ -6717,10 +7191,13 @@ export default function App() {
       {showCalculatorsModal && (
         <ClinicalCalculatorsModal
           patient={activeDoctorRecordPatient || patients[0]}
+          patients={patients}
+          calculatedBy={sessionUser?.name || "GP"}
           onClose={() => setShowCalculatorsModal(false)}
           onSaveToConsultation={(resultText) => {
             alert("Calculator result copied to consultation clipboard:\n\n" + resultText);
           }}
+          onPersistPatient={persistCalculatorPatient}
         />
       )}
 

@@ -203,6 +203,13 @@ class DemoHealthRepository implements HealthRepository {
   }
 
   @override
+  Stream<List<TreatmentNote>> watchTreatmentNotes(String patientId) async* {
+    yield List<TreatmentNote>.from(
+      PatientHealthSamples.treatmentNotes(patientId: patientId),
+    );
+  }
+
+  @override
   Future<List<Prescription>> issueTelehealthPrescription({
     required String patientId,
     required String doctorName,

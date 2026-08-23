@@ -29,7 +29,6 @@ class AccountsMenuCard extends StatelessWidget {
     required this.onBilling,
     required this.familyMembers,
     required this.activeKey,
-    required this.isOwnerActive,
     required this.onSelectMember,
     required this.onAddMember,
     required this.onSignOut,
@@ -40,7 +39,6 @@ class AccountsMenuCard extends StatelessWidget {
   final VoidCallback onBilling;
   final List<FamilyMember> familyMembers;
   final String? activeKey;
-  final bool isOwnerActive;
   final ValueChanged<String> onSelectMember;
   final VoidCallback onAddMember;
   final VoidCallback onSignOut;
@@ -121,12 +119,11 @@ class AccountsMenuCard extends StatelessWidget {
                 onTap: () => onSelectMember(m.key),
               );
             }),
-          if (isOwnerActive)
-            _MenuRow(
-              icon: Icons.person_add_alt_1_outlined,
-              label: 'Add Family Member',
-              onTap: onAddMember,
-            ),
+          _MenuRow(
+            icon: Icons.person_add_alt_1_outlined,
+            label: 'Add Family Member',
+            onTap: onAddMember,
+          ),
           _MenuRow(
             icon: Icons.logout_rounded,
             label: 'Sign out all accounts',

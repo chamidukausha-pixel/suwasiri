@@ -86,6 +86,11 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   bool _incomingRinging = false;
   String _liveStatus = '';
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _ringSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _chatSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _doctorNotesSub;
+  final _chatCtrl = TextEditingController();
+  final _callMessages = <_InCallMsg>[];
+  final _doctorLiveNotes = <String>[];
 
   @override
   void initState() {
@@ -112,10 +117,13 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   void dispose() {
     _noteCtrl.dispose();
     _aiCtrl.dispose();
+    _chatCtrl.dispose();
     _callTimer?.cancel();
     _rxTimer?.cancel();
     unawaited(_rxWatch?.cancel());
     unawaited(_ringSub?.cancel());
+    unawaited(_chatSub?.cancel());
+    unawaited(_doctorNotesSub?.cancel());
     unawaited(_hangupLiveCall());
     _disposeCamera();
     super.dispose();
@@ -276,6 +284,10 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     _rxTimer?.cancel();
     await _rxWatch?.cancel();
     _rxWatch = null;
+    await _chatSub?.cancel();
+    _chatSub = null;
+    await _doctorNotesSub?.cancel();
+    _doctorNotesSub = null;
     await _hangupLiveCall();
     await _disposeCamera();
     if (!mounted) return;
@@ -352,6 +364,82 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
         _sessionRx = pending;
         _rxUpdating = false;
       });
+    });
+    _watchConsultSync(patientId: user.id, appointmentId: appt.id);
+  }
+
+  void _watchConsultSync({
+    required String patientId,
+    required String appointmentId,
+  }) {
+    unawaited(_chatSub?.cancel());
+    unawaited(_doctorNotesSub?.cancel());
+    _chatSub = FirebaseFirestore.instance
+        .collection('telehealth_sessions')
+        .doc(appointmentId)
+        .collection('messages')
+        .snapshots()
+        .listen((snap) {
+      if (!mounted) return;
+      final timed = snap.docs.map((d) {
+        final data = d.data();
+        final sender = (data['sender'] as String? ?? '').toLowerCase();
+        final at = data['at'];
+        final millis = at is int ? at : (at is num ? at.toInt() : 0);
+        return (
+          millis,
+          _InCallMsg(
+            sender: data['senderName'] as String? ??
+                data['sender'] as String? ??
+                '',
+            text: data['text'] as String? ?? '',
+            fromPatient: sender == 'patient',
+          ),
+        );
+      }).toList()
+        ..sort((a, b) => a.$1.compareTo(b.$1));
+      setState(() {
+        _callMessages
+          ..clear()
+          ..addAll(timed.map((e) => e.$2));
+      });
+    });
+    _doctorNotesSub = FirebaseFirestore.instance
+        .collection('consultation_notes')
+        .where('patientId', isEqualTo: patientId)
+        .snapshots()
+        .listen((snap) {
+      if (!mounted) return;
+      final notes = snap.docs.map((d) {
+        final data = d.data();
+        final body = (data['body'] as String? ?? '').trim();
+        final doctor = data['doctor'] as String? ?? '';
+        if (body.isEmpty) return '';
+        return doctor.isEmpty ? body : '$doctor: $body';
+      }).where((s) => s.isNotEmpty).toList();
+      setState(() {
+        _doctorLiveNotes
+          ..clear()
+          ..addAll(notes);
+      });
+    });
+  }
+
+  Future<void> _sendInCallMessage() async {
+    final text = _chatCtrl.text.trim();
+    final appt = _videoAppt;
+    final user = context.read<AuthCubit>().state.user;
+    if (text.isEmpty || appt == null || user == null) return;
+    _chatCtrl.clear();
+    await FirebaseFirestore.instance
+        .collection('telehealth_sessions')
+        .doc(appt.id)
+        .collection('messages')
+        .add({
+      'sender': 'patient',
+      'senderName': user.name,
+      'text': text,
+      'at': DateTime.now().millisecondsSinceEpoch,
     });
   }
 
@@ -663,12 +751,21 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
             ),
             const SizedBox(height: 14),
             _QuickNotesCard(
-              notes: _notes,
+              notes: _doctorLiveNotes.isNotEmpty
+                  ? _doctorLiveNotes
+                  : _notes,
               showAll: _showAllTips,
               controller: _noteCtrl,
               onAdd: _addNote,
               onToggleViewAll: () =>
                   setState(() => _showAllTips = !_showAllTips),
+              liveFromDoctor: _doctorLiveNotes.isNotEmpty,
+            ),
+            const SizedBox(height: 14),
+            _InCallMessagesCard(
+              messages: _callMessages,
+              controller: _chatCtrl,
+              onSend: _sendInCallMessage,
             ),
           ],
           const SizedBox(height: 14),
@@ -823,21 +920,44 @@ class _VideoStage extends StatelessWidget {
           Positioned(
             top: 14,
             left: 14,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.emergencyRed,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                l.t('recSecure'),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 10,
-                  letterSpacing: 0.4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.emergencyRed,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    l.t('recSecure'),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 10,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
                 ),
-              ),
+                if (liveConnected) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      l.t('gpRoomCamActive'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
           Positioned(
@@ -887,7 +1007,7 @@ class _VideoStage extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          camOff ? l.t('cameraOff') : l.t('youFeed'),
+                          camOff ? l.t('cameraOff') : l.t('patientCamera'),
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             color: Colors.white70,
@@ -905,7 +1025,7 @@ class _VideoStage extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       color: Colors.black54,
                       child: Text(
-                        l.t('youFeed'),
+                        l.t('patientCamera'),
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: Colors.white,
@@ -1480,6 +1600,7 @@ class _QuickNotesCard extends StatelessWidget {
     required this.controller,
     required this.onAdd,
     required this.onToggleViewAll,
+    this.liveFromDoctor = false,
   });
 
   final List<String> notes;
@@ -1487,6 +1608,7 @@ class _QuickNotesCard extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onAdd;
   final VoidCallback onToggleViewAll;
+  final bool liveFromDoctor;
 
   @override
   Widget build(BuildContext context) {
@@ -1509,7 +1631,7 @@ class _QuickNotesCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  l.t('quickNotes'),
+                  liveFromDoctor ? l.t('doctorLiveNotes') : l.t('quickNotes'),
                   style: const TextStyle(
                     color: AppColors.trustBlueDark,
                     fontWeight: FontWeight.w800,
@@ -1587,6 +1709,136 @@ class _QuickNotesCard extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 18),
                 ),
                 child: Text(l.t('add')),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InCallMsg {
+  const _InCallMsg({
+    required this.sender,
+    required this.text,
+    required this.fromPatient,
+  });
+
+  final String sender;
+  final String text;
+  final bool fromPatient;
+}
+
+class _InCallMessagesCard extends StatelessWidget {
+  const _InCallMessagesCard({
+    required this.messages,
+    required this.controller,
+    required this.onSend,
+  });
+
+  final List<_InCallMsg> messages;
+  final TextEditingController controller;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.chat_bubble_outline, color: AppColors.trustBlue),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  l.t('inCallMessages'),
+                  style: const TextStyle(
+                    color: AppColors.trustBlueDark,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (messages.isEmpty)
+            Text(
+              l.t('inCallMessagesEmpty'),
+              style: const TextStyle(
+                color: AppColors.slateMuted,
+                fontSize: 13,
+              ),
+            )
+          else
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 180),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: messages.length,
+                itemBuilder: (context, i) {
+                  final m = messages[i];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Align(
+                      alignment: m.fromPatient
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: m.fromPatient
+                              ? AppColors.trustBlueSoft
+                              : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Text(
+                          '${m.sender}: ${m.text}',
+                          style: const TextStyle(
+                            color: AppColors.trustBlueDark,
+                            fontSize: 13,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  decoration: InputDecoration(
+                    hintText: l.t('inCallMessageHint'),
+                  ),
+                  onSubmitted: (_) => onSend(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: onSend,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                ),
+                child: Text(l.t('send')),
               ),
             ],
           ),

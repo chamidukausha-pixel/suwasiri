@@ -237,7 +237,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onBilling: _openBilling,
             familyMembers: members,
             activeKey: activeKey,
-            isOwnerActive: context.read<AuthCubit>().isActiveOwner,
             onSelectMember: (key) async {
               await context.read<AuthCubit>().selectFamilyMember(key);
               if (!context.mounted) return;

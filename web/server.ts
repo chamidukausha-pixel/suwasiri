@@ -503,7 +503,78 @@ const INITIAL_STATE = {
   roles: DEFAULT_ROLES,
   staffUsers: DEFAULT_STAFF_USERS,
   memberships: DEFAULT_MEMBERSHIPS,
-  staffDirectory: DEFAULT_STAFF_DIRECTORY
+  staffDirectory: DEFAULT_STAFF_DIRECTORY,
+  patientAccessRequests: [],
+  recalls: [
+    {
+      id: "rec-1",
+      patientId: "9942-LK",
+      patientName: "Fatima Zahra",
+      patientPhone: "+94 77 982 1100",
+      patientEmail: "fatima.zahra@email.lk",
+      category: "Diabetes Review",
+      urgency: "HIGH",
+      dueDate: "2026-08-25",
+      status: "DUE",
+      notes: "6-monthly HbA1c, microalbuminuria check, and diabetic foot sensory exam",
+      assignedDoctor: "Dr. Priyantha Silva"
+    },
+    {
+      id: "rec-2",
+      patientId: "1028-LK",
+      patientName: "Sunil Jayawardena",
+      patientPhone: "+94 71 345 8899",
+      patientEmail: "sunil.j@email.lk",
+      category: "Pathology Follow-up",
+      urgency: "HIGH",
+      dueDate: "2026-08-20",
+      status: "DUE",
+      notes: "Elevated Fasting Lipid Profile (Cholesterol 6.8 mmol/L, LDL 4.2). Review statin therapy.",
+      assignedDoctor: "Dr. Priyantha Silva"
+    },
+    {
+      id: "rec-3",
+      patientId: "4491-LK",
+      patientName: "Kamala Wickramasinghe",
+      patientPhone: "+94 77 234 5566",
+      patientEmail: "kamala.w@email.lk",
+      category: "Immunisation",
+      urgency: "ROUTINE",
+      dueDate: "2026-09-01",
+      status: "SMS_SENT",
+      lastContactedDate: "2026-08-14",
+      contactMethod: "SMS",
+      notes: "Seasonal Influenza Vaccine (Fluarix Tetra) booster due",
+      assignedDoctor: "Dr. Anoja Senanayake"
+    },
+    {
+      id: "rec-4",
+      patientId: "9942-LK",
+      patientName: "Fatima Zahra",
+      patientPhone: "+94 77 982 1100",
+      patientEmail: "fatima.zahra@email.lk",
+      category: "Cervical Screening",
+      urgency: "MEDIUM",
+      dueDate: "2026-09-15",
+      status: "DUE",
+      notes: "National Cervical Screening Program (CST) 5-yearly routine interval",
+      assignedDoctor: "Dr. Anoja Senanayake"
+    },
+    {
+      id: "rec-5",
+      patientId: "1028-LK",
+      patientName: "Sunil Jayawardena",
+      patientPhone: "+94 71 345 8899",
+      patientEmail: "sunil.j@email.lk",
+      category: "Care Plan Review",
+      urgency: "MEDIUM",
+      dueDate: "2026-09-30",
+      status: "DUE",
+      notes: "Chronic Disease GPMP (Item 721) and Team Care Arrangement (Item 723) 6-month review",
+      assignedDoctor: "Dr. Priyantha Silva"
+    }
+  ],
+  auditLogs: [],
 };
 
 // Help load/save the store with automatic forward migration safeguards
@@ -577,6 +648,28 @@ function getStore() {
       data.staffDirectory = DEFAULT_STAFF_DIRECTORY;
       mutated = true;
     }
+    if (!Array.isArray(data.recalls)) {
+      data.recalls = INITIAL_STATE.recalls;
+      mutated = true;
+    }
+    if (!Array.isArray(data.auditLogs)) {
+      data.auditLogs = [];
+      mutated = true;
+    }
+    if (Array.isArray(data.staffDirectory)) {
+      const silva = data.staffDirectory.find((s: any) => s.id === "staff-1" || s.email === "dr.silva@primecare.lk");
+      if (silva && !silva.rosterHours) {
+        silva.roster = { monday: true, tuesday: false, wednesday: true, thursday: false, friday: true, saturday: true, sunday: true };
+        silva.rosterHours = {
+          monday: { start: "16:00", end: "18:00" },
+          wednesday: { start: "16:00", end: "18:00" },
+          friday: { start: "16:00", end: "18:00" },
+          saturday: { start: "09:00", end: "13:00" },
+          sunday: { start: "09:00", end: "13:00" },
+        };
+        mutated = true;
+      }
+    }
     if (!data.clinicCalendarSeedAug2026) {
       if (!Array.isArray(data.appointments)) data.appointments = [];
       const byId = new Map(data.appointments.map((a: any) => [a.id, a]));
@@ -620,6 +713,10 @@ function getStore() {
           status: "PENDING"
         }
       ];
+      mutated = true;
+    }
+    if (!data.patientAccessRequests) {
+      data.patientAccessRequests = [];
       mutated = true;
     }
 
@@ -855,8 +952,121 @@ app.put("/api/tenancy/staff-directory", (req, res) => {
     ...(store.staffDirectory || []).filter((s: any) => s.hospitalId !== hospitalId),
     ...staffDirectory,
   ];
+  store.memberships = (store.memberships || []).map((m: any) => {
+    const staff = staffDirectory.find((s: any) => s.userId === m.userId && (s.hospitalId || hospitalId) === m.hospitalId);
+    if (!staff) return m;
+    return {
+      ...m,
+      branchIds: staff.branchIds || m.branchIds,
+      roleId: staff.roleId || m.roleId,
+      active: staff.active !== false,
+    };
+  });
   persistTenancy(store);
   res.json({ success: true, staffDirectory: store.staffDirectory.filter((s: any) => s.hospitalId === hospitalId) });
+});
+
+app.put("/api/tenancy/memberships", (req, res) => {
+  const store = getStore();
+  const { memberships } = req.body || {};
+  if (!Array.isArray(memberships)) {
+    return res.status(400).json({ error: "memberships[] required" });
+  }
+  store.memberships = memberships;
+  persistTenancy(store);
+  res.json({ success: true, memberships: store.memberships });
+});
+
+app.post("/api/tenancy/staff", (req, res) => {
+  const store = getStore();
+  const { hospitalId, name, email, roleName, branchIds, phone, specialty } = req.body || {};
+  if (!hospitalId || !name || !email || !roleName) {
+    return res.status(400).json({ error: "hospitalId, name, email, and roleName required" });
+  }
+  const role = (store.roles || []).find((r: any) => r.hospitalId === hospitalId && r.name === roleName);
+  if (!role) {
+    return res.status(400).json({ error: `Role "${roleName}" not found for this hospital` });
+  }
+  const hospitalBranches = (store.branches || []).filter((b: any) => b.hospitalId === hospitalId);
+  const assigned = Array.isArray(branchIds) && branchIds.length
+    ? branchIds
+    : hospitalBranches.map((b: any) => b.id);
+  const existingUser = (store.staffUsers || []).find(
+    (u: any) => String(u.email || "").toLowerCase() === String(email).toLowerCase()
+  );
+  const userId = existingUser?.id || `user-${Date.now()}`;
+  if (!existingUser) {
+    store.staffUsers = [...(store.staffUsers || []), { id: userId, name, email, platformRole: null }];
+  }
+  const membership = {
+    id: `mem-${userId}-${hospitalId}-${Date.now()}`,
+    userId,
+    hospitalId,
+    roleId: role.id,
+    branchIds: assigned,
+    active: true,
+  };
+  store.memberships = [...(store.memberships || []), membership];
+  const staff = {
+    id: `staff-${Date.now()}`,
+    userId,
+    hospitalId,
+    roleId: role.id,
+    branchIds: assigned,
+    name,
+    role: roleName,
+    specialty: specialty || roleName,
+    providerNumber: "PENDING",
+    email,
+    phone: phone || "",
+    assignedRoom: roleName === "Receptionist" ? "Front Desk Reception" : "Consultation Room 1",
+    roster: { monday: true, tuesday: true, wednesday: true, thursday: true, friday: true, saturday: false, sunday: false },
+    rosterHours: {
+      monday: { start: "09:00", end: "17:00" },
+      tuesday: { start: "09:00", end: "17:00" },
+      wednesday: { start: "09:00", end: "17:00" },
+      thursday: { start: "09:00", end: "17:00" },
+      friday: { start: "09:00", end: "17:00" },
+    },
+    active: true,
+  };
+  store.staffDirectory = [...(store.staffDirectory || []), staff];
+  persistTenancy(store);
+  res.json({ success: true, staffUser: store.staffUsers.find((u: any) => u.id === userId), membership, staff });
+});
+
+app.put("/api/recalls", (req, res) => {
+  const store = getStore();
+  const { recalls } = req.body || {};
+  if (!Array.isArray(recalls)) {
+    return res.status(400).json({ error: "recalls[] required" });
+  }
+  store.recalls = recalls;
+  saveStore(store);
+  res.json({ success: true, recalls: store.recalls });
+});
+
+app.post("/api/audit-logs", (req, res) => {
+  const store = getStore();
+  const entry = req.body || {};
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const timestamp = entry.timestamp || `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const log = {
+    id: entry.id || `log-${Date.now()}`,
+    timestamp,
+    user: entry.user || "Staff",
+    role: entry.role || "Doctor",
+    action: entry.action || "Clinical activity",
+    category: entry.category || "PATIENT_RECORD",
+    patientId: entry.patientId,
+    patientName: entry.patientName,
+    details: entry.details || "",
+    ipAddress: entry.ipAddress || "clinic-lan",
+  };
+  store.auditLogs = [log, ...(store.auditLogs || [])].slice(0, 500);
+  saveStore(store);
+  res.json({ success: true, log, auditLogs: store.auditLogs });
 });
 
 app.patch("/api/tenancy/hospitals/:id", (req, res) => {
@@ -895,7 +1105,13 @@ app.post("/api/appointments", (req, res) => {
     time,
     reason,
     status: status || "SCHEDULED",
-    date: date || new Date().toISOString().split("T")[0]
+    date: date || new Date().toISOString().split("T")[0],
+    doctorName: req.body.doctorName,
+    type: req.body.type,
+    isTelehealth: !!req.body.isTelehealth,
+    consultMode: req.body.consultMode || (req.body.isTelehealth ? "video" : "clinic"),
+    patientName: req.body.patientName,
+    source: req.body.source || "gp_care"
   };
 
   store.appointments.push(newApt);
@@ -981,14 +1197,33 @@ app.patch("/api/appointments/:id/move", (req, res) => {
 // Create/Register Patients Details
 app.post("/api/patients", (req, res) => {
   const store = getStore();
-  const { name, age, gender, bloodType, allergies, phone, email, notes, medicalHistory, medicalCenter, hospitalId, branchId } = req.body;
+  const { name, age, gender, bloodType, allergies, phone, email, notes, medicalHistory, medicalCenter, hospitalId, branchId, id: requestedId, suwasiriBarcode } = req.body;
 
   if (!name || !age) {
     res.status(400).json({ error: "Missing name or age" });
     return;
   }
 
-  const pId = `${Math.floor(1000 + Math.random() * 9000)}-LK`;
+  if (requestedId) {
+    const existing = store.patients.find((p: { id: string }) => p.id === requestedId);
+    if (existing) {
+      const hid = hospitalId || HOSPITAL_PRIMECARE;
+      const synced = new Set(existing.syncedHospitalIds || [existing.hospitalId || HOSPITAL_PRIMECARE]);
+      synced.add(hid);
+      existing.syncedHospitalIds = Array.from(synced);
+      if (suwasiriBarcode) existing.suwasiriBarcode = suwasiriBarcode;
+      if (name) existing.name = name;
+      if (phone) existing.phone = phone;
+      if (email) existing.email = email;
+      if (medicalCenter && hid === (existing.hospitalId || HOSPITAL_PRIMECARE)) {
+        existing.medicalCenter = medicalCenter;
+      }
+      saveStore(store);
+      return res.status(200).json({ patient: existing, state: store, isNewSync: false });
+    }
+  }
+
+  const pId = requestedId || `${Math.floor(1000 + Math.random() * 9000)}-LK`;
   
   // parsed medical history split by commas or array fallback
   let parseHistory = ["No systemic chronic conditions declared"];
@@ -1022,7 +1257,10 @@ app.post("/api/patients", (req, res) => {
     medicalCertificatesList: [],
     medicalCenter: medicalCenter || "Colombo Central Clinic",
     hospitalId: hospitalId || HOSPITAL_PRIMECARE,
-    branchId: branchId || BRANCH_COLOMBO
+    branchId: branchId || BRANCH_COLOMBO,
+    suwasiriBarcode: suwasiriBarcode || undefined,
+    syncedHospitalIds: [hospitalId || HOSPITAL_PRIMECARE],
+    accessStatus: "ACTIVE"
   };
 
   store.patients.unshift(newPatient);
@@ -1358,7 +1596,14 @@ app.patch("/api/patients/:id", (req, res) => {
     newLabResult,
     newPrescriptionRecord,
     reviewLabResultId,
-    reviewedBy
+    reviewedBy,
+    heightCm,
+    weightKg,
+    lastSystolicBp,
+    lastDiastolicBp,
+    waistCm,
+    clinicalCalculations,
+    observationsHistory
   } = req.body;
 
   const patIndex = store.patients.findIndex(p => p.id === id);
@@ -1388,6 +1633,14 @@ app.patch("/api/patients/:id", (req, res) => {
       pat.medicalHistory = String(medicalHistory).split(",").map(s => s.trim()).filter(Boolean);
     }
   }
+
+  if (heightCm !== undefined) pat.heightCm = Number(heightCm);
+  if (weightKg !== undefined) pat.weightKg = Number(weightKg);
+  if (lastSystolicBp !== undefined) pat.lastSystolicBp = Number(lastSystolicBp);
+  if (lastDiastolicBp !== undefined) pat.lastDiastolicBp = Number(lastDiastolicBp);
+  if (waistCm !== undefined) pat.waistCm = Number(waistCm);
+  if (Array.isArray(clinicalCalculations)) pat.clinicalCalculations = clinicalCalculations;
+  if (Array.isArray(observationsHistory)) pat.observationsHistory = observationsHistory;
 
   if (newVaccineRecord) {
     pat.vaccineRecords.push(newVaccineRecord);
@@ -2004,6 +2257,71 @@ app.post("/api/sample-collections/:id/register", (req, res) => {
   });
   saveStore(store);
   res.json({ sample, state: store });
+});
+
+app.delete("/api/sample-collections/:id", (req, res) => {
+  const store = getStore();
+  if (!store.sampleCollections) store.sampleCollections = [];
+  const index = store.sampleCollections.findIndex((s) => s.id === req.params.id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Sample collection details not found" });
+  }
+  const sample = store.sampleCollections[index];
+  store.sampleCollections.splice(index, 1);
+  const pat = store.patients.find((p) => p.id === sample.patientId);
+  if (pat && Array.isArray(pat.sampleCollections)) {
+    pat.sampleCollections = pat.sampleCollections.filter((ps) => ps.id !== sample.id);
+  }
+  saveStore(store);
+  res.json({ success: true, state: store });
+});
+
+app.post("/api/patient-access-requests", (req, res) => {
+  const store = getStore();
+  if (!store.patientAccessRequests) store.patientAccessRequests = [];
+  const { patientId, type, comment, requestedBy, hospitalId } = req.body;
+  const pat = store.patients.find((p) => p.id === patientId);
+  if (!pat) return res.status(404).json({ error: "Patient not found" });
+  if (!comment || !String(comment).trim()) {
+    return res.status(400).json({ error: "A comment is required to delete or block a patient." });
+  }
+  const kind = type === "BLOCK" ? "BLOCK" : "DELETE";
+  const reqRow = {
+    id: `par-${Date.now()}`,
+    patientId,
+    patientName: pat.name,
+    type: kind,
+    comment: String(comment).trim(),
+    requestedBy: requestedBy || "Reception",
+    hospitalId: hospitalId || HOSPITAL_PRIMECARE,
+    status: "PENDING",
+    createdAt: new Date().toISOString()
+  };
+  pat.accessStatus = kind === "BLOCK" ? "PENDING_BLOCK" : "PENDING_DELETE";
+  pat.accessComment = reqRow.comment;
+  store.patientAccessRequests.unshift(reqRow);
+  saveStore(store);
+  res.status(201).json({ request: reqRow, state: store });
+});
+
+app.patch("/api/patient-access-requests/:id", (req, res) => {
+  const store = getStore();
+  if (!store.patientAccessRequests) store.patientAccessRequests = [];
+  const row = store.patientAccessRequests.find((r) => r.id === req.params.id);
+  if (!row) return res.status(404).json({ error: "Request not found" });
+  const decision = req.body.status === "REJECTED" ? "REJECTED" : "APPROVED";
+  row.status = decision;
+  row.reviewedBy = req.body.reviewedBy || "Admin";
+  const pat = store.patients.find((p) => p.id === row.patientId);
+  if (pat) {
+    if (decision === "REJECTED") {
+      pat.accessStatus = "ACTIVE";
+    } else {
+      pat.accessStatus = row.type === "BLOCK" ? "BLOCKED" : "DELETED";
+    }
+  }
+  saveStore(store);
+  res.json({ request: row, state: store });
 });
 
 // MARK SAMPLE AS COLLECTED

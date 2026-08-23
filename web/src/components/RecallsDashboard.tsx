@@ -38,17 +38,19 @@ export default function RecallsDashboard({
   });
   const [newNotes, setNewNotes] = useState<string>("Routine 6-monthly HbA1c and lipid check required.");
 
+  const activeRecalls = recalls.filter(r => r.status !== "COMPLETED" && r.status !== "CANCELLED");
+
   // Category counts matching the user's specific clinical benchmark
   const categories = [
-    { id: "All", label: "All Active Recalls", count: recalls.length, color: "border-slate-300 text-slate-700 bg-white" },
-    { id: "Diabetes Review", label: "🔴 Diabetes Review", count: recalls.filter(r => r.category === "Diabetes Review").length || 32, color: "border-red-300 text-red-700 bg-red-50" },
-    { id: "Immunisation", label: "🔴 Immunisation Due", count: recalls.filter(r => r.category === "Immunisation").length || 18, color: "border-red-300 text-red-700 bg-red-50" },
-    { id: "Cervical Screening", label: "🟠 Cervical Screening", count: recalls.filter(r => r.category === "Cervical Screening").length || 15, color: "border-orange-300 text-orange-700 bg-orange-50" },
-    { id: "Pathology Follow-up", label: "🟠 Pathology Follow-up", count: recalls.filter(r => r.category === "Pathology Follow-up").length || 9, color: "border-orange-300 text-orange-700 bg-orange-50" },
-    { id: "Care Plan Review", label: "🟡 Care Plan Review", count: recalls.filter(r => r.category === "Care Plan Review").length || 7, color: "border-amber-300 text-amber-700 bg-amber-50" },
+    { id: "All", label: "All Active Recalls", count: activeRecalls.length, color: "border-slate-300 text-slate-700 bg-white" },
+    { id: "Diabetes Review", label: "🔴 Diabetes Review", count: activeRecalls.filter(r => r.category === "Diabetes Review").length, color: "border-red-300 text-red-700 bg-red-50" },
+    { id: "Immunisation", label: "🔴 Immunisation Due", count: activeRecalls.filter(r => r.category === "Immunisation").length, color: "border-red-300 text-red-700 bg-red-50" },
+    { id: "Cervical Screening", label: "🟠 Cervical Screening", count: activeRecalls.filter(r => r.category === "Cervical Screening").length, color: "border-orange-300 text-orange-700 bg-orange-50" },
+    { id: "Pathology Follow-up", label: "🟠 Pathology Follow-up", count: activeRecalls.filter(r => r.category === "Pathology Follow-up").length, color: "border-orange-300 text-orange-700 bg-orange-50" },
+    { id: "Care Plan Review", label: "🟡 Care Plan Review", count: activeRecalls.filter(r => r.category === "Care Plan Review").length, color: "border-amber-300 text-amber-700 bg-amber-50" },
   ];
 
-  const filteredRecalls = recalls.filter(r => {
+  const filteredRecalls = activeRecalls.filter(r => {
     if (activeCategory !== "All" && r.category !== activeCategory) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -80,9 +82,32 @@ export default function RecallsDashboard({
     setTimeout(() => setSuccessToast(null), 3000);
   };
 
-  const handleNotify = (recallId: string, method: "SMS" | "Email" | "App Notification", patientName: string) => {
-    onSendNotification(recallId, method);
-    setSuccessToast(`Sent ${method} recall reminder to ${patientName}`);
+  const handleNotify = (recall: RecallRecord, method: "SMS" | "Email" | "App Notification") => {
+    const live = patients.find(p => p.id === recall.patientId);
+    const phone = (live?.phone || recall.patientPhone || "").replace(/\s+/g, "");
+    const email = live?.email || recall.patientEmail || "";
+    const body = encodeURIComponent(
+      `PrimeCare reminder: ${recall.patientName}, please book your ${recall.category} (${recall.notes}). Due ${recall.dueDate}.`
+    );
+    if (method === "SMS") {
+      if (!phone) {
+        setSuccessToast(`No registered phone number for ${recall.patientName}`);
+        setTimeout(() => setSuccessToast(null), 3000);
+        return;
+      }
+      window.open(`sms:${phone}?body=${body}`, "_self");
+    }
+    if (method === "Email") {
+      if (!email) {
+        setSuccessToast(`No registered email for ${recall.patientName}`);
+        setTimeout(() => setSuccessToast(null), 3000);
+        return;
+      }
+      window.open(`mailto:${email}?subject=${encodeURIComponent("Clinic recall reminder")}&body=${body}`);
+    }
+    onSendNotification(recall.id, method);
+    const dest = method === "SMS" ? phone : email;
+    setSuccessToast(`Sent ${method} recall reminder to ${recall.patientName} via ${dest}`);
     setTimeout(() => setSuccessToast(null), 3000);
   };
 
@@ -104,9 +129,9 @@ export default function RecallsDashboard({
             <BellRing className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-slate-900">Clinical Recall & Preventive Health Reminders</h1>
+            <h1 className="text-lg font-bold text-slate-900">Front Desk Recalls & Reminders</h1>
             <p className="text-xs text-slate-500">
-              Active patient safety monitoring, overdue pathology follow-ups, and automated recall dispatch
+              Receptionist queue: SMS or email using the patient’s registered phone and email, rebook a suitable doctor, then mark the recall complete
             </p>
           </div>
         </div>
@@ -230,18 +255,17 @@ export default function RecallsDashboard({
                       <div className="flex items-center justify-end gap-1.5">
                         {/* Send SMS */}
                         <button
-                          onClick={() => handleNotify(r.id, "SMS", r.patientName)}
-                          title="Dispatch SMS Recall"
+                          onClick={() => handleNotify(r, "SMS")}
+                          title={`SMS to registered number ${r.patientPhone}`}
                           className="p-1.5 bg-sky-50 text-sky-700 hover:bg-sky-100 rounded border border-sky-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
                         >
                           <Smartphone className="w-3.5 h-3.5" />
                           <span>SMS</span>
                         </button>
 
-                        {/* Send Email */}
                         <button
-                          onClick={() => handleNotify(r.id, "Email", r.patientName)}
-                          title="Dispatch Email Recall"
+                          onClick={() => handleNotify(r, "Email")}
+                          title={`Email to registered address ${r.patientEmail}`}
                           className="p-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded border border-slate-300 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
                         >
                           <Mail className="w-3.5 h-3.5" />

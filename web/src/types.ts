@@ -1,3 +1,16 @@
+export interface DrugFormularyItem {
+  name: string;
+  brand: string;
+  generic: string;
+  category: string;
+  strength: string;
+  defaultDose: string;
+  defaultDays: string;
+  defaultMeal: string;
+  contraindicatedAllergies: string[];
+  indications: string;
+}
+
 export interface VaccineRecord {
   vaccineName: string;
   date: string;
@@ -166,6 +179,20 @@ export interface AuditLogEntry {
   ipAddress?: string;
 }
 
+export type RosterWeekday =
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday";
+
+export interface RosterDayHours {
+  start: string;
+  end: string;
+}
+
 export interface StaffProvider {
   id: string;
   userId?: string;
@@ -191,6 +218,8 @@ export interface StaffProvider {
     saturday: boolean;
     sunday: boolean;
   };
+  /** Per-day clinic hours, e.g. Monday 16:00–18:00. Editable after save. */
+  rosterHours?: Partial<Record<RosterWeekday, RosterDayHours>>;
   active: boolean;
 }
 
@@ -272,6 +301,15 @@ export interface Patient {
   hospitalId?: string;
   branchId?: string;
   currentMedications?: string[];
+  heightCm?: number;
+  weightKg?: number;
+  lastSystolicBp?: number;
+  lastDiastolicBp?: number;
+  waistCm?: number;
+  /** Hospitals that have synced this Suwasiri Unique Health ID into their portal. */
+  syncedHospitalIds?: string[];
+  accessStatus?: "ACTIVE" | "PENDING_DELETE" | "PENDING_BLOCK" | "BLOCKED" | "DELETED";
+  accessComment?: string;
 }
 
 export interface SampleCollection {
@@ -412,10 +450,23 @@ export interface Billing {
   gapFee?: number;
   status: "PAID" | "PENDING" | "OVERDUE" | "BULK_BILLED";
   date: string;
-  paymentMethod?: "Medicare Bulk Bill" | "EFTPOS" | "Credit Card" | "Cash" | "Suwasiri Pay" | "DVA";
+  paymentMethod?: "Medicare Bulk Bill" | "EFTPOS" | "Credit Card" | "Cash" | "Suwasiri Pay" | "Suwasiri Manual" | "DVA";
   paidBySuwasiri?: boolean;
   suwasiriReceiptUrl?: string;
   claimId?: string;
+}
+
+export interface PatientAccessRequest {
+  id: string;
+  patientId: string;
+  patientName: string;
+  type: "DELETE" | "BLOCK";
+  comment: string;
+  requestedBy: string;
+  hospitalId: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  createdAt: string;
+  reviewedBy?: string;
 }
 
 export interface LabOrder {

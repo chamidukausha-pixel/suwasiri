@@ -102,6 +102,27 @@ class FirebaseHealthRepository implements HealthRepository {
   }
 
   @override
+  Stream<List<TreatmentNote>> watchTreatmentNotes(String patientId) {
+    return _db
+        .collection('consultation_notes')
+        .where('patientId', isEqualTo: patientId)
+        .snapshots()
+        .map((snap) {
+      final live = snap.docs
+          .map((d) => TreatmentNote.fromMap(d.id, d.data()))
+          .toList()
+        ..sort((a, b) => b.date.compareTo(a.date));
+      final samples = PatientHealthSamples.treatmentNotes(patientId: patientId);
+      if (live.isEmpty) return samples;
+      final ids = {for (final n in live) n.id};
+      return [
+        ...live,
+        ...samples.where((s) => !ids.contains(s.id)),
+      ];
+    });
+  }
+
+  @override
   Future<List<Prescription>> issueTelehealthPrescription({
     required String patientId,
     required String doctorName,

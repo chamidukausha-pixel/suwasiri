@@ -4,7 +4,7 @@ import {
   Plus, Edit, Trash2, MapPin, Stethoscope, Shield, ShieldCheck, Mail, Smartphone,
   Check, Save, Sparkles, RefreshCw, AlertCircle
 } from "lucide-react";
-import { StaffProvider, FeeScheduleItem, Hospital, Branch, RoleDefinition } from "../types";
+import { StaffProvider, FeeScheduleItem, Hospital, Branch, RoleDefinition, RosterWeekday } from "../types";
 
 interface Props {
   currentRole?: string;
@@ -124,15 +124,41 @@ export default function PracticeManagerView({
     }
     setStaffList(prev => prev.map(s => {
       if (s.id === staffId) {
+        const nextOn = !s.roster[day];
+        const hours = { ...(s.rosterHours || {}) };
+        if (nextOn) {
+          hours[day] = hours[day] || { start: day === "saturday" || day === "sunday" ? "09:00" : "16:00", end: day === "saturday" || day === "sunday" ? "13:00" : "18:00" };
+        } else {
+          delete hours[day];
+        }
         return {
           ...s,
           roster: {
             ...s.roster,
-            [day]: !s.roster[day]
-          }
+            [day]: nextOn
+          },
+          rosterHours: hours
         };
       }
       return s;
+    }));
+  };
+
+  const handleUpdateHours = (staffId: string, day: RosterWeekday, field: "start" | "end", value: string) => {
+    if (!isAdmin) return;
+    setStaffList((prev) => prev.map((s) => {
+      if (s.id !== staffId) return s;
+      return {
+        ...s,
+        rosterHours: {
+          ...(s.rosterHours || {}),
+          [day]: {
+            start: s.rosterHours?.[day]?.start || "09:00",
+            end: s.rosterHours?.[day]?.end || "17:00",
+            [field]: value,
+          },
+        },
+      };
     }));
   };
 
@@ -222,9 +248,9 @@ export default function PracticeManagerView({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-serif font-bold text-[#00334f]">
-                    Practice Management & Operational Governance
-                  </h1>
+                    <h1 className="text-xl font-serif font-bold text-[#00334f]">
+                      {hospital?.name || "Practice"} — staff, branches & weekly roster
+                    </h1>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                     isAdmin 
                       ? "bg-purple-100 text-purple-800 border-purple-200" 
@@ -381,7 +407,8 @@ export default function PracticeManagerView({
                   </div>
                 </div>
 
-                {/* Day Buttons */}
+                {/* Day Buttons + hours */}
+                <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {(["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const).map((day) => {
                     const fullDay = day === "mon" ? "monday" : day === "tue" ? "tuesday" : day === "wed" ? "wednesday" : day === "thu" ? "thursday" : day === "fri" ? "friday" : day === "sat" ? "saturday" : "sunday";
@@ -404,6 +431,29 @@ export default function PracticeManagerView({
                       </button>
                     );
                   })}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as RosterWeekday[]).filter((d) => staff.roster[d]).map((d) => (
+                    <label key={d} className="flex items-center gap-1 text-[10px] text-slate-600 bg-white border rounded px-1.5 py-0.5">
+                      <span className="font-bold uppercase">{d.slice(0, 3)}</span>
+                      <input
+                        type="time"
+                        disabled={!isAdmin}
+                        value={staff.rosterHours?.[d]?.start || "09:00"}
+                        onChange={(e) => handleUpdateHours(staff.id, d, "start", e.target.value)}
+                        className="text-[10px] border rounded px-1 py-0.5"
+                      />
+                      <span>–</span>
+                      <input
+                        type="time"
+                        disabled={!isAdmin}
+                        value={staff.rosterHours?.[d]?.end || "17:00"}
+                        onChange={(e) => handleUpdateHours(staff.id, d, "end", e.target.value)}
+                        className="text-[10px] border rounded px-1 py-0.5"
+                      />
+                    </label>
+                  ))}
+                </div>
                 </div>
               </div>
             ))}

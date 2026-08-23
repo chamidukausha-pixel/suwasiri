@@ -142,6 +142,7 @@ class VaultCubit extends Cubit<VaultState> {
   final SharedPreferences _prefs;
   StreamSubscription<List<Prescription>>? _rxSub;
   StreamSubscription<List<DoctorCertificate>>? _certSub;
+  StreamSubscription<List<TreatmentNote>>? _notesSub;
   String? _patientId;
 
   Future<void> unlock(Future<bool> Function() biometric) async {
@@ -162,6 +163,11 @@ class VaultCubit extends Cubit<VaultState> {
     _certSub = _health.watchCertificates(patientId).listen((certs) {
       if (isClosed) return;
       emit(state.copyWith(certificates: certs));
+    });
+    await _notesSub?.cancel();
+    _notesSub = _health.watchTreatmentNotes(patientId).listen((notes) {
+      if (isClosed) return;
+      emit(state.copyWith(treatmentNotes: notes));
     });
   }
 
@@ -295,8 +301,10 @@ class VaultCubit extends Cubit<VaultState> {
   void resetForPatient() {
     unawaited(_rxSub?.cancel());
     unawaited(_certSub?.cancel());
+    unawaited(_notesSub?.cancel());
     _rxSub = null;
     _certSub = null;
+    _notesSub = null;
     _patientId = null;
     emit(VaultState(unlocked: state.unlocked));
   }
@@ -305,6 +313,7 @@ class VaultCubit extends Cubit<VaultState> {
   Future<void> close() {
     _rxSub?.cancel();
     _certSub?.cancel();
+    _notesSub?.cancel();
     return super.close();
   }
 

@@ -556,6 +556,18 @@ class TreatmentNote {
   final String title;
   final String body;
   final DateTime date;
+
+  factory TreatmentNote.fromMap(String id, Map<String, dynamic> map) {
+    return TreatmentNote(
+      id: id,
+      patientId: map['patientId'] as String? ?? '',
+      doctor: map['doctor'] as String? ?? '',
+      clinicName: map['clinicName'] as String? ?? '',
+      title: map['title'] as String? ?? 'Consultation notes',
+      body: map['body'] as String? ?? '',
+      date: DateTime.tryParse(map['date'] as String? ?? '') ?? DateTime.now(),
+    );
+  }
 }
 
 class VaccineHistoryEntry {

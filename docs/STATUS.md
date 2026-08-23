@@ -83,6 +83,25 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Home search bar removed; video consult 5‑min reminder + notification; Call Answer for GP Care ringing; Vault Previous Medical History folders; unique family member profiles
 - [x] Previous medical photos: tap to view + pinch zoom; Switch Account opens member profile; appointments/vaccines write member patientName for GP Care
 - [x] Doctor booking UI matches mockup (sage dates, coral times, reason chips); 6‑month date window; Available/Booked sync with GP Care
+- [x] GP Care Clinical Calculators: search registered patient, click name for current details, edit/save; history reloads in the suite
+- [x] Recalls & Reminders live on Receptionist / Front Desk; SMS/email via registered phone/email; completing a recall drops the active count (e.g. 5 → 4)
+- [x] Reception **Book scheduler appointment slot**: drag working doctors, sage dates, coral times, 6‑month window; in-person → Suwasiri Home **blue** card, video → **purple** card; doctor + receptionist calendars show the name on that date
+- [x] Patient Clinical Records lives on Receptionist & Front Desk; Unique Health ID → **Sync to Portal** loads the Suwasiri `users` file (name, phone, details)
+- [x] **Check walk-in availability** uses the same sage/coral 6‑month scheduler; if the session is full, reception can add up to 5 walk-ins at the end of the list; Lobby ⬆️⬇️ / place selector still reorders the queue
+- [x] Telehealth right rail is the clinical consultation room (not Active GP room); View Clinical Hub opens history and syncs to that patient’s Suwasiri file
+- [x] Telehealth e-Rx: view, download, and print after medicines are issued; still writes Suwasiri Call E-Prescription
+- [x] Unique Health ID Sync to Portal is clinic-scoped (PrimeCare vs other hospitals); Chamidu `SW3C6F5B5A27` / Sakuni `SW6CF9340271`
+- [x] Reception delete/block patient requires a comment and admin approval
+- [x] Receipts: Paid by Suwasiri vs paid by manual via Suwasiri (view/download slip)
+- [x] Sample Dispatch Hub delete with yes/no confirm; Team Secure Chat is shared by all clinic staff
+- [x] Telehealth: day’s video bookings only; click name → Active Clinical Consultation Room; Call start from 2 minutes before the slot
+- [x] Telehealth e-Rx matches GP Exam Room (formulary + Sinhala meal timing); attached prescription image removed
+- [x] Recalls: complete a recall drops All Active and category counts and persists
+- [x] Receipts & Invoices: month calendar filters to that day’s booked patients; view/download Suwasiri slips
+- [x] Platform Console: click hospital to add doctor/receptionist/nurse/staff (linked to Practice Manager, RBAC, login)
+- [x] Practice Manager: weekly roster days and hours, editable after save
+- [x] Security & RBAC: Super Admin assigns staff to other branches
+- [x] Clinical audit trail: consult/lab activity + medicines/labs inspector + month calendar
 
 ## In progress / next
 
@@ -95,7 +114,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [ ] Firebase Storage for vault file uploads (`fileUrl`)
 - [ ] Tighten `notifications` rules to owner-scoped (`userId == auth.uid`)
 - [ ] Telehealth/Call: live WebRTC to GP Care is wired (STUN); a TURN server may be needed on some mobile networks
-- [ ] Web + mobile sync: appointments, telehealth, e-Rx, and medical certificates are on Firestore; Vault → GP Care sync is **vaccine history only**. Remaining GP EMR notes still use the web JSON store. Tenancy/RBAC is in the web JSON store; tenancy collections are documented, not deployed.
+- [ ] Web + mobile sync: appointments (including receptionist Book scheduler and walk-ins), Unique Health ID lookup, telehealth notes/chat, e-Rx, medical certificates, and clinical calculator snapshots are on Firestore; Vault → GP Care sync is **vaccine history only**. Remaining GP EMR charts still use the web JSON store. Tenancy/RBAC is in the web JSON store; tenancy collections are documented, not deployed.
 
 ## Known caveats
 

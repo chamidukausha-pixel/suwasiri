@@ -33,7 +33,11 @@ import {
   Patient,
   UserRole,
   BreakGlassEvent,
-  ActiveSession
+  ActiveSession,
+  StaffProvider,
+  Hospital,
+  Branch,
+  StaffMembership,
 } from "../types";
 import { cloneHospitalRoles } from "../tenancy";
 
@@ -50,6 +54,12 @@ interface Props {
   onSaveRoles?: (roles: RoleDefinition[]) => void | Promise<void>;
   onAddRole?: (name: string, cloneFromRoleId: string) => void;
   onRemoveRole?: (roleId: string) => void;
+  staffList?: StaffProvider[];
+  hospitals?: Hospital[];
+  branches?: Branch[];
+  memberships?: StaffMembership[];
+  onSaveStaff?: (staff: StaffProvider[]) => void | Promise<void>;
+  onSaveMemberships?: (memberships: StaffMembership[]) => void | Promise<void>;
 }
 
 const DEFAULT_SECURITY_CONFIG: SecurityStatusConfig = {
@@ -131,7 +141,13 @@ export default function SecurityModuleView({
   onRecordBreakGlass,
   onSaveRoles,
   onAddRole,
-  onRemoveRole
+  onRemoveRole,
+  staffList = [],
+  hospitals = [],
+  branches = [],
+  memberships = [],
+  onSaveStaff,
+  onSaveMemberships,
 }: Props) {
   const isAdmin = canEditRbac ?? (currentRole === "Admin" || currentRole === "Practice Manager" || currentRole === "Hospital Super Admin" || isPlatformSA);
   const [config, setConfig] = useState<SecurityStatusConfig>(DEFAULT_SECURITY_CONFIG);
@@ -619,6 +635,68 @@ export default function SecurityModuleView({
             <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs font-bold animate-in fade-in">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>{rbacSaveSuccess}</span>
+            </div>
+          )}
+
+          {isAdmin && staffList.length > 0 && (
+            <div className="border rounded-xl p-4 space-y-3 bg-slate-50">
+              <div>
+                <h4 className="text-sm font-bold text-[#00334f]">Assign staff to branches</h4>
+                <p className="text-[11px] text-slate-500">
+                  Super Admin can attach staff to other branches (and other hospitals if you are Platform Super Admin). Saving updates Practice Manager and login memberships.
+                </p>
+              </div>
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {staffList
+                  .filter((s) => isPlatformSA || s.hospitalId === hospitalId)
+                  .map((s) => {
+                    const assignable = isPlatformSA ? branches : branches.filter((b) => b.hospitalId === (s.hospitalId || hospitalId));
+                    return (
+                      <div key={s.id} className="bg-white border rounded-lg p-2.5 text-xs">
+                        <div className="flex flex-wrap justify-between gap-1 mb-1.5">
+                          <span className="font-bold text-slate-900">{s.name}</span>
+                          <span className="text-slate-500">{s.role} · {hospitals.find((h) => h.id === s.hospitalId)?.name || hospitalName}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {assignable.map((b) => {
+                            const on = (s.branchIds || []).includes(b.id);
+                            return (
+                              <button
+                                key={b.id}
+                                type="button"
+                                onClick={() => {
+                                  const nextStaff = staffList.map((row) => {
+                                    if (row.id !== s.id) return row;
+                                    const current = row.branchIds || [];
+                                    const branchIds = current.includes(b.id)
+                                      ? current.filter((id) => id !== b.id)
+                                      : [...current, b.id];
+                                    return { ...row, branchIds, hospitalId: row.hospitalId || b.hospitalId };
+                                  });
+                                  onSaveStaff?.(nextStaff.filter((row) => row.hospitalId === (s.hospitalId || hospitalId)));
+                                  const nextMem = memberships.map((m) => {
+                                    if (m.userId !== s.userId || m.hospitalId !== (s.hospitalId || hospitalId)) return m;
+                                    const current = m.branchIds || [];
+                                    const branchIds = current.includes(b.id)
+                                      ? current.filter((id) => id !== b.id)
+                                      : [...current, b.id];
+                                    return { ...m, branchIds };
+                                  });
+                                  onSaveMemberships?.(nextMem);
+                                }}
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                                  on ? "bg-emerald-100 text-emerald-800 border-emerald-200" : "bg-white text-slate-500"
+                                }`}
+                              >
+                                {b.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
             </div>
           )}
 

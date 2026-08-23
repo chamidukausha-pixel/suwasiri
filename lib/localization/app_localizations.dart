@@ -442,6 +442,36 @@ class AppLocalizations {
       'si': 'ඔබ',
       'ta': 'நீங்கள்',
     },
+    'patientCamera': {
+      'en': 'Patient camera',
+      'si': 'රෝගී කැමරාව',
+      'ta': 'நோயாளி கேமரா',
+    },
+    'gpRoomCamActive': {
+      'en': 'GP Room Cam Active',
+      'si': 'GP කාමර කැමරාව සක්‍රියයි',
+      'ta': 'GP அறை கேமரா செயலில்',
+    },
+    'doctorLiveNotes': {
+      'en': 'Doctor notes & treatment',
+      'si': 'වෛද්‍ය සටහන් සහ ප්‍රතිකාර',
+      'ta': 'மருத்துவர் குறிப்புகள் மற்றும் சிகிச்சை',
+    },
+    'inCallMessages': {
+      'en': 'In-call messages',
+      'si': 'ඇමතුම අතර පණිවිඩ',
+      'ta': 'அழைப்பு செய்திகள்',
+    },
+    'inCallMessagesEmpty': {
+      'en': 'The doctor can message you here during the consult.',
+      'si': 'උපදේශනය අතරතුර වෛද්‍යවරයාට මෙහි පණිවිඩ යැවිය හැක.',
+      'ta': 'ஆலோசனையின் போது மருத்துவர் இங்கே செய்தி அனுப்பலாம்.',
+    },
+    'inCallMessageHint': {
+      'en': 'Reply to the doctor…',
+      'si': 'වෛද්‍යවරයාට පිළිතුරු දෙන්න…',
+      'ta': 'மருத்துவருக்கு பதிலளிக்கவும்…',
+    },
     'cameraOff': {
       'en': 'Camera off',
       'si': 'කැමරාව ක්‍රියා විරහිතයි',

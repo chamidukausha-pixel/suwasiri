@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { 
   Calculator, Activity, Heart, Scale, Baby, Droplet, Stethoscope, CheckCircle, 
-  AlertTriangle, X, ShieldAlert, Sparkles, Plus, Copy, Check, Search, User, Shield
+  AlertTriangle, X, ShieldAlert, Sparkles, Plus, Copy, Check, Search, User, Shield, Save
 } from "lucide-react";
 import { 
   calculateBmi, calculateAustralianCvdRisk, calculateAusdrisk, 
@@ -9,19 +9,45 @@ import {
   calculatePaediatricDose, BmiResult, CvdRiskResult, AusdriskResult, 
   EgfrResult, BpStagingResult, PregnancyEddResult, PaediatricDoseResult 
 } from "../utils/clinicalCalculators";
-import { Patient } from "../types";
+import { ClinicalCalculationResult, ObservationRecord, Patient } from "../types";
+import {
+  loadClinicalCalculatorSnapshot,
+  saveClinicalCalculatorSnapshot,
+} from "../sync/suwasiriClinicalCalculators";
 
 interface Props {
   patient?: Patient | null;
   patients?: Patient[];
+  calculatedBy?: string;
+  embedded?: boolean;
   onClose: () => void;
   onSaveToConsultation?: (summaryText: string) => void;
+  onPersistPatient?: (updated: Patient) => void | Promise<void>;
 }
 
-export default function ClinicalCalculatorsModal({ patient, patients = [], onClose, onSaveToConsultation }: Props) {
+export default function ClinicalCalculatorsModal({
+  patient,
+  patients = [],
+  calculatedBy = "GP",
+  embedded = false,
+  onClose,
+  onSaveToConsultation,
+  onPersistPatient,
+}: Props) {
   const [activePatient, setActivePatient] = useState<Patient | null>(patient || patients[0] || null);
   const [patientSearchQuery, setPatientSearchQuery] = useState("");
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+  const [savingFile, setSavingFile] = useState(false);
+  const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [editAge, setEditAge] = useState<number>(activePatient?.age || 52);
+  const [editGender, setEditGender] = useState<string>(activePatient?.gender || "Female");
+  const [editPhone, setEditPhone] = useState(activePatient?.phone || "");
+  const [editEmail, setEditEmail] = useState(activePatient?.email || "");
+  const [editBlood, setEditBlood] = useState(activePatient?.bloodType || "");
+  const [editAllergies, setEditAllergies] = useState(activePatient?.allergies || "");
+  const [editConditions, setEditConditions] = useState(
+    (activePatient?.medicalHistory || []).join(", ")
+  );
 
   const [activeCalcTab, setActiveCalcTab] = useState<"bmi" | "cvd" | "ausdrisk" | "egfr" | "bp" | "pregnancy" | "paediatric">("bmi");
   const [copiedNotification, setCopiedNotification] = useState(false);
@@ -87,16 +113,68 @@ export default function ClinicalCalculatorsModal({ patient, patients = [], onClo
   }, [patient]);
 
   useEffect(() => {
-    if (activePatient) {
-      setCvdAge(activePatient.age || 52);
-      setCvdGender(activePatient.gender === "Male" ? "Male" : "Female");
-      setAusAge(activePatient.age || 52);
-      setAusGender(activePatient.gender === "Male" ? "Male" : "Female");
-      setEgfrAge(activePatient.age || 52);
-      setEgfrGender(activePatient.gender === "Male" ? "Male" : "Female");
-      setCvdDiabetes(activePatient.medicalHistory?.some(m => m.toLowerCase().includes("diabet")) || false);
-    }
-  }, [activePatient]);
+    if (!activePatient) return;
+    let cancelled = false;
+    const latestObs = activePatient.observationsHistory?.[0];
+    const apply = (p: Patient) => {
+      const obs = p.observationsHistory?.[0] || latestObs;
+      setEditAge(p.age || 52);
+      setEditGender(p.gender || "Female");
+      setEditPhone(p.phone || "");
+      setEditEmail(p.email || "");
+      setEditBlood(p.bloodType || "");
+      setEditAllergies(p.allergies || "");
+      setEditConditions((p.medicalHistory || []).join(", "));
+      setHeightCm(p.heightCm || obs?.heightCm || 170);
+      setWeightKg(p.weightKg || obs?.weightKg || 72);
+      setPaedWeight(p.weightKg || obs?.weightKg || (p.age && p.age < 16 ? 14 : 72));
+      const sys = p.lastSystolicBp || obs?.systolicBp || 135;
+      const dia = p.lastDiastolicBp || obs?.diastolicBp || 88;
+      setCvdSystolic(sys);
+      setBpSystolic(sys);
+      setBpDiastolic(dia);
+      if (p.waistCm || obs?.waistCircumferenceCm) {
+        setAusWaist(p.waistCm || obs?.waistCircumferenceCm || 92);
+      }
+      setCvdAge(p.age || 52);
+      setCvdGender(p.gender === "Male" ? "Male" : "Female");
+      setAusAge(p.age || 52);
+      setAusGender(p.gender === "Male" ? "Male" : "Female");
+      setEgfrAge(p.age || 52);
+      setEgfrGender(p.gender === "Male" ? "Male" : "Female");
+      setCvdDiabetes(p.medicalHistory?.some(m => m.toLowerCase().includes("diabet")) || false);
+    };
+    apply(activePatient);
+    loadClinicalCalculatorSnapshot(activePatient.id).then((snap) => {
+      if (cancelled || !snap) return;
+      const merged: Patient = {
+        ...activePatient,
+        age: snap.age ?? activePatient.age,
+        gender: snap.gender ?? activePatient.gender,
+        phone: snap.phone ?? activePatient.phone,
+        email: snap.email ?? activePatient.email,
+        bloodType: snap.bloodType ?? activePatient.bloodType,
+        allergies: snap.allergies ?? activePatient.allergies,
+        medicalHistory: snap.medicalHistory ?? activePatient.medicalHistory,
+        heightCm: snap.heightCm ?? activePatient.heightCm,
+        weightKg: snap.weightKg ?? activePatient.weightKg,
+        lastSystolicBp: snap.lastSystolicBp ?? activePatient.lastSystolicBp,
+        lastDiastolicBp: snap.lastDiastolicBp ?? activePatient.lastDiastolicBp,
+        waistCm: snap.waistCm ?? activePatient.waistCm,
+        observationsHistory: snap.observationsHistory?.length
+          ? snap.observationsHistory
+          : activePatient.observationsHistory,
+        clinicalCalculations: snap.clinicalCalculations?.length
+          ? snap.clinicalCalculations
+          : activePatient.clinicalCalculations,
+      };
+      setActivePatient(merged);
+      apply(merged);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activePatient?.id]);
 
   // Auto-calculate on changes
   useEffect(() => {
@@ -190,9 +268,191 @@ export default function ClinicalCalculatorsModal({ patient, patients = [], onClo
     }
   };
 
+  const persistPatientFile = async (
+    extraCalc?: ClinicalCalculationResult,
+    extraNote?: string
+  ) => {
+    if (!activePatient) {
+      setSaveToast("Search and select a registered patient first.");
+      setTimeout(() => setSaveToast(null), 2500);
+      return;
+    }
+    setSavingFile(true);
+    const now = new Date();
+    const date = now.toISOString().split("T")[0];
+    const time = now.toTimeString().slice(0, 5);
+    const conditions = editConditions.split(",").map((s) => s.trim()).filter(Boolean);
+    const obs: ObservationRecord = {
+      id: "obs-" + Date.now(),
+      date,
+      time,
+      systolicBp: bpSystolic,
+      diastolicBp: bpDiastolic,
+      weightKg,
+      heightCm,
+      bmi: bmiResult?.bmi,
+      bmiCategory: bmiResult?.category,
+      waistCircumferenceCm: ausWaist,
+      eGFR: egfrResult?.egfr,
+      recordedBy: calculatedBy,
+      notes: extraNote,
+    };
+    const calcs = extraCalc
+      ? [extraCalc, ...(activePatient.clinicalCalculations || [])]
+      : (activePatient.clinicalCalculations || []);
+    const historyNote = extraNote || `Calculator suite updated (Ht ${heightCm}cm, Wt ${weightKg}kg, BP ${bpSystolic}/${bpDiastolic}).`;
+    const updated: Patient = {
+      ...activePatient,
+      age: editAge,
+      gender: editGender,
+      phone: editPhone,
+      email: editEmail,
+      bloodType: editBlood,
+      allergies: editAllergies,
+      medicalHistory: conditions,
+      heightCm,
+      weightKg,
+      lastSystolicBp: bpSystolic,
+      lastDiastolicBp: bpDiastolic,
+      waistCm: ausWaist,
+      observationsHistory: [obs, ...(activePatient.observationsHistory || [])],
+      clinicalCalculations: calcs,
+      history: [
+        {
+          date,
+          reason: "Clinical Decision Calculators Suite",
+          doctor: calculatedBy,
+          notes: historyNote,
+        },
+        ...(activePatient.history || []),
+      ],
+    };
+    setActivePatient(updated);
+    try {
+      await saveClinicalCalculatorSnapshot({
+        patientId: updated.id,
+        heightCm,
+        weightKg,
+        lastSystolicBp: bpSystolic,
+        lastDiastolicBp: bpDiastolic,
+        waistCm: ausWaist,
+        age: editAge,
+        gender: editGender,
+        phone: editPhone,
+        email: editEmail,
+        bloodType: editBlood,
+        allergies: editAllergies,
+        medicalHistory: conditions,
+        observationsHistory: updated.observationsHistory,
+        clinicalCalculations: calcs,
+        updatedBy: calculatedBy,
+      });
+      await onPersistPatient?.(updated);
+      setSaveToast(`Saved ${updated.name}'s details to Clinical Decision Calculators Suite.`);
+    } catch (err) {
+      console.error(err);
+      setSaveToast("Could not save patient file.");
+    }
+    setSavingFile(false);
+    setTimeout(() => setSaveToast(null), 3500);
+  };
+
+  const saveCurrentCalculator = () => {
+    if (!activePatient) return persistPatientFile();
+    const date = new Date().toISOString().split("T")[0];
+    let extra: ClinicalCalculationResult | undefined;
+    let note = "";
+    if (activeCalcTab === "bmi" && bmiResult) {
+      extra = {
+        id: "calc-" + Date.now(),
+        date,
+        type: "BMI",
+        score: bmiResult.bmi,
+        interpretation: bmiResult.category,
+        recommendation: bmiResult.advice,
+        inputs: { heightCm, weightKg },
+        calculatedBy,
+      };
+      note = `BMI ${bmiResult.bmi} (${bmiResult.category}).`;
+    } else if (activeCalcTab === "cvd" && cvdResult) {
+      extra = {
+        id: "calc-" + Date.now(),
+        date,
+        type: "CVD_RISK",
+        score: `${cvdResult.riskScorePercent}%`,
+        interpretation: cvdResult.riskCategory,
+        recommendation: cvdResult.recommendedAction,
+        inputs: { cvdAge, cvdGender, cvdSystolic, cvdSmoker, cvdDiabetes, cvdTotalChol, cvdHdlChol },
+        calculatedBy,
+      };
+      note = `CVD 5-year risk ${cvdResult.riskScorePercent}% (${cvdResult.riskCategory}).`;
+    } else if (activeCalcTab === "ausdrisk" && ausdriskResult) {
+      extra = {
+        id: "calc-" + Date.now(),
+        date,
+        type: "DIABETES_RISK",
+        score: ausdriskResult.score,
+        interpretation: ausdriskResult.riskTier,
+        recommendation: ausdriskResult.recommendations,
+        inputs: { ausAge, ausGender, ausWaist },
+        calculatedBy,
+      };
+      note = `AUSDRISK ${ausdriskResult.score} (${ausdriskResult.riskTier}).`;
+    } else if (activeCalcTab === "egfr" && egfrResult) {
+      extra = {
+        id: "calc-" + Date.now(),
+        date,
+        type: "EGFR",
+        score: egfrResult.egfr,
+        interpretation: egfrResult.stage,
+        recommendation: egfrResult.actionProtocol,
+        inputs: { creatinineVal, egfrAge, egfrGender },
+        calculatedBy,
+      };
+      note = `eGFR ${egfrResult.egfr} (${egfrResult.stage}).`;
+    } else if (activeCalcTab === "bp" && bpResult) {
+      extra = {
+        id: "calc-" + Date.now(),
+        date,
+        type: "BP_STAGING",
+        score: `${bpSystolic}/${bpDiastolic}`,
+        interpretation: bpResult.classification,
+        recommendation: bpResult.managementPlan,
+        inputs: { bpSystolic, bpDiastolic },
+        calculatedBy,
+      };
+      note = `BP ${bpSystolic}/${bpDiastolic} (${bpResult.classification}).`;
+    } else if (activeCalcTab === "pregnancy" && pregResult) {
+      extra = {
+        id: "calc-" + Date.now(),
+        date,
+        type: "PREGNANCY_EDD",
+        score: pregResult.eddDateStr,
+        interpretation: `${pregResult.gestationalWeeks} weeks`,
+        recommendation: pregResult.currentTrimester,
+        inputs: { lmpDate, cycleDays },
+        calculatedBy,
+      };
+      note = `EDD ${pregResult.eddDateStr} (${pregResult.gestationalWeeks}w).`;
+    } else if (activeCalcTab === "paediatric" && paedResult) {
+      extra = {
+        id: "calc-" + Date.now(),
+        date,
+        type: "PAEDIATRIC_DOSE",
+        score: `${paedResult.recommendedDoseMg} mg`,
+        interpretation: paedDrug,
+        recommendation: paedResult.frequency,
+        inputs: { paedDrug, paedWeight },
+        calculatedBy,
+      };
+      note = `Paediatric ${paedDrug} ${paedResult.recommendedDoseMg} mg.`;
+    }
+    return persistPatientFile(extra, note);
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3">
-      <div className="bg-white border border-slate-300 rounded-xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+    <div className={embedded ? "" : "fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3"}>
+      <div className={`bg-white border border-slate-300 rounded-xl shadow-2xl w-full max-w-5xl flex flex-col overflow-hidden ${embedded ? "max-h-none shadow-none" : "max-h-[92vh] animate-in fade-in zoom-in duration-150"}`}>
         
         {/* Modal Header */}
         <div className="bg-[#00334f] text-white px-5 py-3.5 flex justify-between items-center shrink-0">
@@ -245,109 +505,157 @@ export default function ClinicalCalculatorsModal({ patient, patients = [], onClo
 
         {/* Main Calculator Content Area */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
+          {saveToast && (
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold px-3 py-2 rounded-lg">
+              {saveToast}
+            </div>
+          )}
+
+          <div className="bg-[#f0f7ff] border border-sky-200 rounded-xl p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Search className="w-4 h-4 text-sky-700 shrink-0" />
+                <h3 className="text-xs font-bold text-[#00334f] uppercase tracking-wider">
+                  Search Registered Patient by Name or ID Number
+                </h3>
+              </div>
+              <span className="text-[11px] text-sky-800 font-semibold">
+                {patients.length > 0 ? `${patients.length} Registered Patients in Clinic` : "Live Registry"}
+              </span>
+            </div>
+
+            <div className="relative">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={patientSearchQuery}
+                    onChange={(e) => {
+                      setPatientSearchQuery(e.target.value);
+                      setShowPatientDropdown(true);
+                    }}
+                    onFocus={() => setShowPatientDropdown(true)}
+                    placeholder="Type Patient Name, ID (e.g. 9942-LK), Medicare Number, or Phone..."
+                    className="w-full pl-9 pr-4 py-2 bg-white border border-sky-300 rounded-lg text-xs text-slate-800 outline-none focus:ring-2 focus:ring-sky-600 font-medium"
+                  />
+                  <Search className="w-4 h-4 text-sky-500 absolute left-3 top-2.5" />
+                  {patientSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setPatientSearchQuery("")}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700 text-xs font-bold"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {showPatientDropdown && searchedPatients.length > 0 && (
+                <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
+                  {searchedPatients.map((p) => (
+                    <div
+                      key={p.id}
+                      onClick={() => {
+                        setActivePatient(p);
+                        setShowPatientDropdown(false);
+                        setPatientSearchQuery(`${p.name} (${p.id})`);
+                      }}
+                      className={`p-2.5 hover:bg-sky-50 cursor-pointer flex items-center justify-between text-xs transition ${
+                        activePatient?.id === p.id ? "bg-sky-50 font-bold" : ""
+                      }`}
+                    >
+                      <div>
+                        <span className="font-bold text-slate-900">{p.name}</span>
+                        <span className="text-[11px] text-slate-500 ml-2 font-mono">[{p.id}]</span>
+                        <span className="text-[10px] text-slate-500 ml-2">({p.age}y, {p.gender})</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {p.medicareNumber && (
+                          <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">
+                            Med: {p.medicareNumber}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-sky-700 font-bold">Open current details →</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {activePatient && (
+              <div className="bg-white p-3.5 rounded-lg border border-sky-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Current patient details</span>
+                    <strong className="text-slate-900 text-sm">{activePatient.name}</strong>
+                    <p className="text-[11px] text-slate-500 font-mono">{activePatient.id}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => persistPatientFile()}
+                    disabled={savingFile}
+                    className="px-3 py-1.5 bg-[#00334f] text-white text-[11px] font-bold rounded-lg flex items-center gap-1 disabled:opacity-60"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    Save details
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                  <label className="space-y-0.5">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Age</span>
+                    <input type="number" value={editAge} onChange={(e) => setEditAge(Number(e.target.value))} className="w-full p-1.5 border rounded-md" />
+                  </label>
+                  <label className="space-y-0.5">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Gender</span>
+                    <select value={editGender} onChange={(e) => setEditGender(e.target.value)} className="w-full p-1.5 border rounded-md">
+                      <option>Female</option>
+                      <option>Male</option>
+                    </select>
+                  </label>
+                  <label className="space-y-0.5">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Phone</span>
+                    <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} className="w-full p-1.5 border rounded-md" />
+                  </label>
+                  <label className="space-y-0.5">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Email</span>
+                    <input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} className="w-full p-1.5 border rounded-md" />
+                  </label>
+                  <label className="space-y-0.5">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Blood</span>
+                    <input value={editBlood} onChange={(e) => setEditBlood(e.target.value)} className="w-full p-1.5 border rounded-md" />
+                  </label>
+                  <label className="space-y-0.5 md:col-span-3">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Allergies</span>
+                    <input value={editAllergies} onChange={(e) => setEditAllergies(e.target.value)} className="w-full p-1.5 border rounded-md" />
+                  </label>
+                  <label className="space-y-0.5 md:col-span-4">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase">Medical conditions</span>
+                    <input value={editConditions} onChange={(e) => setEditConditions(e.target.value)} className="w-full p-1.5 border rounded-md" />
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {(activePatient?.clinicalCalculations?.length || 0) > 0 && (
+              <div className="bg-white rounded-lg border border-slate-200 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Patient calculator history</p>
+                <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                  {activePatient!.clinicalCalculations!.slice(0, 8).map((c) => (
+                    <div key={c.id} className="text-[11px] flex justify-between gap-2 border-b border-slate-100 pb-1">
+                      <span className="font-semibold text-slate-800">{c.date} · {c.type.replace("_", " ")} · {c.score}</span>
+                      <span className="text-slate-500 truncate">{c.interpretation}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
           
           {/* TAB 1: BMI & ANTHROPOMETRY WITH PATIENT SEARCH & AUTO-CALCULATED IDEAL WEIGHT */}
           {activeCalcTab === "bmi" && (
             <div className="space-y-5">
-              {/* Patient Search Bar in BMI Section */}
-              <div className="bg-[#f0f7ff] border border-sky-200 rounded-xl p-4 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Search className="w-4 h-4 text-sky-700 shrink-0" />
-                    <h3 className="text-xs font-bold text-[#00334f] uppercase tracking-wider">
-                      Search Registered Patient by Name or ID Number
-                    </h3>
-                  </div>
-                  <span className="text-[11px] text-sky-800 font-semibold">
-                    {patients.length > 0 ? `${patients.length} Registered Patients in Clinic` : "Live Registry"}
-                  </span>
-                </div>
-
-                <div className="relative">
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <input
-                        type="text"
-                        value={patientSearchQuery}
-                        onChange={(e) => {
-                          setPatientSearchQuery(e.target.value);
-                          setShowPatientDropdown(true);
-                        }}
-                        onFocus={() => setShowPatientDropdown(true)}
-                        placeholder="Type Patient Name, ID (e.g. 9942-LK), Medicare Number, or Phone..."
-                        className="w-full pl-9 pr-4 py-2 bg-white border border-sky-300 rounded-lg text-xs text-slate-800 outline-none focus:ring-2 focus:ring-sky-600 font-medium"
-                      />
-                      <Search className="w-4 h-4 text-sky-500 absolute left-3 top-2.5" />
-                      {patientSearchQuery && (
-                        <button
-                          type="button"
-                          onClick={() => setPatientSearchQuery("")}
-                          className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700 text-xs font-bold"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Dropdown list of matching patients */}
-                  {showPatientDropdown && searchedPatients.length > 0 && (
-                    <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
-                      {searchedPatients.map((p) => (
-                        <div
-                          key={p.id}
-                          onClick={() => {
-                            setActivePatient(p);
-                            setShowPatientDropdown(false);
-                            setPatientSearchQuery(`${p.name} (${p.id})`);
-                          }}
-                          className={`p-2.5 hover:bg-sky-50 cursor-pointer flex items-center justify-between text-xs transition ${
-                            activePatient?.id === p.id ? "bg-sky-50 font-bold" : ""
-                          }`}
-                        >
-                          <div>
-                            <span className="font-bold text-slate-900">{p.name}</span>
-                            <span className="text-[11px] text-slate-500 ml-2 font-mono">[{p.id}]</span>
-                            <span className="text-[10px] text-slate-500 ml-2">({p.age}y, {p.gender})</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {p.medicareNumber && (
-                              <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">
-                                Med: {p.medicareNumber}
-                              </span>
-                            )}
-                            <span className="text-[10px] text-sky-700 font-bold">Select File →</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Selected Patient Overview Card */}
-                {activePatient && (
-                  <div className="bg-white p-3.5 rounded-lg border border-sky-200 grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Selected Patient</span>
-                      <strong className="text-slate-900 text-sm">{activePatient.name}</strong>
-                      <p className="text-[11px] text-slate-500">{activePatient.age} yrs • {activePatient.gender} • Blood: {activePatient.bloodType}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Patient ID & Medicare</span>
-                      <span className="font-mono font-bold text-sky-800">{activePatient.id}</span>
-                      <p className="text-[11px] text-slate-500">{activePatient.medicareNumber || "Private Account"}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Allergies</span>
-                      <span className="text-rose-700 font-semibold">{activePatient.allergies || "No Known Drug Allergies"}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Medical Conditions</span>
-                      <p className="text-[11px] text-slate-700 font-medium line-clamp-2">{activePatient.notes || activePatient.medicalHistory?.join(", ") || "Routine General Health"}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
 
               {/* Main Measurements & Auto-Calculations Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -964,16 +1272,27 @@ export default function ClinicalCalculatorsModal({ patient, patients = [], onClo
         </div>
 
         {/* Footer */}
-        <div className="bg-slate-50 border-t border-slate-200 px-5 py-3 flex justify-between items-center shrink-0">
+        <div className="bg-slate-50 border-t border-slate-200 px-5 py-3 flex justify-between items-center shrink-0 gap-3">
           <p className="text-[11px] text-slate-500 font-medium">
             Clinical Decision Support aligned with RACGP, Heart Foundation, & Kidney Health Australia standards.
           </p>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg transition-colors cursor-pointer"
-          >
-            Close
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={saveCurrentCalculator}
+              disabled={savingFile || !activePatient}
+              className="px-4 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {savingFile ? "Saving…" : "Save to patient history"}
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
         </div>
 
       </div>

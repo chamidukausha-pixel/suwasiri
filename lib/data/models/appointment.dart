@@ -169,10 +169,14 @@ class Appointment extends Equatable {
 
   factory Appointment.fromMap(String id, Map<String, dynamic> map) {
     final modeRaw = (map['consultMode'] as String? ?? '').toLowerCase();
-    final isVideo = modeRaw == ConsultMode.video.name ||
+    final typeRaw = (map['type'] as String? ?? '').toLowerCase();
+    final isVideo = map['isTelehealth'] == true ||
+        modeRaw == ConsultMode.video.name ||
         modeRaw.contains('video') ||
         modeRaw.contains('online') ||
-        modeRaw.contains('tele');
+        modeRaw.contains('tele') ||
+        typeRaw.contains('telehealth') ||
+        typeRaw.contains('video');
     return Appointment(
       id: id,
       patientId: map['patientId'] as String? ?? '',

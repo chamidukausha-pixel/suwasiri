@@ -19,7 +19,8 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId) || isHouseholdPatient(userId);
     }
 
     match /vault/{reportId} {
@@ -83,6 +84,18 @@ service cloud.firestore {
     match /medical_certificates/{certId} {
       // GP Care staff issue; the named Suwasiri patient (household id) reads
       // their own certificates in Vault.
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn()
+        && (isHouseholdPatient(resource.data.patientId)
+            || request.resource.data.patientId == resource.data.patientId);
+    }
+
+    match /clinical_calculations/{patientId} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /consultation_notes/{noteId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
       allow update, delete: if isSignedIn()

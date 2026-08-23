@@ -11,6 +11,7 @@ abstract class HealthRepository {
   Future<List<Prescription>> getPrescriptions(String patientId);
   Stream<List<Prescription>> watchPrescriptions(String patientId);
   Stream<List<DoctorCertificate>> watchCertificates(String patientId);
+  Stream<List<TreatmentNote>> watchTreatmentNotes(String patientId);
   Future<void> syncLankaLab(String patientId);
   Future<void> syncGpCare(String patientId);
 

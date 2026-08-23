@@ -5,6 +5,8 @@ import { ClinicMessage } from "../types";
 interface Props {
   messages: ClinicMessage[];
   currentRole: string;
+  currentUserName?: string;
+  staffNames?: string[];
   activeChannel: string;
   setActiveChannel: (ch: string) => void;
   onPostMessage: (text: string, channel: string) => void;
@@ -13,6 +15,8 @@ interface Props {
 export default function SecureClinicChat({
   messages,
   currentRole,
+  currentUserName,
+  staffNames = [],
   activeChannel,
   setActiveChannel,
   onPostMessage,
@@ -20,7 +24,7 @@ export default function SecureClinicChat({
   const [inputText, setInputText] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const channels = ["#general-clinical", "#billing-frontdesk", "#emergency-notices"];
+  const channels = ["#clinic-team", "#general-clinical", "#billing-frontdesk", "#emergency-notices"];
 
   const activeMessages = messages.filter((m) => m.channel === activeChannel);
 
@@ -67,18 +71,12 @@ export default function SecureClinicChat({
             Active Clinic Staff
           </div>
           <div className="space-y-1 text-[11px] text-slate-600">
-            <p className="flex items-center gap-1.5 font-bold">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              Dr. P. Silva (Doctor)
-            </p>
-            <p className="flex items-center gap-1.5 font-bold">
-              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-              Ms. S. Jayasekara (Admin)
-            </p>
-            <p className="flex items-center gap-1.5 font-bold">
-              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-              Mr. T. Perera (Receptionist)
-            </p>
+            {(staffNames.length > 0 ? staffNames : ["Clinic staff"]).map((name) => (
+              <p key={name} className="flex items-center gap-1.5 font-bold">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                {name}
+              </p>
+            ))}
           </div>
         </div>
       </div>
@@ -88,8 +86,8 @@ export default function SecureClinicChat({
         {/* Chat Header */}
         <div className="p-4 border-b bg-white flex justify-between items-center">
           <div>
-            <h4 className="font-bold text-slate-800 text-sm">{activeChannel} Channel</h4>
-            <p className="text-[11px] text-gray-400">Internal secure chat compliant with clinical guidelines.</p>
+            <h4 className="font-bold text-slate-800 text-sm">{activeChannel === "#clinic-team" ? "Everyone on this clinic" : activeChannel}</h4>
+            <p className="text-[11px] text-gray-400">Everyone working here can see and reply to every message.</p>
           </div>
           <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
             <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
@@ -100,7 +98,7 @@ export default function SecureClinicChat({
         {/* Message Container */}
         <div className="flex-1 p-4 overflow-y-auto space-y-3 min-h-[350px]">
           {activeMessages.map((msg) => {
-            const isMe = msg.senderRole === currentRole;
+            const isMe = msg.sender === currentUserName || msg.senderRole === currentRole;
             return (
               <div
                 key={msg.id}

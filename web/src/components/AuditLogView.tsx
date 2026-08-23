@@ -18,12 +18,22 @@ import {
   Layers,
   FileSpreadsheet
 } from "lucide-react";
-import { AuditLogEntry, Patient } from "../types";
+import { AuditLogEntry, Patient, LabOrder } from "../types";
+import ClinicMonthCalendar from "./ClinicMonthCalendar";
 
 interface Props {
   patients?: Patient[];
   logs?: AuditLogEntry[];
+  labOrders?: LabOrder[];
   onExportCsv?: () => void;
+  selectedDate?: string;
+  todayKey?: string;
+  calendarYear?: number;
+  calendarMonth?: number;
+  countsByDate?: Record<string, number>;
+  onSelectDate?: (dateKey: string) => void;
+  onChangeMonth?: (year: number, month: number) => void;
+  onJumpToToday?: () => void;
 }
 
 const INITIAL_AUDIT_LOGS: AuditLogEntry[] = [
@@ -135,9 +145,77 @@ const INITIAL_AUDIT_LOGS: AuditLogEntry[] = [
   }
 ];
 
+function deriveClinicalLogs(patients: Patient[], labOrders: LabOrder[]): AuditLogEntry[] {
+  const rows: AuditLogEntry[] = [];
+  for (const p of patients) {
+    for (const h of p.history || []) {
+      rows.push({
+        id: `hist-${p.id}-${h.date}-${h.reason}`,
+        timestamp: `${h.date} 09:00:00`,
+        user: h.doctor || "Doctor",
+        role: "Doctor",
+        action: "Clinical consultation",
+        category: "DIAGNOSIS",
+        patientId: p.id,
+        patientName: p.name,
+        details: `${h.reason}. ${h.notes || ""}\nMedicines: ${(p.activeMedications || []).join("; ") || "none"}`,
+      });
+    }
+    for (const lab of p.labResults || []) {
+      rows.push({
+        id: `lab-${p.id}-${lab.id}`,
+        timestamp: `${lab.date} 10:15:00`,
+        user: lab.reviewedBy || "Doctor",
+        role: "Doctor",
+        action: lab.doctorReviewed ? "Reviewed pathology result" : "Pathology result on chart",
+        category: "PATHOLOGY",
+        patientId: p.id,
+        patientName: p.name,
+        details: `${lab.testName}: ${lab.result}. ${lab.remarks || ""}`,
+      });
+    }
+    for (const rx of p.prescriptionsList || []) {
+      rows.push({
+        id: `rx-${p.id}-${rx.id}`,
+        timestamp: `${rx.date} 11:00:00`,
+        user: "Doctor",
+        role: "Doctor",
+        action: "Created electronic prescription",
+        category: "PRESCRIPTION",
+        patientId: p.id,
+        patientName: p.name,
+        details: `Rx ${rx.rxNumber || rx.id}: ${(rx.items || []).join("; ")}`,
+      });
+    }
+  }
+  for (const o of labOrders) {
+    rows.push({
+      id: `order-${o.id}`,
+      timestamp: `${(o.dateOrdered || "").slice(0, 10)} 08:45:00`,
+      user: "Doctor",
+      role: "Doctor",
+      action: "Ordered pathology investigation",
+      category: "PATHOLOGY",
+      patientId: o.patientId,
+      patientName: o.patientName,
+      details: `${o.testName}. ${o.remarks || ""} Status: ${o.status || "ORDERED"}`,
+    });
+  }
+  return rows;
+}
+
 export default function AuditLogView({
   patients = [],
-  logs = INITIAL_AUDIT_LOGS
+  logs = INITIAL_AUDIT_LOGS,
+  labOrders = [],
+  selectedDate,
+  todayKey,
+  calendarYear,
+  calendarMonth,
+  countsByDate = {},
+  onSelectDate,
+  onChangeMonth,
+  onJumpToToday,
 }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
@@ -145,7 +223,14 @@ export default function AuditLogView({
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [selectedLog, setSelectedLog] = useState<AuditLogEntry | null>(null);
 
-  const filteredLogs = logs.filter((log) => {
+  const mergedLogs = [...logs, ...deriveClinicalLogs(patients, labOrders)].filter(
+    (log, idx, arr) => arr.findIndex((x) => x.id === log.id) === idx
+  );
+  const dateLogs = selectedDate
+    ? mergedLogs.filter((log) => (log.timestamp || "").startsWith(selectedDate))
+    : mergedLogs;
+
+  const filteredLogs = dateLogs.filter((log) => {
     const matchesSearch =
       log.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
       log.user.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -180,7 +265,25 @@ export default function AuditLogView({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+      {selectedDate && todayKey && calendarYear != null && calendarMonth != null && onSelectDate && onChangeMonth && onJumpToToday && (
+        <div className="xl:col-span-4">
+          <ClinicMonthCalendar
+            year={calendarYear}
+            month={calendarMonth}
+            selectedDate={selectedDate}
+            todayKey={todayKey}
+            countsByDate={countsByDate}
+            onSelectDate={onSelectDate}
+            onChangeMonth={onChangeMonth}
+            onJumpToToday={onJumpToToday}
+          />
+          <p className="text-[11px] text-slate-500 mt-2 px-1">
+            Click a date to inspect consultations and lab activity for that day only.
+          </p>
+        </div>
+      )}
+    <div className={`${selectedDate ? "xl:col-span-8" : "xl:col-span-12"} space-y-6`}>
       {/* Top Banner */}
       <div className="bg-white p-6 border rounded-xl shadow-xs">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -386,6 +489,23 @@ export default function AuditLogView({
                   {selectedLog.details}
                 </p>
               </div>
+
+              {selectedLog.patientId && (() => {
+                const pat = patients.find((p) => p.id === selectedLog.patientId);
+                if (!pat) return null;
+                return (
+                  <div className="border rounded-lg p-3 space-y-2 bg-emerald-50/50">
+                    <p className="text-[10px] font-bold uppercase text-emerald-900">Patient chart snapshot</p>
+                    <p className="text-[11px] text-slate-700">
+                      <strong>Medicines:</strong> {(pat.activeMedications || []).join("; ") || "None on chart"}
+                    </p>
+                    <p className="text-[11px] text-slate-700">
+                      <strong>Lab reports:</strong>{" "}
+                      {(pat.labResults || []).map((l) => `${l.testName} (${l.result})`).join("; ") || "None on chart"}
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="pt-2 text-right">
@@ -399,6 +519,7 @@ export default function AuditLogView({
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }

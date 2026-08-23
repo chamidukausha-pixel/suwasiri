@@ -102,12 +102,13 @@ class UserProfile extends Equatable {
     );
   }
 
-  /// Ensures a stable barcode is assigned when NIC is known.
+  /// Ensures a stable barcode is assigned when NIC or user id is known.
   UserProfile withEnsuredBarcode() {
     if (barcodeNumber != null && barcodeNumber!.isNotEmpty) return this;
     final n = nic;
-    if (n == null || n.isEmpty) return this;
-    final code = SuwasiriHealthId.generate(userId: id, nic: n);
+    final seed = (n != null && n.isNotEmpty) ? n : id;
+    if (seed.isEmpty) return this;
+    final code = SuwasiriHealthId.generate(userId: id, nic: seed);
     return copyWith(
       barcodeNumber: code,
       ceylonHealthId: ceylonHealthId ?? code,

@@ -144,6 +144,7 @@ const ROLE_TEMPLATES: TemplateSpec[] = [
     canDispatchSampleCourier: true,
     canViewBilling: true,
     canManageCashierAndInvoicing: true,
+    canManageRecalls: true,
   } },
   { name: "Billing Officer", flags: {
     canViewBilling: true,
@@ -343,7 +344,14 @@ export const DEFAULT_STAFF_DIRECTORY: StaffProvider[] = [
     email: "dr.silva@primecare.lk",
     phone: "+94 77 111 2233",
     assignedRoom: "Consultation Room 1",
-    roster: { ...WEEKDAYS, saturday: true },
+    roster: { monday: true, tuesday: false, wednesday: true, thursday: false, friday: true, saturday: true, sunday: true },
+    rosterHours: {
+      monday: { start: "16:00", end: "18:00" },
+      wednesday: { start: "16:00", end: "18:00" },
+      friday: { start: "16:00", end: "18:00" },
+      saturday: { start: "09:00", end: "13:00" },
+      sunday: { start: "09:00", end: "13:00" },
+    },
     active: true,
   },
   {
@@ -506,9 +514,9 @@ export function tabAllowed(tab: string, role: RoleDefinition | undefined, isPlat
     case "calculators":
       return role.canAccessDoctorDashboard || role.canEditClinicalNotes;
     case "recalls":
-      return role.canManageRecalls;
+      return role.canManageRecalls || role.name === "Receptionist";
     case "patients":
-      return role.canViewClinicalNotes;
+      return role.canViewClinicalNotes || role.name === "Receptionist" || role.canManageRecalls;
     case "telehealth":
       return role.canAccessTelehealthSuite;
     case "calendar":
@@ -540,6 +548,11 @@ export function tabAllowed(tab: string, role: RoleDefinition | undefined, isPlat
 export function defaultTabFor(role: RoleDefinition | undefined, isPlatformSA: boolean): string {
   if (isPlatformSA) return "platform";
   if (!role) return "billing";
+  if (role.name === "Receptionist") {
+    const recOrder = ["calendar", "patients", "recalls", "billing", "sampleCollection"];
+    const recFound = recOrder.find((tab) => tabAllowed(tab, role, false));
+    return recFound || "calendar";
+  }
   const order = [
     "dashboard",
     "patients",

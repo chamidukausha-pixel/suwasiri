@@ -11,24 +11,21 @@ import { getFirebaseDb, isFirebaseConfigured } from "../firebase";
 import { HOSPITAL_PRIMECARE, BRANCH_COLOMBO } from "../tenancy";
 import type { Appointment, Patient } from "../types";
 
+/** Sri Lanka has no DST; clinic wall-clock is always UTC+05:30. */
+function colomboWallTime(dateKey: string, hours: number, minutes: number): Date {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const iso = `${y}-${String(m || 1).padStart(2, "0")}-${String(d || 1).padStart(2, "0")}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00+05:30`;
+  return new Date(iso);
+}
+
 export function parseSlot(apt: Appointment): Date | null {
   if (apt.timeSlot) {
     const parsed = new Date(apt.timeSlot);
     if (!Number.isNaN(parsed.getTime())) return parsed;
   }
   if (!apt.date) return null;
-  const match = (apt.time || "09:00 AM").trim().match(
-    /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i
-  );
-  let hours = 9;
-  let minutes = 0;
-  if (match) {
-    hours = Number(match[1]) % 12;
-    if (match[3].toUpperCase() === "PM") hours += 12;
-    minutes = Number(match[2]);
-  }
-  const [y, m, d] = apt.date.split("-").map(Number);
-  return new Date(y, (m || 1) - 1, d || 1, hours, minutes, 0, 0);
+  const { hours, minutes } = parseClock(apt.time || "09:00 AM");
+  return colomboWallTime(apt.date, hours, minutes);
 }
 
 export function compareAppointmentTime(a: Appointment, b: Appointment): number {
@@ -99,7 +96,7 @@ export function mapFirestoreAppointment(
     isTelehealth: video,
     feeAmount: typeof data.feeAmount === "number" ? data.feeAmount : undefined,
     medicareClaimStatus: "PRIVATE_PAID",
-    source: "suwasiri_app",
+    source: data.source === "gp_care" ? "gp_care" : "suwasiri_app",
     hospitalId: String(data.hospitalId || HOSPITAL_PRIMECARE),
     branchId: String(data.branchId || BRANCH_COLOMBO),
     specialty,
@@ -200,15 +197,37 @@ export function isVideoBooking(apt: Appointment): boolean {
   );
 }
 
-/** Video consult is listed in the telehealth room from 15 minutes before the slot until +3h. */
-export function isDueTelehealth(apt: Appointment, now = new Date()): boolean {
+/** Doctor may press Call start from 2 minutes before the slot (e.g. 9:30 → 9:28), not earlier. */
+export const TELEHEALTH_CALL_LEAD_MS = 2 * 60 * 1000;
+const TELEHEALTH_CALL_CLOSE_MS = 3 * 60 * 60 * 1000;
+
+export function isVideoBookingOnDate(apt: Appointment, dateKey: string): boolean {
+  if (!isVideoBooking(apt)) return false;
+  if (apt.status === "COMPLETED" || apt.status === "CANCELLED") return false;
+  return apt.date === dateKey;
+}
+
+export function telehealthCallOpensAt(apt: Appointment): Date | null {
+  const start = parseSlot(apt);
+  if (!start) return null;
+  return new Date(start.getTime() - TELEHEALTH_CALL_LEAD_MS);
+}
+
+/** True only inside [slot − 2 minutes, slot + 3 hours]. */
+export function canStartTelehealthCall(apt: Appointment, now = new Date()): boolean {
   if (!isVideoBooking(apt)) return false;
   if (apt.status === "COMPLETED" || apt.status === "CANCELLED") return false;
   const start = parseSlot(apt);
   if (!start) return false;
-  const open = new Date(start.getTime() - 15 * 60 * 1000);
-  const close = new Date(start.getTime() + 3 * 60 * 60 * 1000);
-  return now.getTime() >= open.getTime() && now.getTime() <= close.getTime();
+  const open = start.getTime() - TELEHEALTH_CALL_LEAD_MS;
+  const close = start.getTime() + TELEHEALTH_CALL_CLOSE_MS;
+  const t = now.getTime();
+  return t >= open && t <= close;
+}
+
+/** @deprecated Use canStartTelehealthCall — window is now 2 minutes before the slot. */
+export function isDueTelehealth(apt: Appointment, now = new Date()): boolean {
+  return canStartTelehealthCall(apt, now);
 }
 
 export function subscribeSuwasiriAppointments(
@@ -266,29 +285,37 @@ export function suwasiriDoctorCatalogId(opts: {
   return id || "gp-care-doctor";
 }
 
-function slotLockId(doctorId: string, dateKey: string, timeLabel: string): string {
-  const match = timeLabel.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  let hours = 9;
-  let minutes = 0;
-  if (match) {
-    hours = Number(match[1]) % 12;
-    if (match[3].toUpperCase() === "PM") hours += 12;
-    minutes = Number(match[2]);
+/** Accepts "10:00 AM", "03:00 PM", or 24-hour "15:00" / "09:00". */
+export function parseClock(timeLabel: string): { hours: number; minutes: number } {
+  const t = timeLabel.trim();
+  const ampm = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (ampm) {
+    let hours = Number(ampm[1]) % 12;
+    if (ampm[3].toUpperCase() === "PM") hours += 12;
+    return { hours, minutes: Number(ampm[2]) };
   }
+  const h24 = t.match(/^(\d{1,2}):(\d{2})$/);
+  if (h24) {
+    return { hours: Number(h24[1]) % 24, minutes: Number(h24[2]) };
+  }
+  return { hours: 9, minutes: 0 };
+}
+
+export function formatAmPm(hours: number, minutes: number): string {
+  const ampm = hours >= 12 ? "PM" : "AM";
+  const h = hours % 12 === 0 ? 12 : hours % 12;
+  return `${String(h).padStart(2, "0")}:${String(minutes).padStart(2, "0")} ${ampm}`;
+}
+
+function slotLockId(doctorId: string, dateKey: string, timeLabel: string): string {
+  const { hours, minutes } = parseClock(timeLabel);
   const hh = String(hours).padStart(2, "0");
   const mm = String(minutes).padStart(2, "0");
   return `${doctorId}_${dateKey}_${hh}-${mm}`;
 }
 
 function timeSlotIso(dateKey: string, timeLabel: string): string {
-  const match = timeLabel.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  let hours = 9;
-  let minutes = 0;
-  if (match) {
-    hours = Number(match[1]) % 12;
-    if (match[3].toUpperCase() === "PM") hours += 12;
-    minutes = Number(match[2]);
-  }
+  const { hours, minutes } = parseClock(timeLabel);
   const [y, m, d] = dateKey.split("-").map(Number);
   return new Date(y, (m || 1) - 1, d || 1, hours, minutes, 0, 0).toISOString();
 }
@@ -310,25 +337,32 @@ export async function bookGpCareSlotToFirestore(opts: {
   hospitalId?: string;
   branchId?: string;
   clinicName?: string;
+  specialty?: string;
+  consultMode?: "clinic" | "video";
+  isTelehealth?: boolean;
 }): Promise<{ ok: true; appointmentId: string } | { ok: false; reason: string }> {
   if (!isFirebaseConfigured()) {
     return { ok: false, reason: "Firebase not configured" };
   }
+  const video = opts.isTelehealth === true || opts.consultMode === "video";
+  const { hours, minutes } = parseClock(opts.time);
+  const timeAmPm = formatAmPm(hours, minutes);
   const db = getFirebaseDb();
-  const lockId = slotLockId(opts.doctorId, opts.date, opts.time);
+  const lockId = slotLockId(opts.doctorId, opts.date, timeAmPm);
   const lockRef = doc(db, "appointment_slots", lockId);
   const existing = await getDoc(lockRef);
   if (existing.exists()) {
     return { ok: false, reason: "This doctor date/time is already booked" };
   }
   const appointmentId = `gp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const iso = timeSlotIso(opts.date, opts.time);
+  const iso = timeSlotIso(opts.date, timeAmPm);
+  const specialty = opts.specialty || "";
   await setDoc(lockRef, {
     doctorId: opts.doctorId,
     doctorName: opts.doctorName,
     timeSlot: iso,
     date: opts.date,
-    time: opts.time,
+    time: timeAmPm,
     appointmentId,
     patientId: opts.patientId,
     patientName: opts.patientName,
@@ -342,20 +376,21 @@ export async function bookGpCareSlotToFirestore(opts: {
     patientPhone: opts.patientPhone || "",
     doctorId: opts.doctorId,
     doctorName: opts.doctorName,
-    specialty: "",
+    specialty,
     timeSlot: iso,
     date: opts.date,
-    time: opts.time,
+    time: timeAmPm,
     reason: opts.reason,
-    type: "Standard GP Consult",
-    isTelehealth: false,
+    type: video ? "Telehealth Video" : "Standard GP Consult",
+    isTelehealth: video,
     status: "upcoming",
-    consultMode: "clinic",
+    consultMode: video ? "video" : "clinic",
     hospital: opts.clinicName || "PrimeCare Medical Centre - Colombo Central",
     clinicName: opts.clinicName || "PrimeCare Medical Centre - Colombo Central",
     hospitalId: opts.hospitalId || HOSPITAL_PRIMECARE,
     branchId: opts.branchId || BRANCH_COLOMBO,
     source: "gp_care",
+    token: `TKN-${Date.now() % 10000}`,
     paymentStatus: "PENDING",
     bookedAt: new Date().toISOString(),
   });
