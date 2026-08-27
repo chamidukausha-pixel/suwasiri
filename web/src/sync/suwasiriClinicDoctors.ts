@@ -1,62 +1,46 @@
 import { doc, setDoc } from "firebase/firestore";
 import { getFirebaseDb, isFirebaseConfigured } from "../firebase";
 
-/** Matches Suwasiri Doctors category filter so GP Care staff appear under the same specialty. */
-export const GP_CARE_DOCTOR_CATEGORIES = [
-  "Physician / Consultant Physician",
-  "Cardiologist",
-  "Neurologist",
-  "Pediatrician",
-  "Dermatologist",
-  "Psychiatrist",
-  "Endocrinologist",
-  "Nephrologist",
-  "Oncologist",
-  "Rheumatologist",
-  "Hematologist",
-  "Chest Physician / Pulmonologist",
-  "General Practitioner",
-  "Physiotherapist",
-  "Orthopedic Surgeon",
-  "Gastroenterologist",
-  "Ophthalmologist",
-  "ENT Surgeon",
-  "Obstetrician / Gynecologist",
-  "Urologist",
-  "Dental Surgeon",
-  "General Surgeon",
-  "Radiologist",
-] as const;
+export function clinicDoctorDocId(staffId: string) {
+  const slug = staffId.replace(/[^a-zA-Z0-9_-]/g, "-").toLowerCase();
+  return `clinic-${slug || Date.now()}`;
+}
 
+/** Publish a GP Care doctor so Suwasiri Doctors tab can list them under that clinic + specialty. */
 export async function publishClinicDoctorToSuwasiri(opts: {
-  id: string;
+  staffId: string;
   name: string;
   specialty: string;
-  clinicName: string;
+  hospitalName: string;
+  branchName?: string;
   region?: string;
   email?: string;
   phone?: string;
-  hospitalId?: string;
-  branchId?: string;
 }): Promise<void> {
-  if (!isFirebaseConfigured() || !opts.name.trim() || !opts.clinicName.trim()) return;
-  const displayName = /^dr\.?\s/i.test(opts.name) ? opts.name.trim() : `Dr. ${opts.name.trim()}`;
+  if (!isFirebaseConfigured()) return;
+  const name = opts.name.trim();
+  const specialty = opts.specialty.trim();
+  if (!name || !specialty) return;
+  const displayName = /^dr\.?\s/i.test(name) ? name : `Dr. ${name}`;
+  const hospital = opts.hospitalName.trim() || "GP Care Clinic";
+  const id = clinicDoctorDocId(opts.staffId);
   await setDoc(
-    doc(getFirebaseDb(), "clinic_doctors", opts.id),
+    doc(getFirebaseDb(), "clinic_doctors", id),
     {
       name: displayName,
-      specialty: opts.specialty || "General Practitioner",
-      hospital: opts.clinicName,
-      clinicName: opts.clinicName,
+      specialty,
+      hospital,
+      address: opts.branchName || hospital,
       region: opts.region || "Colombo",
-      email: opts.email || "",
-      phone: opts.phone || "",
-      hospitalId: opts.hospitalId || "",
-      branchId: opts.branchId || "",
       rating: 4.8,
       yearsExperience: 8,
       feeLkr: 3500,
+      nextAvailable: "Mon–Fri · 09:00–17:00",
+      bio: `${specialty} at ${hospital}. Book via Suwasiri.`,
+      email: opts.email || "",
+      phone: opts.phone || "",
       source: "gp_care",
+      staffId: opts.staffId,
       active: true,
       updatedAt: new Date().toISOString(),
     },

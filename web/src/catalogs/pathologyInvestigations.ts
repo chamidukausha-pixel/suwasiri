@@ -38,26 +38,33 @@ export const PATHOLOGY_INVESTIGATIONS: PathologyInvestigation[] = [
   { name: "Cervical Screening Test (CST - HPV)", category: "Screening", sample: "Both Blood & Urinal" },
 ];
 
-/** Specimen types a doctor can log on the Sample Collections tab (Image C). */
+/** Specimen types a doctor can request from Sample Collections (feeds Sample Dispatch Hub). */
 export const SAMPLE_COLLECTION_CATEGORIES = [
-  "Venous Blood",
-  "Capillary / Finger-prick Blood",
-  "Blood Culture",
-  "Mid-stream Urine (MSU)",
-  "24-hour Urine",
-  "Urine for Culture & ABST",
+  "Blood",
+  "Serum",
+  "Plasma",
+  "Whole blood (EDTA)",
+  "Urine (midstream)",
+  "24-hour urine",
   "Stool / Faeces",
-  "Stool Occult Blood",
   "Sputum",
-  "Throat Swab",
-  "Nasopharyngeal Swab",
-  "Wound Swab",
-  "High Vaginal Swab",
-  "Pap Smear / Cervical",
-  "CSF (Cerebrospinal Fluid)",
-  "Tissue / Biopsy",
+  "Throat swab",
+  "Nasal / nasopharyngeal swab",
+  "Wound swab",
+  "High vaginal swab (HVS)",
+  "Cervical swab",
+  "CSF (cerebrospinal fluid)",
   "Semen",
+  "Tissue / biopsy",
+  "Bone marrow",
+  "Pleural fluid",
+  "Ascitic fluid",
+  "Synovial fluid",
+  "Pus",
+  "Nail clipping",
+  "Skin scraping",
   "Both Blood & Urine",
+  "Other body fluid",
 ] as const;
 
 export function sampleCategoryForTest(testName: string): PathologyInvestigation["sample"] {

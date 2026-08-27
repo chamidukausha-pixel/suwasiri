@@ -1603,8 +1603,7 @@ app.patch("/api/patients/:id", (req, res) => {
     lastDiastolicBp,
     waistCm,
     clinicalCalculations,
-    observationsHistory,
-    history,
+    observationsHistory
   } = req.body;
 
   const patIndex = store.patients.findIndex(p => p.id === id);
@@ -1642,7 +1641,6 @@ app.patch("/api/patients/:id", (req, res) => {
   if (waistCm !== undefined) pat.waistCm = Number(waistCm);
   if (Array.isArray(clinicalCalculations)) pat.clinicalCalculations = clinicalCalculations;
   if (Array.isArray(observationsHistory)) pat.observationsHistory = observationsHistory;
-  if (Array.isArray(history)) pat.history = history;
 
   if (newVaccineRecord) {
     pat.vaccineRecords.push(newVaccineRecord);
@@ -1673,6 +1671,7 @@ app.patch("/api/patients/:id", (req, res) => {
     }
     pat.medicalHistory.push(medHistoryString);
 
+    if (!Array.isArray(pat.history)) pat.history = [];
     pat.history.unshift({
       date: sumDate,
       reason: historyEntry.reason || "Clinical consultation",
@@ -2222,7 +2221,18 @@ app.post("/api/sample-collections", (req, res) => {
   store.sampleCollections.unshift(newSample);
   if (pat) pat.sampleCollections.unshift(newSample);
 
-  store.notifications.unshift({
+  // Add a clinic team notification
+  store.clinicMessages.push({
+    id: `msg-sc-${Date.now()}`,
+    sender: "Diagnostics Hub System",
+    senderRole: "System",
+    text: `New laboratory order logged: ${sampleCategory} sample requested for citizen patient ${patientName} (ID: ${patientId}). Status: PENDING COLLECTION.`,
+    timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
+    channel: "#general-clinical"
+  });
+
+  if (!store.notifications) store.notifications = [];
+  const sampleAlert = {
     id: `notif-sc-${Date.now()}`,
     patientName,
     recipient: "Reception / Sample Dispatch Hub",
@@ -2235,16 +2245,8 @@ app.post("/api/sample-collections", (req, res) => {
     sampleId: newSample.id,
     testName: testName || sampleCategory,
     registeredBy: ""
-  });
-
-  store.clinicMessages.push({
-    id: `msg-sc-${Date.now()}`,
-    sender: "Diagnostics Hub System",
-    senderRole: "System",
-    text: `New laboratory order logged: ${sampleCategory} sample requested for citizen patient ${patientName} (ID: ${patientId}). Status: PENDING COLLECTION.`,
-    timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
-    channel: "#general-clinical"
-  });
+  };
+  store.notifications.unshift(sampleAlert);
 
   saveStore(store);
   res.status(201).json({ sample: newSample, state: store });

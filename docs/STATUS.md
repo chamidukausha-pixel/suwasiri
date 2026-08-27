@@ -102,6 +102,12 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Practice Manager: weekly roster days and hours, editable after save
 - [x] Security & RBAC: Super Admin assigns staff to other branches
 - [x] Clinical audit trail: consult/lab activity + medicines/labs inspector + month calendar
+- [x] Formulary Select hides that drug from recommendations (exam room + telehealth)
+- [x] Sample Collections: full specimen categories + receptionist PATHOLOGY_ORDER alert + Sample Dispatch Hub
+- [x] Clinical calculators save vitals/details onto that patient’s visit history
+- [x] Telehealth: click booked name fills Active Clinical Consultation Room (replaces generic “Patient”); View Clinical Hub opens that file
+- [x] Receipts & Invoices: calendar date lists that day’s booked patients (lobby-style rows)
+- [x] Platform Console: doctor specialty required; published to Suwasiri Doctors tab under clinic + category
 
 ## In progress / next
 
@@ -114,12 +120,12 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [ ] Firebase Storage for vault file uploads (`fileUrl`)
 - [ ] Tighten `notifications` rules to owner-scoped (`userId == auth.uid`)
 - [ ] Telehealth/Call: live WebRTC to GP Care is wired (STUN); a TURN server may be needed on some mobile networks
-- [ ] Web + mobile sync: appointments (including receptionist Book scheduler and walk-ins), Unique Health ID lookup, telehealth notes/chat, e-Rx, medical certificates, and clinical calculator snapshots are on Firestore; Vault → GP Care sync is **vaccine history only**. Remaining GP EMR charts still use the web JSON store. Tenancy/RBAC is in the web JSON store; tenancy collections are documented, not deployed.
+- [ ] Web + mobile sync: appointments (including receptionist Book scheduler and walk-ins), Unique Health ID lookup, telehealth notes/chat, e-Rx, medical certificates, clinical calculator snapshots, and GP Care–published `clinic_doctors` are on Firestore; Vault → GP Care sync is **vaccine history only**. Remaining GP EMR charts still use the web JSON store. Tenancy/RBAC is in the web JSON store; tenancy collections are documented, not deployed.
 
 ## Known caveats
 
 1. **Phone OTP** still accepts code `123456` and creates/signs in via `$phone@phone.suwasiri.lk`.
-2. **Clinics / doctors / vaccine protocols** are curated in-code lists, not Firestore collections.
+2. **Clinics / doctors / vaccine protocols** are curated in-code lists plus Firestore `clinic_doctors` published from GP Care Platform Console.
 3. **Widget tests** must use `AppServices.forTesting`, not `bootstrap()`.
 4. PowerShell may need `firebase.cmd` if script policy blocks `firebase.ps1`.
 

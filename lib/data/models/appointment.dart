@@ -44,27 +44,6 @@ class Doctor extends Equatable {
     return parts.join(', ');
   }
 
-  factory Doctor.fromMap(String id, Map<String, dynamic> map) {
-    final hospital = (map['hospital'] as String? ??
-            map['clinicName'] as String? ??
-            '')
-        .trim();
-    return Doctor(
-      id: id,
-      name: (map['name'] as String? ?? '').trim(),
-      specialty: (map['specialty'] as String? ?? 'General Practitioner').trim(),
-      hospital: hospital,
-      rating: (map['rating'] as num?)?.toDouble() ?? 4.8,
-      region: (map['region'] as String? ?? 'Colombo').trim(),
-      yearsExperience: (map['yearsExperience'] as num?)?.toInt() ?? 8,
-      feeLkr: (map['feeLkr'] as num?)?.toInt() ?? 3500,
-      bio: (map['bio'] as String?) ??
-          'GP Care registered clinician. Book a clinic or video consult in Suwasiri.',
-      nextAvailable: (map['nextAvailable'] as String?) ?? 'Mon–Sat · 09:00–17:00',
-      address: (map['address'] as String? ?? hospital).trim(),
-    );
-  }
-
   @override
   List<Object?> get props => [
         id,
@@ -81,6 +60,24 @@ class Doctor extends Equatable {
         latitude,
         longitude,
       ];
+
+  /// GP Care Platform Console doctors published to Firestore `clinic_doctors`.
+  factory Doctor.fromClinicMap(String id, Map<String, dynamic> map) {
+    return Doctor(
+      id: id,
+      name: map['name'] as String? ?? '',
+      specialty: map['specialty'] as String? ?? 'General Practitioner',
+      hospital: map['hospital'] as String? ?? '',
+      rating: (map['rating'] as num?)?.toDouble() ?? 4.8,
+      region: map['region'] as String? ?? 'Colombo',
+      yearsExperience: (map['yearsExperience'] as num?)?.toInt() ?? 8,
+      feeLkr: (map['feeLkr'] as num?)?.toInt() ?? 3500,
+      bio: map['bio'] as String? ?? '',
+      nextAvailable:
+          map['nextAvailable'] as String? ?? 'Mon–Fri · 09:00–17:00',
+      address: map['address'] as String? ?? '',
+    );
+  }
 }
 
 enum AppointmentStatus { upcoming, completed, cancelled }

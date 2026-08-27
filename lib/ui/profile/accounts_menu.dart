@@ -13,6 +13,7 @@ import '../../data/models/user_profile.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../localization/health_intake_l10n.dart';
 import '../help/help_desk_sheet.dart';
+import '../vault/vault_portal_sync_section.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/profile_avatar.dart';
 import 'unique_health_id_card.dart';
@@ -416,6 +417,8 @@ class AccountSettingsPage extends StatelessWidget {
           communicationCard,
           const SizedBox(height: 14),
           securityCard,
+          const SizedBox(height: 14),
+          const VaultPortalSyncSection(),
         ],
       ),
     );

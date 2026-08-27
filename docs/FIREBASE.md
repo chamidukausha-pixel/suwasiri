@@ -53,6 +53,7 @@ Aligned with `firestore.rules` and `FirebaseHealthRepository` / `FirebaseAuthRep
 | `notifications` | `title`, `body`, `timestamp`, `type`, `read` | any signed-in (tighten later) |
 | `telehealth_sessions` | WebRTC offer/answer + `ice_doctor` / `ice_patient` ICE candidates; subcollection `messages` (in-call chat) | any signed-in (patient app + GP Care doctor) |
 | `consultation_notes` | `patientId`, `patientName`, `doctor`, `clinicName`, `title`, `body`, `date`, `appointmentId`, `source` (`gp_care`) | read/create: signed-in; update/delete: household or same patientId. Suwasiri Call + Vault treatment notes + GP Care history |
+| `clinic_doctors` | `name`, `specialty` (matches DoctorCatalog categories, e.g. Cardiologist), `hospital`, `address`, `region`, `active`, `staffId`, `source` (`gp_care`) | signed-in read/write. GP Care Platform Console publishes doctors so the Suwasiri Doctors tab can list them under that clinic + specialty |
 
 ## Planned tenancy collections (web RBAC — not deployed yet)
 

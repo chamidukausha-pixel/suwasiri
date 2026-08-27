@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/notification/notification_cubit.dart';
@@ -18,7 +17,6 @@ import '../../data/catalogs/doctor_catalog.dart';
 import '../../data/models/appointment.dart';
 import '../../data/models/vault_report.dart';
 import '../../data/repositories/health_repository.dart';
-import '../../data/services/clinic_copilot_replies.dart';
 import '../../data/services/telehealth_call_session.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
@@ -51,27 +49,11 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     return appt.specialty;
   }
 
-  final _noteCtrl = TextEditingController();
-  final _aiCtrl = TextEditingController();
-  final _notes = <String>[
-    'Rest for 2 days. Avoid cold beverages and direct cold drafts.',
-    'Monitor body temperature every 4 hours. Keep a log.',
-    'Take Paracetamol only if temperature exceeds 38°C / 100°F.',
-    'Drink warm fluids regularly — aim for 2–3 litres of water daily.',
-    'Wash hands before meals and after returning home.',
-    'Sleep 7–8 hours; elevate your head if coughing at night.',
-    'Avoid self-medicating antibiotics without clinician advice.',
-    'If breathing worsens or fever lasts >3 days, seek urgent care.',
-  ];
-
-  bool _showAllTips = false;
   bool _muted = false;
   bool _camOff = false;
   bool _rxUpdating = true;
   String? _sessionId;
   List<Prescription> _sessionRx = [];
-  String? _aiReply;
-  String? _aiLastQuery;
   Duration _remaining = const Duration(minutes: 8, seconds: 18);
   Timer? _callTimer;
   Timer? _rxTimer;
@@ -87,10 +69,8 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   String _liveStatus = '';
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _ringSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _chatSub;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _doctorNotesSub;
   final _chatCtrl = TextEditingController();
   final _callMessages = <_InCallMsg>[];
-  final _doctorLiveNotes = <String>[];
 
   @override
   void initState() {
@@ -115,15 +95,12 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
 
   @override
   void dispose() {
-    _noteCtrl.dispose();
-    _aiCtrl.dispose();
     _chatCtrl.dispose();
     _callTimer?.cancel();
     _rxTimer?.cancel();
     unawaited(_rxWatch?.cancel());
     unawaited(_ringSub?.cancel());
     unawaited(_chatSub?.cancel());
-    unawaited(_doctorNotesSub?.cancel());
     unawaited(_hangupLiveCall());
     _disposeCamera();
     super.dispose();
@@ -286,8 +263,6 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     _rxWatch = null;
     await _chatSub?.cancel();
     _chatSub = null;
-    await _doctorNotesSub?.cancel();
-    _doctorNotesSub = null;
     await _hangupLiveCall();
     await _disposeCamera();
     if (!mounted) return;
@@ -362,15 +337,11 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
         _rxUpdating = false;
       });
     });
-    _watchConsultSync(patientId: user.id, appointmentId: appt.id);
+    _watchConsultSync(appointmentId: appt.id);
   }
 
-  void _watchConsultSync({
-    required String patientId,
-    required String appointmentId,
-  }) {
+  void _watchConsultSync({required String appointmentId}) {
     unawaited(_chatSub?.cancel());
-    unawaited(_doctorNotesSub?.cancel());
     _chatSub = FirebaseFirestore.instance
         .collection('telehealth_sessions')
         .doc(appointmentId)
@@ -399,25 +370,6 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
         _callMessages
           ..clear()
           ..addAll(timed.map((e) => e.$2));
-      });
-    });
-    _doctorNotesSub = FirebaseFirestore.instance
-        .collection('consultation_notes')
-        .where('patientId', isEqualTo: patientId)
-        .snapshots()
-        .listen((snap) {
-      if (!mounted) return;
-      final notes = snap.docs.map((d) {
-        final data = d.data();
-        final body = (data['body'] as String? ?? '').trim();
-        final doctor = data['doctor'] as String? ?? '';
-        if (body.isEmpty) return '';
-        return doctor.isEmpty ? body : '$doctor: $body';
-      }).where((s) => s.isNotEmpty).toList();
-      setState(() {
-        _doctorLiveNotes
-          ..clear()
-          ..addAll(notes);
       });
     });
   }
@@ -578,33 +530,6 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
     );
   }
 
-  void _addNote() {
-    final text = _noteCtrl.text.trim();
-    if (text.isEmpty) return;
-    setState(() {
-      _notes.insert(0, text);
-      _noteCtrl.clear();
-    });
-  }
-
-  void _askAi() {
-    final q = _aiCtrl.text.trim();
-    if (q.isEmpty) return;
-    setState(() {
-      _aiReply = ClinicCopilotReplies.reply(q);
-      _aiLastQuery = q;
-      _aiCtrl.clear();
-    });
-  }
-
-  Future<void> _openAiGoogle() async {
-    final q = ClinicCopilotReplies.googleQuery(_aiLastQuery ?? _aiCtrl.text);
-    final uri = Uri.parse(
-      'https://www.google.com/search?q=${Uri.encodeComponent(q)}',
-    );
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
   String get _timerLabel {
     final m = _remaining.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = _remaining.inSeconds.remainder(60).toString().padLeft(2, '0');
@@ -720,6 +645,12 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
               onAnswerCall: _joinGpCareCall,
             ),
             const SizedBox(height: 14),
+            _InCallMessagesCard(
+              messages: _callMessages,
+              controller: _chatCtrl,
+              onSend: _sendInCallMessage,
+            ),
+            const SizedBox(height: 14),
             _LiveConsultationCard(
               patientLabel: patientLabel,
               timerLabel: waiting
@@ -741,32 +672,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
                 doctorName: doctor,
               ),
             ),
-            const SizedBox(height: 14),
-            _QuickNotesCard(
-              notes: _doctorLiveNotes.isNotEmpty
-                  ? _doctorLiveNotes
-                  : _notes,
-              showAll: _showAllTips,
-              controller: _noteCtrl,
-              onAdd: _addNote,
-              onToggleViewAll: () =>
-                  setState(() => _showAllTips = !_showAllTips),
-              liveFromDoctor: _doctorLiveNotes.isNotEmpty,
-            ),
-            const SizedBox(height: 14),
-            _InCallMessagesCard(
-              messages: _callMessages,
-              controller: _chatCtrl,
-              onSend: _sendInCallMessage,
-            ),
           ],
-          const SizedBox(height: 14),
-          _AiCopilotCard(
-            controller: _aiCtrl,
-            reply: _aiReply,
-            onSend: _askAi,
-            onGoogle: _openAiGoogle,
-          ),
         ],
       ), // ListView
     ), // SafeArea
@@ -1129,130 +1035,6 @@ class _EPrescriptionCard extends StatelessWidget {
     );
   }
 }
-class _QuickNotesCard extends StatelessWidget {
-  const _QuickNotesCard({
-    required this.notes,
-    required this.showAll,
-    required this.controller,
-    required this.onAdd,
-    required this.onToggleViewAll,
-    this.liveFromDoctor = false,
-  });
-
-  final List<String> notes;
-  final bool showAll;
-  final TextEditingController controller;
-  final VoidCallback onAdd;
-  final VoidCallback onToggleViewAll;
-  final bool liveFromDoctor;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final visible = showAll ? notes : notes.take(3).toList();
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.assignment_outlined, color: AppColors.trustBlue),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  liveFromDoctor ? l.t('doctorLiveNotes') : l.t('quickNotes'),
-                  style: const TextStyle(
-                    color: AppColors.trustBlueDark,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-              MinTap(
-                enforceMinSize: false,
-                onTap: onToggleViewAll,
-                child: Text(
-                  showAll ? l.t('showLess') : l.t('viewAll'),
-                  style: const TextStyle(
-                    color: AppColors.trustBlue,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ...visible.map(
-            (n) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Icons.check_circle,
-                      color: AppColors.emerald,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        n,
-                        style: const TextStyle(
-                          color: AppColors.trustBlueDark,
-                          fontSize: 13,
-                          height: 1.35,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  decoration: InputDecoration(
-                    hintText: l.t('privateNoteHint'),
-                  ),
-                  onSubmitted: (_) => onAdd(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: onAdd,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(0, 48),
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                ),
-                child: Text(l.t('add')),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _InCallMsg {
   const _InCallMsg({
@@ -1375,128 +1157,6 @@ class _InCallMessagesCard extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 18),
                 ),
                 child: Text(l.t('send')),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AiCopilotCard extends StatelessWidget {
-  const _AiCopilotCard({
-    required this.controller,
-    required this.onSend,
-    required this.onGoogle,
-    this.reply,
-  });
-
-  final TextEditingController controller;
-  final VoidCallback onSend;
-  final VoidCallback onGoogle;
-  final String? reply;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.trustBlueSoft,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: AppColors.trustBlue.withValues(alpha: 0.12),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.auto_awesome, color: AppColors.trustBlue),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  l.t('aiCopilotActive'),
-                  style: const TextStyle(
-                    color: AppColors.trustBlue,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-              TextButton.icon(
-                onPressed: onGoogle,
-                icon: const Icon(Icons.open_in_new, size: 16),
-                label: Text(l.t('searchOnGoogle')),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.trustBlue,
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            l.t('aiCopilotHint'),
-            style: const TextStyle(
-              color: AppColors.slateMuted,
-              fontSize: 13,
-              height: 1.35,
-            ),
-          ),
-          if (reply != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Text(
-                reply!,
-                style: const TextStyle(
-                  color: AppColors.trustBlueDark,
-                  fontSize: 13,
-                  height: 1.4,
-                ),
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  decoration: InputDecoration(
-                    hintText: l.t('aiCopilotPlaceholder'),
-                    filled: true,
-                    fillColor: AppColors.surface,
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => onSend(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Material(
-                color: AppColors.trustBlue,
-                borderRadius: BorderRadius.circular(12),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: onSend,
-                  child: const SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Icon(Icons.send_rounded,
-                        color: Colors.white, size: 20),
-                  ),
-                ),
               ),
             ],
           ),

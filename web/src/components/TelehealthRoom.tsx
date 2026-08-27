@@ -44,6 +44,16 @@ import {
   type TelehealthChatMessage,
 } from "../sync/suwasiriConsultSync";
 
+function overlayBookingIdentity(apt: Appointment, patient: Patient): Patient {
+  const displayName = appointmentPatientName(apt, patient);
+  return {
+    ...patient,
+    name: displayName,
+    phone: patient.phone || apt.patientPhone || "",
+    email: patient.email || apt.patientEmail || "",
+  };
+}
+
 interface Props {
   patients: Patient[];
   appointments: Appointment[];
@@ -158,10 +168,10 @@ export default function TelehealthRoom({
   ]));
 
   const filteredFormulary = formulary.filter((d) => {
+    if (selectedDrugName && d.name === selectedDrugName) return false;
+    if (telehealthMedsList.some((m) => m.drug.toLowerCase().includes(d.name.toLowerCase()))) return false;
     const matchesCat = medCategoryFilter === "All" || d.category === medCategoryFilter;
     if (!matchesCat) return false;
-    if (telehealthMedsList.some((m) => m.drug.toLowerCase().includes(d.name.toLowerCase()))) return false;
-    if (selectedDrugName === d.name) return false;
     if (!drugSearchQuery.trim()) return true;
     const q = drugSearchQuery.toLowerCase();
     return (
@@ -184,7 +194,8 @@ export default function TelehealthRoom({
     const byId = new Map<string, Patient>();
     for (const apt of dayVideoAppointments) {
       const existing = patients.find((p) => p.id === apt.patientId);
-      byId.set(apt.patientId, existing || stubPatientFromBooking(apt));
+      const base = existing || stubPatientFromBooking(apt);
+      byId.set(apt.patientId, overlayBookingIdentity(apt, base));
     }
     if (selectedPat && !byId.has(selectedPat.id)) byId.set(selectedPat.id, selectedPat);
     return [...byId.values()];
@@ -215,7 +226,8 @@ export default function TelehealthRoom({
       fresh.vaccineRecords !== selectedPat.vaccineRecords ||
       fresh.activeMedications !== selectedPat.activeMedications
     ) {
-      setSelectedPat(fresh);
+      const apt = dayVideoAppointments.find((a) => a.patientId === fresh.id);
+      setSelectedPat(apt ? overlayBookingIdentity(apt, fresh) : fresh);
     }
   }, [patients, selectedPat?.id]);
 
@@ -346,13 +358,7 @@ export default function TelehealthRoom({
 
   const openVideoPatient = (apt: Appointment) => {
     const existing = patients.find((p) => p.id === apt.patientId);
-    const displayName = appointmentPatientName(apt, existing);
-    const patient: Patient = {
-      ...(existing || stubPatientFromBooking(apt)),
-      name: displayName,
-      phone: existing?.phone || apt.patientPhone || "",
-      email: existing?.email || apt.patientEmail || "",
-    };
+    const patient = overlayBookingIdentity(apt, existing || stubPatientFromBooking(apt));
     setSelectedPat(patient);
     setTelehealthNotes(patient.notes || "");
     onSelectVideoPatient?.(patient, apt.id);
@@ -389,6 +395,7 @@ export default function TelehealthRoom({
     };
     setTelehealthMedsList((prev) => [...prev, line]);
     setDrugSearchQuery("");
+    setSelectedDrugName("");
     setShowDrugDropdown(false);
     if (selectedPat?.id) {
       const sessionId = callTargetApt?.id || focusAppointmentId;
@@ -982,21 +989,11 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
                       key={drug.name}
                       type="button"
                       onClick={() => {
-                        const days = drug.defaultDays || doseDays;
-                        const line = {
-                          drug: drug.name,
-                          instructions: drug.defaultDose || doseInstr,
-                          duration: String(days).includes("day") ? String(days) : `${days} days`,
-                          meal: drug.defaultMeal || doseMeal,
-                        };
-                        setTelehealthMedsList((prev) =>
-                          prev.some((m) => m.drug === line.drug && m.instructions === line.instructions)
-                            ? prev
-                            : [...prev, line]
-                        );
-                        setSelectedDrugName("");
-                        setDrugSearchQuery("");
-                        setShowDrugDropdown(false);
+                        setSelectedDrugName(drug.name);
+                        setDrugSearchQuery(drug.name);
+                        setDoseInstr(drug.defaultDose || doseInstr);
+                        setDoseDays(drug.defaultDays || doseDays);
+                        setDoseMeal(drug.defaultMeal || doseMeal);
                       }}
                       className="w-full text-left p-2.5 hover:bg-emerald-50 text-xs"
                     >

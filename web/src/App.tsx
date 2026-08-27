@@ -117,16 +117,8 @@ import {
   type SuwasiriChartPatch,
 } from "./sync/suwasiriPatientChart";
 import { subscribeSuwasiriVaccinePatients } from "./sync/suwasiriVaccinations";
-import { PATHOLOGY_INVESTIGATIONS, SAMPLE_COLLECTION_CATEGORIES, sampleCategoryForTest } from "./catalogs/pathologyInvestigations";
-import { GP_CARE_DOCTOR_CATEGORIES, publishClinicDoctorToSuwasiri } from "./sync/suwasiriClinicDoctors";
-
-type DayInvoiceRow = Billing & {
-  synthetic?: boolean;
-  appointmentId?: string;
-  appointmentTime?: string;
-  appointmentDoctor?: string;
-  appointmentReason?: string;
-};
+import { PATHOLOGY_INVESTIGATIONS, sampleCategoryForTest } from "./catalogs/pathologyInvestigations";
+import { publishClinicDoctorToSuwasiri } from "./sync/suwasiriClinicDoctors";
 
 export interface DrugFormularyItem {
   name: string;
@@ -930,46 +922,44 @@ export default function App() {
     acc[a.date] = (acc[a.date] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
-  const dayBookedAppointments = tenantAppointments
-    .filter((a) => a.date === selectedBillingDate)
-    .slice()
-    .sort(compareAppointmentTime);
-  const dayBilling: DayInvoiceRow[] = dayBookedAppointments.map((apt) => {
-    const p = patients.find((pt) => pt.id === apt.patientId);
-    const name = appointmentPatientName(apt, p);
-    const existing = billing.find(
-      (inv) =>
-        (inv.patientId && apt.patientId === inv.patientId && inv.date === apt.date) ||
-        (inv.patientName === name && inv.date === apt.date)
-    );
-    if (existing) {
-      return {
-        ...existing,
-        patientName: name,
-        patientId: apt.patientId,
-        appointmentTime: apt.time,
-        appointmentDoctor: apt.doctorName,
-        appointmentReason: apt.reason,
-        appointmentId: apt.id,
-      };
+  const dayBookedAppointments = tenantAppointments.filter((a) => a.date === selectedBillingDate);
+  const dayBilling = billing.filter((inv) =>
+    dayBookedAppointments.some(
+      (a) => (inv.patientId && a.patientId === inv.patientId) || a.patientName === inv.patientName
+    ) || inv.date === selectedBillingDate
+  );
+  const dayInvoiceRows = (() => {
+    const used = new Set<string>();
+    const rows: Array<Billing & { appointmentTime?: string }> = [];
+    for (const apt of dayBookedAppointments) {
+      const match = billing.find(
+        (inv) =>
+          (inv.patientId && inv.patientId === apt.patientId) ||
+          inv.patientName === apt.patientName
+      );
+      const p = patients.find((x) => x.id === apt.patientId);
+      const name = apt.patientName || p?.name || "Patient";
+      if (match) {
+        used.add(match.id);
+        rows.push({ ...match, patientName: match.patientName || name, appointmentTime: apt.time });
+      } else {
+        rows.push({
+          id: `booked-${apt.id}`,
+          patientName: name,
+          patientId: apt.patientId,
+          amount: 3500,
+          service: apt.reason || (apt.isTelehealth ? "GP Video Consult" : "GP Consultation"),
+          status: "PENDING",
+          date: apt.date,
+          appointmentTime: apt.time,
+        });
+      }
     }
-    return {
-      id: `pending-${apt.id}`,
-      patientName: name,
-      patientId: apt.patientId,
-      amount: 1500,
-      service: apt.reason
-        ? `GP Consultation (${apt.reason})`
-        : `GP Consultation${apt.doctorName ? ` — ${apt.doctorName}` : ""}`,
-      status: "PENDING",
-      date: apt.date,
-      appointmentTime: apt.time,
-      appointmentDoctor: apt.doctorName,
-      appointmentReason: apt.reason,
-      appointmentId: apt.id,
-      synthetic: true,
-    };
-  });
+    for (const inv of dayBilling) {
+      if (!used.has(inv.id)) rows.push(inv);
+    }
+    return rows;
+  })();
   const jumpToBillingToday = () => {
     const n = new Date();
     setBillingCalendarMonth({ year: n.getFullYear(), month: n.getMonth() });
@@ -1400,7 +1390,7 @@ export default function App() {
     setPatients((prev) => prev.map((p) => p.id === updated.id ? { ...p, ...updated } : p));
     setSuwasiriPatients((prev) => prev.map((p) => p.id === updated.id ? { ...p, ...updated } : p));
     setActiveDoctorRecordPatient(updated);
-    setActiveHubPatient((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
+    setActiveHubPatient((prev) => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
     try {
       const res = await fetch(`/api/patients/${updated.id}`, {
         method: "PATCH",
@@ -1420,9 +1410,8 @@ export default function App() {
           waistCm: updated.waistCm,
           clinicalCalculations: updated.clinicalCalculations,
           observationsHistory: updated.observationsHistory,
-          history: updated.history,
           historyEntry: {
-            reason: updated.history?.[0]?.reason || "Clinical Decision Calculators Suite",
+            reason: "Clinical Decision Calculators Suite",
             doctor: sessionUser?.name || "GP",
             notes: updated.history?.[0]?.notes || "Calculator details updated",
           },
@@ -1430,10 +1419,22 @@ export default function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.state?.patients) setPatients(data.state.patients);
-        const saved = data.patient || updated;
-        setActiveHubPatient((prev) => (prev?.id === saved.id ? { ...prev, ...saved } : prev));
+        if (data.state?.patients) {
+          setPatients(data.state.patients);
+          const fresh = data.state.patients.find((p: Patient) => p.id === updated.id);
+          if (fresh) {
+            setActiveDoctorRecordPatient(fresh);
+            setActiveHubPatient((prev) => (prev && prev.id === fresh.id ? fresh : prev));
+          }
+        }
       }
+      void saveConsultationNote({
+        patientId: updated.id,
+        patientName: updated.name,
+        doctor: sessionUser?.name || "GP",
+        clinicName: activeHospital?.name || updated.medicalCenter,
+        body: updated.history?.[0]?.notes || "Clinical Decision Calculators Suite details updated.",
+      });
     } catch (err) {
       console.warn("Calculator patient persist:", err);
     }
@@ -1611,24 +1612,7 @@ export default function App() {
     setConsultMedsList([...consultMedsList, formattedMed]);
     setConsultCustomMed("");
     setConsultSelectedMed("");
-    setSelectedFormularyDrug(null);
-    setMedSearchQuery("");
-    setMedSearchFocused(false);
     // Reset to friendly default values
-    setConsultMedInstruction("Take 1 tablet twice a day");
-    setConsultMedDays("5");
-    setConsultMedMeal("After Meal");
-  };
-
-  const pickFormularyDrug = (item: DrugFormularyItem) => {
-    const medBase = `${item.name} (${item.brand})`;
-    const formattedMed = `${medBase} [${item.defaultDose}, for ${item.defaultDays} days, ${item.defaultMeal}]`;
-    setConsultMedsList((prev) => (prev.includes(formattedMed) ? prev : [...prev, formattedMed]));
-    setConsultCustomMed("");
-    setConsultSelectedMed("");
-    setSelectedFormularyDrug(null);
-    setMedSearchQuery("");
-    setMedSearchFocused(false);
     setConsultMedInstruction("Take 1 tablet twice a day");
     setConsultMedDays("5");
     setConsultMedMeal("After Meal");
@@ -1829,32 +1813,7 @@ export default function App() {
       };
       reader.readAsDataURL(file);
     } catch (err: any) {
-        alert("Error uploading receipt: " + err.message);
-    }
-  };
-
-  const persistDayInvoice = async (invoice: DayInvoiceRow): Promise<string | null> => {
-    if (!invoice.synthetic) return invoice.id;
-    try {
-      const res = await fetch("/api/billing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          patientId: invoice.patientId,
-          patientName: invoice.patientName,
-          amount: invoice.amount,
-          service: invoice.service,
-          date: invoice.date,
-          appointmentId: invoice.appointmentId,
-        }),
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (data.state?.billing) setBilling(data.state.billing);
-      return data.bill?.id || null;
-    } catch (err) {
-      console.error(err);
-      return null;
+      alert("Error uploading receipt: " + err.message);
     }
   };
 
@@ -1966,17 +1925,15 @@ export default function App() {
 
   // Clinic Messaging team chat handler
   const openClinicalHubWithHistory = (patient: Patient) => {
-    const chart = suwasiriCharts[patient.id];
-    const merged = chart ? applySuwasiriChart(patient, chart) : patient;
     setActiveHubInitialTab("history");
-    setActiveHubPatient(merged);
-    const history = (merged.medicalHistory || []).join("; ") || "No previous history on file.";
+    setActiveHubPatient(patient);
+    const history = (patient.medicalHistory || []).join("; ") || "No previous history on file.";
     void saveConsultationNote({
-      patientId: merged.id,
-      patientName: merged.name,
+      patientId: patient.id,
+      patientName: patient.name,
       doctor: sessionUser?.name || currentRole,
-      clinicName: activeHospital?.name || merged.medicalCenter,
-      body: `Clinical Record Hub opened for ${merged.name}. History: ${history}`,
+      clinicName: activeHospital?.name || patient.medicalCenter,
+      body: `Clinical Record Hub opened for ${patient.name}. History: ${history}`,
     });
   };
 
@@ -4445,7 +4402,14 @@ export default function App() {
                                     return (
                                       <div
                                         key={idx}
-                                        onClick={() => pickFormularyDrug(item)}
+                                        onClick={() => {
+                                          setConsultSelectedMed(`${item.name} (${item.brand})`);
+                                          setConsultMedInstruction(item.defaultDose);
+                                          setConsultMedMeal(item.defaultMeal);
+                                          setConsultMedDays(item.defaultDays);
+                                          setMedSearchQuery(item.name);
+                                          setSelectedFormularyDrug(item);
+                                        }}
                                         className={`p-2.5 hover:bg-sky-50/70 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
                                           isAllergyConflict ? "bg-red-50/70 border-l-4 border-l-red-500" : ""
                                         }`}
@@ -4478,7 +4442,12 @@ export default function App() {
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            pickFormularyDrug(item);
+                                            setConsultSelectedMed(`${item.name} (${item.brand})`);
+                                            setConsultMedInstruction(item.defaultDose);
+                                            setConsultMedMeal(item.defaultMeal);
+                                            setConsultMedDays(item.defaultDays);
+                                            setMedSearchQuery(item.name);
+                                            setSelectedFormularyDrug(item);
                                           }}
                                           className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-2.5 py-1 rounded text-[10px] font-bold self-start sm:self-center shrink-0 cursor-pointer"
                                         >
@@ -5086,9 +5055,9 @@ export default function App() {
                               </td>
                               <td className="p-3">
                                 <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${
-                                  sample.sampleCategory.includes("Blood") && sample.sampleCategory.includes("Urinal")
+                                  (sample.sampleCategory || "").includes("Blood") && (sample.sampleCategory || "").includes("Urinal")
                                     ? "bg-purple-100 text-purple-800"
-                                    : sample.sampleCategory.includes("Blood")
+                                    : (sample.sampleCategory || "").includes("Blood")
                                     ? "bg-rose-100 text-rose-800"
                                     : "bg-amber-100 text-amber-800"
                                 }`}>
@@ -5635,14 +5604,14 @@ export default function App() {
                     onJumpToToday={jumpToBillingToday}
                   />
                   <p className="text-[11px] text-slate-500 mt-2 px-1">
-                    Click a date to list booked patients for that day (same names as Appointments & Lobby Queue), shown as invoices. Reception can view and download Suwasiri bank slips.
+                    Click a date to show invoices only for patients booked that day. Reception can view and download bank slips uploaded from the Suwasiri app.
                   </p>
                 </div>
               <div className="xl:col-span-8 bg-white p-6 border rounded space-y-6">
                 <div>
                   <h2 className="font-serif font-bold text-lg text-[#00334f]">Invoices & Billing Panel</h2>
                   <p className="text-xs text-slate-500">
-                    {formatLongDate(selectedBillingDate)} — booked patients (lobby-style) as invoices ({dayBilling.length} row{dayBilling.length === 1 ? "" : "s"}).
+                    {formatLongDate(selectedBillingDate)} — booked patients only ({dayInvoiceRows.length} invoice{dayInvoiceRows.length === 1 ? "" : "s"}).
                   </p>
                 </div>
 
@@ -5660,14 +5629,14 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {dayBilling.length === 0 && (
+                      {dayInvoiceRows.length === 0 && (
                         <tr>
                           <td colSpan={7} className="p-6 text-center text-slate-400 italic">
-                            No booked patients on {formatLongDate(selectedBillingDate)}. Click a date that has appointments on the doctor dashboard / lobby calendar.
+                            No booked patients on {formatLongDate(selectedBillingDate)}. Pick another date on the calendar.
                           </td>
                         </tr>
                       )}
-                      {dayBilling.map(invoice => (
+                      {dayInvoiceRows.map(invoice => (
                         <tr key={invoice.id} className="hover:bg-slate-50">
                           <td className="p-3 font-semibold text-slate-500">{invoice.id}</td>
                           <td className="p-3">
@@ -5713,12 +5682,8 @@ export default function App() {
 
                               <div className="flex flex-col gap-1">
                                 <span className="font-bold text-slate-700">{invoice.patientName}</span>
-                                {(invoice.appointmentTime || invoice.appointmentDoctor) && (
-                                  <p className="text-[10px] text-slate-500">
-                                    {invoice.appointmentTime}
-                                    {invoice.appointmentDoctor ? ` · ${invoice.appointmentDoctor}` : ""}
-                                    {invoice.appointmentReason ? ` · ${invoice.appointmentReason}` : ""}
-                                  </p>
+                                {invoice.appointmentTime && (
+                                  <span className="text-[10px] text-slate-500 font-medium">{invoice.appointmentTime}</span>
                                 )}
                                 <div className="flex flex-wrap gap-1.5 items-center">
                                   {invoice.paidBySuwasiri && invoice.suwasiriReceiptUrl && (
@@ -5748,9 +5713,7 @@ export default function App() {
                                         className="hidden"
                                         onChange={(e) => {
                                           if (e.target.files && e.target.files[0]) {
-                                            void persistDayInvoice(invoice).then((id) => {
-                                              if (id) handleUploadReceipt(id, e.target.files[0]);
-                                            });
+                                            handleUploadReceipt(invoice.id, e.target.files[0]);
                                           }
                                         }}
                                       />
@@ -5761,9 +5724,7 @@ export default function App() {
                                         type="button"
                                         onClick={async () => {
                                           const mockReceiptUrl = "https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?q=80&w=260&auto=format&fit=crop";
-                                          const id = await persistDayInvoice(invoice);
-                                          if (!id) return;
-                                          const res = await fetch(`/api/billing/${id}/upload-receipt`, {
+                                          const res = await fetch(`/api/billing/${invoice.id}/upload-receipt`, {
                                             method: "POST",
                                             headers: { "Content-Type": "application/json" },
                                             body: JSON.stringify({
@@ -5801,13 +5762,12 @@ export default function App() {
                           </td>
                           <td className="p-3">
                             <div className="flex items-center justify-end gap-1.5">
-                              {invoice.status === "PENDING" ? (
+                              {String(invoice.id).startsWith("booked-") ? (
+                                <span className="text-[9px] text-slate-500 italic font-medium">Booked — settle after consult</span>
+                              ) : invoice.status === "PENDING" ? (
                                 <>
                                   <button
-                                    onClick={async () => {
-                                      const id = await persistDayInvoice(invoice);
-                                      if (id) handleSettleReceipt(id, "PAID");
-                                    }}
+                                    onClick={() => handleSettleReceipt(invoice.id, "PAID")}
                                     className="bg-[#00334f] hover:bg-[#002235] text-white px-2 py-1 text-[9px] font-bold rounded transition-colors cursor-pointer"
                                   >
                                     Cash Settle
@@ -5815,9 +5775,7 @@ export default function App() {
                                   <button
                                     onClick={async () => {
                                       try {
-                                        const id = await persistDayInvoice(invoice);
-                                        if (!id) throw new Error("Could not create invoice");
-                                        const res = await fetch(`/api/billing/${id}/sync-suwasiri`, { method: "POST" });
+                                        const res = await fetch(`/api/billing/${invoice.id}/sync-suwasiri`, { method: "POST" });
                                         if (!res.ok) throw new Error("Synchronization refused or gateway is busy");
                                         const data = await res.json();
                                         setBilling(data.state.billing);
@@ -6365,23 +6323,21 @@ export default function App() {
                   }
                   if (data.membership) setMemberships((prev) => [...prev, data.membership]);
                   if (data.staff) setStaffDirectory((prev) => [...prev, data.staff]);
-                  if (payload.roleName === "Doctor") {
+                  if (payload.roleName === "Doctor" && data.staff) {
                     const hospital = hospitals.find((h) => h.id === payload.hospitalId);
                     const branch = branches.find((b) => payload.branchIds?.includes(b.id));
                     try {
                       await publishClinicDoctorToSuwasiri({
-                        id: data.staff?.id || data.staffUser?.id || payload.email,
+                        staffId: data.staff.id,
                         name: payload.name,
-                        specialty: payload.specialty || "General Practitioner",
-                        clinicName: hospital?.name || "GP Care Clinic",
-                        region: branch?.name || "Colombo",
+                        specialty: payload.specialty || data.staff.specialty || "General Practitioner",
+                        hospitalName: hospital?.name || "GP Care Clinic",
+                        branchName: branch?.name,
                         email: payload.email,
                         phone: payload.phone,
-                        hospitalId: payload.hospitalId,
-                        branchId: payload.branchIds?.[0],
                       });
                     } catch (err) {
-                      console.warn("Suwasiri doctor publish:", err);
+                      console.warn("Could not publish clinic doctor to Suwasiri:", err);
                     }
                   }
                 }}

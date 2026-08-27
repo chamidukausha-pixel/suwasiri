@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Building2, Plus, ShieldAlert, UserCheck, Users } from "lucide-react";
 import type { Branch, Hospital, RoleDefinition, StaffMembership, StaffProvider, StaffUser } from "../types";
-import { GP_CARE_DOCTOR_CATEGORIES } from "../sync/suwasiriClinicDoctors";
+import { DOCTOR_SPECIALTIES } from "../catalogs/doctorSpecialties";
 
 interface Props {
   hospitals: Hospital[];
@@ -42,7 +42,7 @@ export default function PlatformConsoleView({
   const [staffEmail, setStaffEmail] = useState("");
   const [staffPhone, setStaffPhone] = useState("");
   const [staffRole, setStaffRole] = useState("Doctor");
-  const [staffSpecialty, setStaffSpecialty] = useState("General Practitioner");
+  const [staffSpecialty, setStaffSpecialty] = useState<string>("Cardiologist");
   const [staffBranches, setStaffBranches] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -165,6 +165,10 @@ export default function PlatformConsoleView({
                       onSubmit={async (e) => {
                         e.preventDefault();
                         if (!staffName.trim() || !staffEmail.trim()) return;
+                        if (staffRole === "Doctor" && !staffSpecialty) {
+                          alert("Please choose a doctor category / specialty.");
+                          return;
+                        }
                         setSaving(true);
                         try {
                           await onCreateStaff({
@@ -218,9 +222,10 @@ export default function PlatformConsoleView({
                             value={staffSpecialty}
                             onChange={(e) => setStaffSpecialty(e.target.value)}
                             className="border rounded-lg px-3 py-1.5 text-xs sm:col-span-2"
+                            required
                           >
-                            {GP_CARE_DOCTOR_CATEGORIES.map((cat) => (
-                              <option key={cat} value={cat}>{cat}</option>
+                            {DOCTOR_SPECIALTIES.map((spec) => (
+                              <option key={spec} value={spec}>{spec}</option>
                             ))}
                           </select>
                         )}
