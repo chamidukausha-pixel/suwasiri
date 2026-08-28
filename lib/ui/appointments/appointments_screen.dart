@@ -9,9 +9,12 @@ import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/suwasiri_brand_header.dart';
 import 'booking_checkout_flow.dart';
+import 'doctor_directory_intent.dart';
 
 class AppointmentsScreen extends StatefulWidget {
-  const AppointmentsScreen({super.key});
+  const AppointmentsScreen({super.key, this.isActive = false});
+
+  final bool isActive;
 
   @override
   State<AppointmentsScreen> createState() => _AppointmentsScreenState();
@@ -23,11 +26,34 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   bool _loading = true;
   String _category = 'general';
   final Set<String> _favorites = {};
+  String? _pendingVisitReason;
 
   @override
   void initState() {
     super.initState();
+    _applyPendingIntent();
     _refresh();
+  }
+
+  @override
+  void didUpdateWidget(covariant AppointmentsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      _applyPendingIntent();
+    }
+  }
+
+  void _applyPendingIntent() {
+    final pending = DoctorDirectoryIntent.consume();
+    if (pending.visitReason == null && pending.categoryId == null) return;
+    setState(() {
+      if (pending.categoryId != null && pending.categoryId!.isNotEmpty) {
+        _category = pending.categoryId!;
+      }
+      if (pending.visitReason != null && pending.visitReason!.isNotEmpty) {
+        _pendingVisitReason = pending.visitReason;
+      }
+    });
   }
 
   Future<void> _refresh() async {
@@ -65,8 +91,13 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   }
 
   Future<void> _book(Doctor doctor) async {
-    await showBookingCheckoutFlow(context, doctor: doctor);
+    await showBookingCheckoutFlow(
+      context,
+      doctor: doctor,
+      initialVisitReason: _pendingVisitReason,
+    );
     if (!mounted) return;
+    setState(() => _pendingVisitReason = null);
     await _refresh();
   }
 
@@ -112,7 +143,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
           ),
           const SizedBox(height: 12),
           SizedBox(
-            height: 92,
+            height: 100,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: DoctorCatalog.browseCategories.length,
@@ -215,8 +246,8 @@ class _CategoryTile extends StatelessWidget {
     return MinTap(
       onTap: onTap,
       child: Container(
-        width: 78,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        width: 86,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(18),
@@ -240,12 +271,14 @@ class _CategoryTile extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               label,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: TextStyle(
                 color: selected ? Colors.white : AppColors.trustBlueDark,
                 fontWeight: FontWeight.w700,
-                fontSize: 12,
+                fontSize: 10,
+                height: 1.15,
               ),
             ),
           ],

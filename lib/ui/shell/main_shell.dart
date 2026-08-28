@@ -89,7 +89,7 @@ class _MainShellState extends State<MainShell> {
     final l = AppLocalizations.of(context);
     final pages = [
       HomeScreen(onNavigate: _goTo, isActive: _index == 0),
-      const AppointmentsScreen(),
+      AppointmentsScreen(isActive: _index == 1),
       TelehealthScreen(isActive: _index == 2),
       const VaultScreen(),
       VaccineScreen(isActive: _index == 4),

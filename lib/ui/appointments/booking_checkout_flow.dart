@@ -39,6 +39,7 @@ class _BookingResult {
 Future<void> showBookingCheckoutFlow(
   BuildContext context, {
   required Doctor doctor,
+  String? initialVisitReason,
 }) async {
   final result = await showModalBottomSheet<_BookingResult>(
     context: context,
@@ -48,7 +49,10 @@ Future<void> showBookingCheckoutFlow(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
-    builder: (_) => _BookingCheckoutSheet(doctor: doctor),
+    builder: (_) => _BookingCheckoutSheet(
+      doctor: doctor,
+      initialVisitReason: initialVisitReason,
+    ),
   );
   if (result == null || !context.mounted) return;
 
@@ -147,9 +151,13 @@ Future<void> showBookingCheckoutFlow(
 }
 
 class _BookingCheckoutSheet extends StatefulWidget {
-  const _BookingCheckoutSheet({required this.doctor});
+  const _BookingCheckoutSheet({
+    required this.doctor,
+    this.initialVisitReason,
+  });
 
   final Doctor doctor;
+  final String? initialVisitReason;
 
   @override
   State<_BookingCheckoutSheet> createState() => _BookingCheckoutSheetState();
@@ -197,6 +205,10 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
   @override
   void initState() {
     super.initState();
+    final reason = widget.initialVisitReason?.trim();
+    if (reason != null && reason.isNotEmpty) {
+      _visitReason = reason;
+    }
     _selectedDate = _dates.length > 3 ? _dates[3] : _dates.first;
     _selectedTime = _times.first;
     _bookedSub = context

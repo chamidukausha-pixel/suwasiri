@@ -228,6 +228,156 @@ class AppLocalizations {
       'si': 'ඇස',
       'ta': 'கண்',
     },
+    'catCardiologist': {
+      'en': 'Heart',
+      'si': 'හෘද රෝග',
+      'ta': 'இதயம்',
+    },
+    'catNeurologist': {
+      'en': 'Brain & nerves',
+      'si': 'මොළය හා ස්නායු',
+      'ta': 'மூளை & நரம்பு',
+    },
+    'catNeurosurgeon': {
+      'en': 'Neuro surgery',
+      'si': 'ස්නායු ශල්‍ය',
+      'ta': 'நரம்பு அறுவை',
+    },
+    'catPulmonologist': {
+      'en': 'Lungs',
+      'si': 'පෙනහළු හා ශ්වසන',
+      'ta': 'நுரையீரல்',
+    },
+    'catHaematologist': {
+      'en': 'Blood',
+      'si': 'රුධිර රෝග',
+      'ta': 'இரத்தம்',
+    },
+    'catVascularSurgeon': {
+      'en': 'Vascular',
+      'si': 'රුධිර නාල ශල්‍ය',
+      'ta': 'இரத்த நாள அறுவை',
+    },
+    'catNephrologist': {
+      'en': 'Kidney',
+      'si': 'වකුගඩු රෝග',
+      'ta': 'சிறுநீரகம்',
+    },
+    'catUrologist': {
+      'en': 'Urology',
+      'si': 'වකුගඩු ශල්‍ය',
+      'ta': 'சிறுநீரக அறுவை',
+    },
+    'catPhysician': {
+      'en': 'Physician',
+      'si': 'සාමාන්‍ය කායික',
+      'ta': 'உள் மருத்துவர்',
+    },
+    'catOncologist': {
+      'en': 'Cancer',
+      'si': 'පිළිකා රෝග',
+      'ta': 'புற்றுநோய்',
+    },
+    'catGeneralSurgeon': {
+      'en': 'Surgery',
+      'si': 'සාමාන්‍ය ශල්‍ය',
+      'ta': 'பொது அறுவை',
+    },
+    'catOrthopaedic': {
+      'en': 'Bones & joints',
+      'si': 'අස්ථි හා සන්ධි',
+      'ta': 'எலும்பு & மூட்டு',
+    },
+    'catGastroenterologist': {
+      'en': 'Digestive',
+      'si': 'ආහාර ජීරණ',
+      'ta': 'செரிமானம்',
+    },
+    'catDermatologist': {
+      'en': 'Skin',
+      'si': 'සමේ රෝග',
+      'ta': 'தோல்',
+    },
+    'catEnt': {
+      'en': 'ENT',
+      'si': 'කන්, නාස, උගුර',
+      'ta': 'ENT',
+    },
+    'catObgyn': {
+      'en': 'Women\'s health',
+      'si': 'නාරි හා ප්‍රසව',
+      'ta': 'மகப்பேறு',
+    },
+    'catPaediatrician': {
+      'en': 'Children',
+      'si': 'ළමා රෝග',
+      'ta': 'குழந்தை',
+    },
+    'catPsychiatrist': {
+      'en': 'Mental health',
+      'si': 'මානසික සෞඛ්‍ය',
+      'ta': 'மனநலம்',
+    },
+    'catEndocrinologist': {
+      'en': 'Hormones',
+      'si': 'හෝමෝන',
+      'ta': 'ஹார்மோன்',
+    },
+    'catVenereologist': {
+      'en': 'Sexual health',
+      'si': 'ලිංගාශ්‍රිත',
+      'ta': 'பாலியல் சுகாதாரம்',
+    },
+    'catPlasticSurgeon': {
+      'en': 'Plastic surgery',
+      'si': 'ප්ලාස්ටික් ශල්‍ය',
+      'ta': 'பிளாஸ்டிக் அறுவை',
+    },
+    'whatAreYouAfter': {
+      'en': 'What are you after today?',
+      'si': 'අද ඔබට අවශ්‍ය වන්නේ?',
+      'ta': 'இன்று உங்களுக்கு என்ன வேண்டும்?',
+    },
+    'repeatPrescription': {
+      'en': 'Repeat Prescription',
+      'si': 'නැවත බෙහෙත්',
+      'ta': 'மீண்டும் மருந்து',
+    },
+    'medicalCertificate': {
+      'en': 'Medical Certificate',
+      'si': 'වෛද්‍ය සහතිකය',
+      'ta': 'மருத்துவ சான்றிதழ்',
+    },
+    'specialistReferral': {
+      'en': 'Specialist Referral',
+      'si': 'විශේෂඥ යොමු',
+      'ta': 'சிறப்பு மருத்துவ பரிந்துரை',
+    },
+    'reviewResults': {
+      'en': 'Review Results',
+      'si': 'ප්‍රතිඵල සමාලෝචන',
+      'ta': 'முடிவுகள் மதிப்பாய்வு',
+    },
+    'visitReasonMedicalCertificate': {
+      'en': 'Medical certificate',
+      'si': 'වෛද්‍ය සහතිකය',
+      'ta': 'மருத்துவ சான்றிதழ்',
+    },
+    'visitReasonRepeatPrescription': {
+      'en': 'Repeat prescription',
+      'si': 'නැවත බෙහෙත්',
+      'ta': 'மீண்டும் மருந்து',
+    },
+    'visitReasonSpecialistReferral': {
+      'en': 'Specialist referral',
+      'si': 'විශේෂඥ යොමු',
+      'ta': 'சிறப்பு மருத்துவ பரிந்துரை',
+    },
+    'visitReasonReviewResults': {
+      'en': 'Review results',
+      'si': 'ප්‍රතිඵල සමාලෝචන',
+      'ta': 'முடிவுகள் மதிப்பாய்வு',
+    },
     'searchDoctorClinicRegion': {
       'en': 'Search doctor, clinic or region',
       'si': 'වෛද්‍ය, සායන හෝ ප්‍රදේශය සොයන්න',

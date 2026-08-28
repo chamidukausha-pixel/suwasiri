@@ -12,6 +12,7 @@ import '../../data/models/vaccine_models.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/suwasiri_brand_header.dart';
+import '../appointments/doctor_directory_intent.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -79,6 +80,18 @@ class _HomeScreenState extends State<HomeScreen> {
       latitude: booking.latitude,
       longitude: booking.longitude,
     );
+  }
+
+  void _openDoctorsForService({
+    required String visitReasonKey,
+    String categoryId = 'general',
+  }) {
+    final l = AppLocalizations.of(context);
+    DoctorDirectoryIntent.set(
+      visitReason: l.t(visitReasonKey),
+      categoryId: categoryId,
+    );
+    widget.onNavigate(1);
   }
 
   @override
@@ -150,6 +163,68 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 24),
+          Text(
+            l.t('whatAreYouAfter'),
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.trustBlueDark,
+                ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 132,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: 4,
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (context, i) {
+                switch (i) {
+                  case 0:
+                    return _ServiceNeedCard(
+                      icon: Icons.medication_outlined,
+                      iconColor: const Color(0xFF334155),
+                      accent: const Color(0xFF22C55E),
+                      label: l.t('repeatPrescription'),
+                      highlight: true,
+                      onTap: () => _openDoctorsForService(
+                        visitReasonKey: 'visitReasonRepeatPrescription',
+                      ),
+                    );
+                  case 1:
+                    return _ServiceNeedCard(
+                      icon: Icons.description_outlined,
+                      iconColor: AppColors.trustBlueDark,
+                      accent: AppColors.trustBlue,
+                      label: l.t('medicalCertificate'),
+                      onTap: () => _openDoctorsForService(
+                        visitReasonKey: 'visitReasonMedicalCertificate',
+                      ),
+                    );
+                  case 2:
+                    return _ServiceNeedCard(
+                      icon: Icons.group_outlined,
+                      iconColor: AppColors.trustBlueDark,
+                      accent: const Color(0xFF22C55E),
+                      label: l.t('specialistReferral'),
+                      onTap: () => _openDoctorsForService(
+                        visitReasonKey: 'visitReasonSpecialistReferral',
+                      ),
+                    );
+                  default:
+                    return _ServiceNeedCard(
+                      icon: Icons.analytics_outlined,
+                      iconColor: AppColors.trustBlueDark,
+                      accent: AppColors.trustBlue,
+                      label: l.t('reviewResults'),
+                      onTap: () => _openDoctorsForService(
+                        visitReasonKey: 'visitReasonReviewResults',
+                      ),
+                    );
+                }
+              },
+            ),
           ),
           const SizedBox(height: 24),
           if (nextClinic != null && nextClinic.isVisibleOnHome()) ...[
@@ -238,6 +313,73 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       ), // SafeArea
     ); // BlocListener
+  }
+}
+
+class _ServiceNeedCard extends StatelessWidget {
+  const _ServiceNeedCard({
+    required this.icon,
+    required this.iconColor,
+    required this.accent,
+    required this.label,
+    required this.onTap,
+    this.highlight = false,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final Color accent;
+  final String label;
+  final VoidCallback onTap;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    return MinTap(
+      onTap: onTap,
+      child: Container(
+        width: 132,
+        padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.border),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.ink(context).withValues(alpha: 0.05),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: AppColors.trustBlueSoft,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: highlight ? accent : iconColor, size: 24),
+            ),
+            const Spacer(),
+            Text(
+              label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: highlight ? AppColors.trustBlue : AppColors.trustBlueDark,
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+                height: 1.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

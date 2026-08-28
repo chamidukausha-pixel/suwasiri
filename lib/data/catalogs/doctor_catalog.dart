@@ -27,41 +27,184 @@ abstract final class DoctorCatalog {
       labelKey: 'catGeneral',
       icon: Icons.medical_services_outlined,
       color: Color(0xFF2563EB),
-      specialties: [
-        'General Practitioner',
-        'Physician / Consultant Physician',
-      ],
+      specialties: ['General Practitioner'],
     ),
     DoctorBrowseCategory(
-      id: 'heart',
-      labelKey: 'catHeart',
+      id: 'cardiologist',
+      labelKey: 'catCardiologist',
       icon: Icons.favorite_rounded,
       color: Color(0xFFEF4444),
       specialties: ['Cardiologist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'neurologist',
+      labelKey: 'catNeurologist',
+      icon: Icons.psychology_outlined,
+      color: Color(0xFF7C3AED),
+      specialties: ['Neurologist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'neurosurgeon',
+      labelKey: 'catNeurosurgeon',
+      icon: Icons.memory_outlined,
+      color: Color(0xFF6366F1),
+      specialties: ['Neurosurgeon', 'Neurologist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'pulmonologist',
+      labelKey: 'catPulmonologist',
+      icon: Icons.air_outlined,
+      color: Color(0xFF0EA5E9),
+      specialties: ['Chest Physician / Pulmonologist', 'Pulmonologist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'haematologist',
+      labelKey: 'catHaematologist',
+      icon: Icons.bloodtype_outlined,
+      color: Color(0xFFDC2626),
+      specialties: ['Hematologist', 'Haematologist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'vascular',
+      labelKey: 'catVascularSurgeon',
+      icon: Icons.monitor_heart_outlined,
+      color: Color(0xFFB91C1C),
+      specialties: ['Vascular Surgeon'],
+    ),
+    DoctorBrowseCategory(
+      id: 'nephrologist',
+      labelKey: 'catNephrologist',
+      icon: Icons.water_drop_outlined,
+      color: Color(0xFF0284C7),
+      specialties: ['Nephrologist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'urologist',
+      labelKey: 'catUrologist',
+      icon: Icons.science_outlined,
+      color: Color(0xFF0369A1),
+      specialties: ['Urologist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'physician',
+      labelKey: 'catPhysician',
+      icon: Icons.local_hospital_outlined,
+      color: Color(0xFF2563EB),
+      specialties: ['Physician / Consultant Physician'],
+    ),
+    DoctorBrowseCategory(
+      id: 'oncologist',
+      labelKey: 'catOncologist',
+      icon: Icons.biotech_outlined,
+      color: Color(0xFF9333EA),
+      specialties: ['Oncologist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'general_surgeon',
+      labelKey: 'catGeneralSurgeon',
+      icon: Icons.content_cut_outlined,
+      color: Color(0xFF475569),
+      specialties: ['General Surgeon'],
+    ),
+    DoctorBrowseCategory(
+      id: 'orthopaedic',
+      labelKey: 'catOrthopaedic',
+      icon: Icons.accessibility_new_outlined,
+      color: Color(0xFF78716C),
+      specialties: ['Orthopedic Surgeon', 'Orthopaedic Surgeon'],
+    ),
+    DoctorBrowseCategory(
+      id: 'gastro',
+      labelKey: 'catGastroenterologist',
+      icon: Icons.restaurant_outlined,
+      color: Color(0xFFEA580C),
+      specialties: ['Gastroenterologist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'dermatologist',
+      labelKey: 'catDermatologist',
+      icon: Icons.spa_outlined,
+      color: Color(0xFFDB2777),
+      specialties: ['Dermatologist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'ophthalmologist',
+      labelKey: 'catEye',
+      icon: Icons.visibility_outlined,
+      color: Color(0xFFF59E0B),
+      specialties: ['Ophthalmologist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'ent',
+      labelKey: 'catEnt',
+      icon: Icons.hearing_disabled_outlined,
+      color: Color(0xFF0891B2),
+      specialties: ['ENT Surgeon', 'ENT Specialist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'obgyn',
+      labelKey: 'catObgyn',
+      icon: Icons.pregnant_woman_outlined,
+      color: Color(0xFFEC4899),
+      specialties: ['Obstetrician / Gynecologist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'paediatrician',
+      labelKey: 'catPaediatrician',
+      icon: Icons.child_care_outlined,
+      color: Color(0xFF22C55E),
+      specialties: ['Pediatrician', 'Paediatrician'],
     ),
     DoctorBrowseCategory(
       id: 'dental',
       labelKey: 'catDental',
       icon: Icons.health_and_safety_outlined,
       color: Color(0xFF10B981),
-      specialties: ['Dental Surgeon'],
+      specialties: ['Dental Surgeon', 'Dentist'],
     ),
     DoctorBrowseCategory(
-      id: 'eye',
-      labelKey: 'catEye',
-      icon: Icons.visibility_outlined,
-      color: Color(0xFFF59E0B),
-      specialties: ['Ophthalmologist'],
+      id: 'psychiatrist',
+      labelKey: 'catPsychiatrist',
+      icon: Icons.self_improvement_outlined,
+      color: Color(0xFF8B5CF6),
+      specialties: ['Psychiatrist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'endocrinologist',
+      labelKey: 'catEndocrinologist',
+      icon: Icons.bubble_chart_outlined,
+      color: Color(0xFF14B8A6),
+      specialties: ['Endocrinologist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'venereologist',
+      labelKey: 'catVenereologist',
+      icon: Icons.shield_outlined,
+      color: Color(0xFF64748B),
+      specialties: ['Venereologist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'plastic',
+      labelKey: 'catPlasticSurgeon',
+      icon: Icons.face_retouching_natural_outlined,
+      color: Color(0xFFBE185D),
+      specialties: ['Plastic Surgeon'],
     ),
   ];
 
   static bool doctorMatchesBrowseCategory(Doctor doctor, String categoryId) {
     if (categoryId == 'all') return true;
+    final specialty = doctor.specialty.toLowerCase();
     for (final cat in browseCategories) {
       if (cat.id != categoryId) continue;
-      return cat.specialties.any((s) => doctor.specialty == s);
+      return cat.specialties.any((spec) {
+        final needle = spec.toLowerCase();
+        return specialty == needle ||
+            specialty.contains(needle) ||
+            needle.contains(specialty);
+      });
     }
-    return true;
+    return false;
   }
 
   static int reviewCountFor(Doctor doctor) =>
