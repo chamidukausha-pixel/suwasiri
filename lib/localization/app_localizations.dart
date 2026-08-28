@@ -727,11 +727,6 @@ class AppLocalizations {
       'si': 'ඉක්මන් සටහන්',
       'ta': 'விரைவு குறிப்புகள்',
     },
-    'viewAll': {
-      'en': 'View All',
-      'si': 'සියල්ල බලන්න',
-      'ta': 'அனைத்தும்',
-    },
     'showLess': {
       'en': 'Show less',
       'si': 'අඩුවෙන් පෙන්වන්න',
