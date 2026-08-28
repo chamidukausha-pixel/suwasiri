@@ -188,6 +188,61 @@ class AppLocalizations {
       'si': 'විශේෂඥ වෛද්‍ය නාමාවලිය',
       'ta': 'சிறப்பு மருத்துவ அடைவு',
     },
+    'findYourSpecialist': {
+      'en': 'Find your specialist',
+      'si': 'ඔබේ විශේෂඥ සොයන්න',
+      'ta': 'உங்கள் சிறப்பு மருத்துவரைக் கண்டறியுங்கள்',
+    },
+    'seeAll': {
+      'en': 'See all',
+      'si': 'සියල්ල',
+      'ta': 'அனைத்தும்',
+    },
+    'topDoctors': {
+      'en': 'Top doctors',
+      'si': 'ප්‍රමුඛ වෛද්‍යවරු',
+      'ta': 'முன்னணி மருத்துவர்கள்',
+    },
+    'viewAll': {
+      'en': 'View all',
+      'si': 'සියල්ල බලන්න',
+      'ta': 'அனைத்தையும் பார்',
+    },
+    'catGeneral': {
+      'en': 'General',
+      'si': 'සාමාන්‍ය',
+      'ta': 'பொது',
+    },
+    'catHeart': {
+      'en': 'Heart',
+      'si': 'හද',
+      'ta': 'இதயம்',
+    },
+    'catDental': {
+      'en': 'Dental',
+      'si': 'දන්ත',
+      'ta': 'பல்',
+    },
+    'catEye': {
+      'en': 'Eye',
+      'si': 'ඇස',
+      'ta': 'கண்',
+    },
+    'searchDoctorClinicRegion': {
+      'en': 'Search doctor, clinic or region',
+      'si': 'වෛද්‍ය, සායන හෝ ප්‍රදේශය සොයන්න',
+      'ta': 'மருத்துவர், கிளினிக் அல்லது பகுதி தேடுங்கள்',
+    },
+    'availableToday': {
+      'en': 'Available today',
+      'si': 'අද ලබා ගත හැක',
+      'ta': 'இன்று கிடைக்கும்',
+    },
+    'reviewsCount': {
+      'en': '{rating} ({count} reviews)',
+      'si': '{rating} ({count} සමාලෝචන)',
+      'ta': '{rating} ({count} விமர்சனங்கள்)',
+    },
     'directorySubtitle': {
       'en':
           'Select or clear criteria to find leading consultants registered at top accredited Sri Lankan hospitals.',
@@ -1492,6 +1547,24 @@ class AppLocalizations {
       'en': 'Select Payment Channel',
       'si': 'ගෙවීම් මාර්ගය තෝරන්න',
       'ta': 'கட்டண வழியைத் தேர்வு',
+    },
+    'payAtReception': {
+      'en': 'Pay at reception',
+      'si': 'පිළිගැනීමේ desk හි ගෙවන්න',
+      'ta': 'ரிசப்ஷனில் செலுத்துங்கள்',
+    },
+    'payAtReceptionHint': {
+      'en':
+          'No online payment is required now. Settle the consultation fee at the clinic reception when you arrive.',
+      'si':
+          'දැන් මාර්ගගත ගෙවීමක් අවශ්‍ය නැත. සායනයට පැමිණි විට reception හි ගෙවන්න.',
+      'ta':
+          'இப்போது ஆன்லைன் கட்டணம் தேவையில்லை. கிளினிக்கில் வந்ததும் reception-ல் செலுத்துங்கள்.',
+    },
+    'confirmBookingPayAtReception': {
+      'en': 'Confirm booking · Pay at reception',
+      'si': 'වෙන්කරවා ගන්න · reception හි ගෙවන්න',
+      'ta': 'முன்பதிவு உறுதி · reception-ல் செலுத்து',
     },
     'onlineDebitCard': {
       'en': 'Online Debit/Card',

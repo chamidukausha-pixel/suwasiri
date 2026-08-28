@@ -3112,158 +3112,63 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* 6 Key Clinical Indicators (Appointments 18, Waiting 4, Telehealth 3, Pathology Results 7, Recalls 5, Documents 8) */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                      {/* 1. Appointments 18 */}
-                      <div 
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div
                         onClick={() => setActiveTab("calendar")}
-                        className="bg-sky-50/70 hover:bg-sky-100/80 border border-sky-200/60 p-3 rounded-lg cursor-pointer transition group"
+                        className="bg-gradient-to-br from-sky-500 via-blue-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 p-4 rounded-xl cursor-pointer transition shadow-md hover:shadow-lg group text-white"
                         title="Click to view full appointment schedule"
                       >
-                        <div className="flex items-center justify-between text-sky-700 mb-1">
-                          <span className="text-[10px] uppercase font-bold tracking-wider">Appointments</span>
-                          <CalendarIcon className="w-4 h-4 text-sky-600 group-hover:scale-110 transition-transform" />
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[11px] uppercase font-extrabold tracking-wider">Appointments</span>
+                          <CalendarIcon className="w-5 h-5 text-white/90 group-hover:scale-110 transition-transform" />
                         </div>
-                        <div className="text-2xl font-black text-[#00334f]">{dayAppointments.length}</div>
-                        <p className="text-[10px] text-sky-700/80 mt-0.5">
+                        <div className="text-3xl font-black">{dayAppointments.length}</div>
+                        <p className="text-[11px] text-sky-100 mt-1 font-semibold">
                           {dayAppointments.filter((a) => a.status === "SCHEDULED").length} scheduled • {dayAppointments.filter((a) => a.status === "CHECKED IN" || a.status === "IN EXAM ROOM").length} in clinic
                         </p>
                       </div>
 
-                      {/* 2. Waiting 4 */}
-                      <div 
+                      <div
                         onClick={() => setActiveTab("calendar")}
-                        className="bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/60 p-3 rounded-lg cursor-pointer transition group"
+                        className="bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 hover:from-amber-300 hover:to-rose-400 p-4 rounded-xl cursor-pointer transition shadow-md hover:shadow-lg group text-white"
                         title="Click to inspect waiting queue"
                       >
-                        <div className="flex items-center justify-between text-amber-800 mb-1">
-                          <span className="text-[10px] uppercase font-bold tracking-wider">Waiting</span>
-                          <Clock className="w-4 h-4 text-amber-600 group-hover:scale-110 transition-transform" />
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[11px] uppercase font-extrabold tracking-wider">Waiting</span>
+                          <Clock className="w-5 h-5 text-white/90 group-hover:scale-110 transition-transform" />
                         </div>
-                        <div className="text-2xl font-black text-amber-900">{lobbyCheckedInCount}</div>
-                        <p className="text-[10px] text-amber-700 mt-0.5">In lobby queue</p>
+                        <div className="text-3xl font-black">{lobbyCheckedInCount}</div>
+                        <p className="text-[11px] text-amber-50 mt-1 font-semibold">In clinic queue</p>
                       </div>
 
-                      {/* 3. Telehealth 3 */}
-                      <div 
+                      <div
                         onClick={() => setActiveTab("telehealth")}
-                        className="bg-purple-50/70 hover:bg-purple-100/80 border border-purple-200/60 p-3 rounded-lg cursor-pointer transition group"
+                        className="bg-gradient-to-br from-violet-500 via-purple-600 to-fuchsia-600 hover:from-violet-400 hover:to-fuchsia-500 p-4 rounded-xl cursor-pointer transition shadow-md hover:shadow-lg group text-white"
                         title="Click to open Telehealth suite"
                       >
-                        <div className="flex items-center justify-between text-purple-700 mb-1">
-                          <span className="text-[10px] uppercase font-bold tracking-wider">Telehealth</span>
-                          <Video className="w-4 h-4 text-purple-600 group-hover:scale-110 transition-transform" />
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[11px] uppercase font-extrabold tracking-wider">Telehealth</span>
+                          <Video className="w-5 h-5 text-white/90 group-hover:scale-110 transition-transform" />
                         </div>
-                        <div className="text-2xl font-black text-purple-900">{dayAppointments.filter((a) => a.isTelehealth || a.type === "Telehealth Video").length}</div>
-                        <p className="text-[10px] text-purple-700 mt-0.5">Remote consults</p>
-                      </div>
-
-                      {/* 4. Pathology Results 7 -> Opens PathologyHub */}
-                      <div 
-                        onClick={() => setActiveTab("pathology")}
-                        className="bg-emerald-50/70 hover:bg-emerald-100/80 border border-emerald-300 p-3 rounded-lg cursor-pointer transition group ring-1 ring-emerald-400/30"
-                        title="Click to view Pathology patients and diagnostic lab results"
-                      >
-                        <div className="flex items-center justify-between text-emerald-800 mb-1">
-                          <span className="text-[10px] uppercase font-bold tracking-wider">Pathology</span>
-                          <FlaskConical className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
-                        </div>
-                        <div className="text-2xl font-black text-emerald-900">{unreadPathologyPatientCount}</div>
-                        <p className="text-[10px] text-emerald-700 mt-0.5 font-semibold">Unread reports →</p>
-                      </div>
-
-                      {/* 5. Recalls 5 */}
-                      <div 
-                        onClick={() => setActiveTab("recalls")}
-                        className="bg-rose-50/70 hover:bg-rose-100/80 border border-rose-200/60 p-3 rounded-lg cursor-pointer transition group"
-                        title="Click to manage clinical recalls"
-                      >
-                        <div className="flex items-center justify-between text-rose-800 mb-1">
-                          <span className="text-[10px] uppercase font-bold tracking-wider">Recalls</span>
-                          <Bell className="w-4 h-4 text-rose-600 group-hover:scale-110 transition-transform" />
-                        </div>
-                        <div className="text-2xl font-black text-rose-900">{activeRecallCount}</div>
-                        <p className="text-[10px] text-rose-700 mt-0.5">Diabetes & CST</p>
-                      </div>
-
-                      {/* 6. Documents 8 -> Opens DocumentManagementHub */}
-                      <div 
-                        onClick={() => setActiveTab("documents")}
-                        className="bg-slate-50 hover:bg-sky-50 border border-sky-200 p-3 rounded-lg cursor-pointer transition group ring-1 ring-sky-300/30"
-                        title="Click to view Document Management (grouped by Patient)"
-                      >
-                        <div className="flex items-center justify-between text-slate-700 mb-1">
-                          <span className="text-[10px] uppercase font-bold tracking-wider">Documents</span>
-                          <FileText className="w-4 h-4 text-sky-600 group-hover:scale-110 transition-transform" />
-                        </div>
-                        <div className="text-2xl font-black text-slate-800">8</div>
-                        <p className="text-[10px] text-sky-700 mt-0.5 font-semibold">Patient Docs &rarr;</p>
+                        <div className="text-3xl font-black">{dayAppointments.filter((a) => a.isTelehealth || a.type === "Telehealth Video").length}</div>
+                        <p className="text-[11px] text-purple-100 mt-1 font-semibold">Remote consults</p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Cleaned Top Status Strip (Removed Registry Count and Pending Labs) */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-white p-4 border border-[#c1c7cf] rounded-xl flex items-center justify-between transition-all hover:shadow-sm">
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-10 h-10 bg-emerald-100 text-emerald-800 rounded-lg flex items-center justify-center">
-                          <Stethoscope className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <p className="text-[#72787f] font-bold text-[10px] uppercase">Completed Consultations</p>
-                          <p className="font-bold text-lg text-[#00334f]">{dayAppointments.filter(a => a.status === "COMPLETED").length} finished this date</p>
-                        </div>
+                  <div className="bg-gradient-to-r from-emerald-50 to-teal-50 p-4 border border-emerald-200 rounded-xl flex items-center justify-between">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-10 h-10 bg-emerald-500 text-white rounded-lg flex items-center justify-center">
+                        <Stethoscope className="w-5 h-5" />
                       </div>
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
-                        On Schedule
-                      </span>
-                    </div>
-
-                    <div className="bg-white p-4 border border-[#c1c7cf] rounded-xl flex items-center justify-between transition-all hover:shadow-sm">
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-10 h-10 bg-amber-100 text-amber-900 rounded-lg flex items-center justify-center">
-                          <Clock className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <p className="text-[#72787f] font-bold text-[10px] uppercase">Lobby Active Queue</p>
-                          <p className="font-bold text-lg text-amber-900">{lobbyCheckedInCount} in clinic queue</p>
-                        </div>
+                      <div>
+                        <p className="text-emerald-800 font-bold text-[10px] uppercase">Completed Consultations</p>
+                        <p className="font-bold text-lg text-[#00334f]">{dayAppointments.filter(a => a.status === "COMPLETED").length} finished this date</p>
                       </div>
-                      <button
-                        onClick={() => setActiveTab("calendar")}
-                        className="text-[10px] font-bold text-sky-700 hover:underline"
-                      >
-                        Manage &rarr;
-                      </button>
                     </div>
-
-                    <div 
-                      onClick={() => {
-                        if (alerts.length > 0) {
-                          setSelectedAlertForDetails(alerts[0]);
-                        } else {
-                          setShowAllAlertsModal(true);
-                        }
-                      }}
-                      className="bg-white p-4 border border-[#c1c7cf] border-l-4 border-l-[#ba1a1a] rounded-xl flex items-center justify-between gap-4 transition-all hover:shadow-md hover:border-[#ba1a1a] cursor-pointer group select-none"
-                      title="Click to inspect all Clinical Warning Details and Action Protocols"
-                    >
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-10 h-10 bg-[#ffdad6] text-[#ba1a1a] rounded-lg flex items-center justify-center group-hover:scale-105 transition-transform">
-                          <ShieldAlert className="w-5 h-5 animate-pulse" />
-                        </div>
-                        <div>
-                          <p className="text-[#72787f] font-bold text-[10px] uppercase flex items-center gap-1">
-                            Clinical Alerts
-                            <span className="bg-red-100 text-[#ba1a1a] text-[8px] font-black px-1.5 py-0.2 rounded uppercase">Critical</span>
-                          </p>
-                          <p className="font-bold text-lg text-[#ba1a1a]">{alerts.length} Warnings</p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-bold text-red-600 group-hover:underline flex items-center gap-0.5">
-                        Inspect &rarr;
-                      </span>
-                    </div>
+                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-1 rounded">
+                      On Schedule
+                    </span>
                   </div>
 
                   {clinicalSearchPanel}
@@ -3431,16 +3336,7 @@ export default function App() {
                                     </td>
 
                                     <td className="p-3.5 text-right space-x-1.5 font-bold whitespace-nowrap">
-                                      {apt.status === "SCHEDULED" && (
-                                        <button
-                                          onClick={() => handleUpdateAptStatus(apt.id, "CHECKED IN")}
-                                          className="text-[#00334f] hover:underline bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded text-xs"
-                                        >
-                                          Check In
-                                        </button>
-                                      )}
-
-                                      {apt.status === "CHECKED IN" && (
+                                      {(apt.status === "SCHEDULED" || apt.status === "CHECKED IN") && (
                                         <button
                                           onClick={() => {
                                             const person = p || stubPatientFromBooking(apt);
@@ -3493,7 +3389,7 @@ export default function App() {
                       </section>
                     </div>
 
-                    {/* Right Column: month calendar + alerts */}
+                    {/* Right Column: month calendar + checklist */}
                     <div className="lg:col-span-4 space-y-6">
                       {clinicCalendar}
                       
@@ -3528,76 +3424,6 @@ export default function App() {
                               <button onClick={() => handleDeleteTask(t.id)} className="text-red-400 hover:text-red-600 ml-2"><Trash2 className="w-3.5 h-3.5" /></button>
                             </div>
                           ))}
-                        </div>
-                      </div>
-
-                      {/* Active alerts warnings list - CLICKABLE TO VIEW WARNING DETAILS */}
-                      <div className="bg-[#ffdad6] border border-[#ffb4ab] rounded-xl p-4 text-xs text-[#93000a] space-y-3 shadow-xs">
-                        <div className="flex justify-between items-center">
-                          <h4 className="font-bold uppercase flex items-center gap-1.5 text-[#ba1a1a]">
-                            <ShieldAlert className="w-4 h-4 animate-pulse" />
-                            Urgent Clinical Alerts ({alerts.length})
-                          </h4>
-                          <button
-                            type="button"
-                            onClick={() => setShowAllAlertsModal(true)}
-                            className="text-[10px] font-bold text-[#ba1a1a] hover:underline"
-                          >
-                            View All &rarr;
-                          </button>
-                        </div>
-
-                        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                          {alerts.map(al => (
-                            <div 
-                              key={al.id} 
-                              onClick={() => setSelectedAlertForDetails(al)}
-                              className="p-3 bg-white border border-red-200 rounded-md relative group hover:border-red-500 hover:shadow-md cursor-pointer transition-all border-l-4 border-l-red-600"
-                            >
-                              <div className="flex justify-between font-bold text-slate-800 items-start">
-                                <span className="text-xs font-bold text-slate-900 group-hover:text-red-700 transition-colors">
-                                  {al.title}
-                                </span>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDismissAlert(al.id);
-                                  }}
-                                  className="text-slate-400 hover:text-red-700 p-0.5 rounded hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity ml-1"
-                                  title="Dismiss alert"
-                                >
-                                  ×
-                                </button>
-                              </div>
-                              
-                              <div className="flex items-center justify-between mt-1">
-                                <span className="text-[10px] font-extrabold uppercase tracking-wide bg-red-50 text-red-700 px-1.5 py-0.5 rounded border border-red-100">
-                                  {al.type}
-                                </span>
-                                <span className="text-slate-400 text-[10px] font-mono">{al.timeLabel}</span>
-                              </div>
-
-                              <p className="text-slate-700 mt-1.5 font-medium text-[11px] line-clamp-2 leading-relaxed">
-                                {al.text}
-                              </p>
-
-                              <div className="mt-2 pt-1.5 border-t border-red-100 flex items-center justify-between text-[10px] text-red-700 font-bold group-hover:translate-x-0.5 transition-transform">
-                                <span className="flex items-center gap-1">
-                                  <AlertOctagon className="w-3 h-3 text-red-600" />
-                                  Inspect Warning & Protocols
-                                </span>
-                                <span>&rarr;</span>
-                              </div>
-                            </div>
-                          ))}
-
-                          {alerts.length === 0 && (
-                            <div className="bg-white/80 p-4 rounded border text-center space-y-1">
-                              <CheckCircle className="w-6 h-6 text-emerald-600 mx-auto" />
-                              <p className="text-slate-700 font-bold">No active clinical warnings</p>
-                              <p className="text-slate-500 text-[10px]">All critical lab bounds, imaging alerts, and contraindications are in stable status.</p>
-                            </div>
-                          )}
                         </div>
                       </div>
                     </div>

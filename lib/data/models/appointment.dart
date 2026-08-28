@@ -19,6 +19,7 @@ class Doctor extends Equatable {
     this.address = '',
     this.latitude,
     this.longitude,
+    this.photoUrl,
   });
 
   final String id;
@@ -34,6 +35,12 @@ class Doctor extends Equatable {
   final String address;
   final double? latitude;
   final double? longitude;
+  final String? photoUrl;
+
+  /// Network avatar when no clinic photo is stored.
+  String get displayPhotoUrl =>
+      photoUrl ??
+      'https://i.pravatar.cc/256?u=${Uri.encodeComponent(id)}';
 
   String get placeLabel {
     final parts = [
@@ -59,6 +66,7 @@ class Doctor extends Equatable {
         address,
         latitude,
         longitude,
+        photoUrl,
       ];
 
   /// GP Care Platform Console doctors published to Firestore `clinic_doctors`.
@@ -76,6 +84,7 @@ class Doctor extends Equatable {
       nextAvailable:
           map['nextAvailable'] as String? ?? 'Mon–Fri · 09:00–17:00',
       address: map['address'] as String? ?? '',
+      photoUrl: map['photoUrl'] as String?,
     );
   }
 }

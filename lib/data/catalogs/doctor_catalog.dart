@@ -1,8 +1,71 @@
+import 'package:flutter/material.dart';
+
 import '../models/appointment.dart';
 import '../../core/constants/app_constants.dart';
 
+class DoctorBrowseCategory {
+  const DoctorBrowseCategory({
+    required this.id,
+    required this.labelKey,
+    required this.icon,
+    required this.color,
+    required this.specialties,
+  });
+
+  final String id;
+  final String labelKey;
+  final IconData icon;
+  final Color color;
+  final List<String> specialties;
+}
+
 /// Curated specialist directory + registered clinics/hospitals by district.
 abstract final class DoctorCatalog {
+  static const browseCategories = <DoctorBrowseCategory>[
+    DoctorBrowseCategory(
+      id: 'general',
+      labelKey: 'catGeneral',
+      icon: Icons.medical_services_outlined,
+      color: Color(0xFF2563EB),
+      specialties: [
+        'General Practitioner',
+        'Physician / Consultant Physician',
+      ],
+    ),
+    DoctorBrowseCategory(
+      id: 'heart',
+      labelKey: 'catHeart',
+      icon: Icons.favorite_rounded,
+      color: Color(0xFFEF4444),
+      specialties: ['Cardiologist'],
+    ),
+    DoctorBrowseCategory(
+      id: 'dental',
+      labelKey: 'catDental',
+      icon: Icons.health_and_safety_outlined,
+      color: Color(0xFF10B981),
+      specialties: ['Dental Surgeon'],
+    ),
+    DoctorBrowseCategory(
+      id: 'eye',
+      labelKey: 'catEye',
+      icon: Icons.visibility_outlined,
+      color: Color(0xFFF59E0B),
+      specialties: ['Ophthalmologist'],
+    ),
+  ];
+
+  static bool doctorMatchesBrowseCategory(Doctor doctor, String categoryId) {
+    if (categoryId == 'all') return true;
+    for (final cat in browseCategories) {
+      if (cat.id != categoryId) continue;
+      return cat.specialties.any((s) => doctor.specialty == s);
+    }
+    return true;
+  }
+
+  static int reviewCountFor(Doctor doctor) =>
+      50 + (doctor.id.hashCode.abs() % 280);
   static const categories = <String>[
     'All',
     'Physician / Consultant Physician',
@@ -384,6 +447,7 @@ abstract final class DoctorCatalog {
     required int yearsExperience,
     required int feeLkr,
     required String bio,
+    String? photoUrl,
   }) {
     return Doctor(
       id: id,
@@ -399,6 +463,7 @@ abstract final class DoctorCatalog {
       yearsExperience: yearsExperience,
       feeLkr: feeLkr,
       bio: bio,
+      photoUrl: photoUrl,
     );
   }
 

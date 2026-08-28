@@ -108,6 +108,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Telehealth: click booked name fills Active Clinical Consultation Room (replaces generic “Patient”); View Clinical Hub opens that file
 - [x] Receipts & Invoices: calendar date lists that day’s booked patients (lobby-style rows)
 - [x] Platform Console: doctor specialty required; published to Suwasiri Doctors tab under clinic + category
+- [x] Doctor Dashboard: Appointments / Waiting / Telehealth colourful cards; Pathology, Recalls, Documents, Clinical Alerts, Lobby Active Queue, and Check In removed
 
 ## In progress / next
 
