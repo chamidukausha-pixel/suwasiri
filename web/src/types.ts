@@ -36,6 +36,11 @@ export interface LabResult {
   abnormalFlag?: boolean;
   category?: string;
   labName?: string;
+  /** Set when the reviewing doctor marks this result as a clinical emergency. */
+  criticalAlert?: boolean;
+  suwasiriSyncedAt?: string;
+  /** GP notes added from exam-room Pathology history. */
+  doctorNotes?: string;
 }
 
 export interface ImagingRecord {
@@ -252,6 +257,12 @@ export interface Patient {
     reason: string;
     doctor: string;
     notes: string;
+    clinicName?: string;
+    appointmentId?: string;
+    soapSubjective?: string;
+    soapObjective?: string;
+    soapAssessment?: string;
+    soapPlan?: string;
   }>;
   activeMedications: string[];
   // Australian & International Identifiers
@@ -293,6 +304,8 @@ export interface Patient {
   referralsList?: ReferralRecord[];
   carePlansList?: CarePlanRecord[];
   myHealthRecordDocs?: MyHealthRecordDoc[];
+  /** Scanned / uploaded correspondence filed on this patient’s chart (Document Management + Exam Room). */
+  clinicalDocuments?: ClinicalDocument[];
   recallsList?: RecallRecord[];
   medicalCertificatesList?: MedicalCertificateRecord[];
   sampleCollections?: SampleCollection[];
@@ -421,6 +434,11 @@ export interface Appointment {
   clinicName?: string;
   timeSlot?: string;
   paymentMethod?: string;
+  paymentStatus?: string;
+  paidBySuwasiri?: boolean;
+  suwasiriReceiptUrl?: string;
+  /** Reception lobby queue position (1 = next). Independent of booked `time`. */
+  queuePlace?: number;
 }
 
 export interface Alert {
@@ -667,6 +685,7 @@ export interface Hospital {
   id: string;
   name: string;
   status: "ACTIVE" | "SUSPENDED";
+  district?: string;
 }
 
 export interface Branch {

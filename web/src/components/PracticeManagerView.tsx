@@ -5,6 +5,7 @@ import {
   Check, Save, Sparkles, RefreshCw, AlertCircle
 } from "lucide-react";
 import { StaffProvider, FeeScheduleItem, Hospital, Branch, RoleDefinition, RosterWeekday } from "../types";
+import { DEFAULT_FEE_SCHEDULE, FEE_CATEGORIES } from "../catalogs/feeSchedule";
 
 interface Props {
   currentRole?: string;
@@ -34,7 +35,12 @@ export default function PracticeManagerView({
   const [activeSubTab, setActiveSubTab] = useState<"staff" | "fees" | "roster" | "templates" | "locations">("roster");
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
 
-  const isAdmin = canManage ?? (currentRole === "Admin" || currentRole === "Practice Manager" || currentRole === "Hospital Super Admin");
+  const isAdmin = canManage ?? (
+    currentRole === "Admin" ||
+    currentRole === "Practice Manager" ||
+    currentRole === "Hospital Super Admin" ||
+    currentRole === "Platform Super Admin"
+  );
 
   const [staffList, setStaffList] = useState<StaffProvider[]>(staffProp || []);
 
@@ -43,74 +49,62 @@ export default function PracticeManagerView({
   }, [staffProp]);
 
   // Fee Schedule & Sri Lankan Private Practice / PHSRC Consultation Items
-  const [feeSchedule, setFeeSchedule] = useState<FeeScheduleItem[]>([
-    {
-      id: "fee-1",
-      mbsItemNumber: "SL-OPD-01",
-      description: "Standard OPD General Practice Consultation (< 15 mins)",
-      category: "Standard Consult",
-      mbsScheduleFee: 1500.00,
-      mbsBenefit: 500.00,
-      privateFee: 2000.00,
-      gapFee: 1500.00,
-      bulkBillable: true
-    },
-    {
-      id: "fee-2",
-      mbsItemNumber: "SL-OPD-02",
-      description: "Extended Chronic Disease Review (Diabetes / Hypertension 20-30 min)",
-      category: "Long Consult",
-      mbsScheduleFee: 2500.00,
-      mbsBenefit: 800.00,
-      privateFee: 3500.00,
-      gapFee: 2700.00,
-      bulkBillable: true
-    },
-    {
-      id: "fee-3",
-      mbsItemNumber: "SL-NCD-03",
-      description: "MoH PEN Protocol Comprehensive NCD Risk Assessment & Care Plan",
-      category: "Care Plan",
-      mbsScheduleFee: 3000.00,
-      mbsBenefit: 3000.00,
-      privateFee: 3000.00,
-      gapFee: 0.00,
-      bulkBillable: true
-    },
-    {
-      id: "fee-4",
-      mbsItemNumber: "SL-HOME-04",
-      description: "Domiciliary / Home Visit Doctor Consultation",
-      category: "Care Plan",
-      mbsScheduleFee: 4500.00,
-      mbsBenefit: 1000.00,
-      privateFee: 5500.00,
-      gapFee: 4500.00,
-      bulkBillable: false
-    },
-    {
-      id: "fee-5",
-      mbsItemNumber: "SL-PROC-05",
-      description: "Minor Surgical Procedure / Wound Suturing / Nebulisation",
-      category: "Mental Health",
-      mbsScheduleFee: 2200.00,
-      mbsBenefit: 500.00,
-      privateFee: 3000.00,
-      gapFee: 2500.00,
-      bulkBillable: true
-    },
-    {
-      id: "fee-6",
-      mbsItemNumber: "SL-TELE-06",
-      description: "Suwasiri Telehealth Video Consultation (< 20 min)",
-      category: "Telehealth",
-      mbsScheduleFee: 1800.00,
-      mbsBenefit: 600.00,
-      privateFee: 2400.00,
-      gapFee: 1800.00,
-      bulkBillable: true
+  const [feeSchedule, setFeeSchedule] = useState<FeeScheduleItem[]>(DEFAULT_FEE_SCHEDULE);
+  const [showAddFee, setShowAddFee] = useState(false);
+  const [newFee, setNewFee] = useState({
+    mbsItemNumber: "",
+    description: "",
+    category: "Standard Consult" as FeeScheduleItem["category"],
+    mbsScheduleFee: 1500,
+    mbsBenefit: 500,
+    privateFee: 2000,
+  });
+  const [savingFees, setSavingFees] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/clinical-state")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data.feeSchedule) && data.feeSchedule.length) {
+          setFeeSchedule(data.feeSchedule);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const persistFeeSchedule = async (next: FeeScheduleItem[]) => {
+    const withGap = next.map((f) => ({
+      ...f,
+      bulkBillable: false,
+      gapFee: Number(f.privateFee || 0) - Number(f.mbsBenefit || 0),
+    }));
+    setFeeSchedule(withGap);
+    setSavingFees(true);
+    try {
+      const res = await fetch("/api/fee-schedule", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feeSchedule: withGap }),
+      });
+      const data = await res.json();
+      if (data.feeSchedule) setFeeSchedule(data.feeSchedule);
+    } catch {
+      alert("Could not save fee schedule.");
+    } finally {
+      setSavingFees(false);
     }
-  ]);
+  };
+
+  const updateFeeField = (id: string, field: keyof FeeScheduleItem, value: string | number) => {
+    const next = feeSchedule.map((f) => {
+      if (f.id !== id) return f;
+      const updated = { ...f, [field]: value };
+      updated.gapFee = Number(updated.privateFee || 0) - Number(updated.mbsBenefit || 0);
+      updated.bulkBillable = false;
+      return updated;
+    });
+    setFeeSchedule(next);
+  };
 
   // Templates
   const [smsTemplate, setSmsTemplate] = useState("Reminder: You have an appointment at PrimeCare GP on {Date} at {Time} with {Doctor}. Please reply YES to confirm or call 011-234-5678.");
@@ -567,21 +561,109 @@ export default function PracticeManagerView({
       {/* 3. FEES & MBS SCHEDULE */}
       {activeSubTab === "fees" && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+          <div className="p-4 bg-sky-50 border-b border-sky-100 flex justify-between items-center">
             <div>
               <h3 className="font-bold text-xs text-slate-700 uppercase tracking-wider">MBS Schedule & Private Billing Fees</h3>
-              <p className="text-xs text-slate-500">Medicare Benefits Schedule item codes, schedule benefits, and patient gap fee calculations</p>
+              <p className="text-xs text-slate-500">Edit schedule fee, private fee, and gap. Super Admin can add new MBS / clinic items.</p>
             </div>
             {isAdmin && (
-              <button 
-                onClick={() => alert("Add MBS item modal opened.")}
-                className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add MBS Item</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void persistFeeSchedule(feeSchedule)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {savingFees ? "Saving…" : "Save fees"}
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setShowAddFee((v) => !v)}
+                  className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add MBS Item</span>
+                </button>
+              </div>
             )}
           </div>
+
+          {showAddFee && isAdmin && (
+            <form
+              className="p-4 bg-violet-50 border-b border-violet-100 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!newFee.mbsItemNumber.trim() || !newFee.description.trim()) {
+                  alert("Item number and description are required.");
+                  return;
+                }
+                const item: FeeScheduleItem = {
+                  id: `fee-${Date.now()}`,
+                  mbsItemNumber: newFee.mbsItemNumber.trim(),
+                  description: newFee.description.trim(),
+                  category: newFee.category,
+                  mbsScheduleFee: Number(newFee.mbsScheduleFee) || 0,
+                  mbsBenefit: Number(newFee.mbsBenefit) || 0,
+                  privateFee: Number(newFee.privateFee) || 0,
+                  gapFee: Number(newFee.privateFee) - Number(newFee.mbsBenefit),
+                  bulkBillable: false,
+                };
+                void persistFeeSchedule([...feeSchedule, item]);
+                setNewFee({
+                  mbsItemNumber: "",
+                  description: "",
+                  category: "Standard Consult",
+                  mbsScheduleFee: 1500,
+                  mbsBenefit: 500,
+                  privateFee: 2000,
+                });
+                setShowAddFee(false);
+              }}
+            >
+              <input
+                required
+                value={newFee.mbsItemNumber}
+                onChange={(e) => setNewFee((p) => ({ ...p, mbsItemNumber: e.target.value }))}
+                placeholder="MBS item (e.g. SL-OPD-07)"
+                className="border rounded-lg px-2 py-1.5"
+              />
+              <input
+                required
+                value={newFee.description}
+                onChange={(e) => setNewFee((p) => ({ ...p, description: e.target.value }))}
+                placeholder="Description"
+                className="border rounded-lg px-2 py-1.5 md:col-span-2"
+              />
+              <select
+                value={newFee.category}
+                onChange={(e) => setNewFee((p) => ({ ...p, category: e.target.value as FeeScheduleItem["category"] }))}
+                className="border rounded-lg px-2 py-1.5"
+              >
+                {FEE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <input
+                type="number"
+                min={0}
+                value={newFee.mbsScheduleFee}
+                onChange={(e) => setNewFee((p) => ({ ...p, mbsScheduleFee: Number(e.target.value) }))}
+                placeholder="Schedule fee (LKR)"
+                className="border rounded-lg px-2 py-1.5"
+              />
+              <input
+                type="number"
+                min={0}
+                value={newFee.privateFee}
+                onChange={(e) => setNewFee((p) => ({ ...p, privateFee: Number(e.target.value) }))}
+                placeholder="Private fee (LKR)"
+                className="border rounded-lg px-2 py-1.5"
+              />
+              <div className="md:col-span-3 flex justify-end">
+                <button type="submit" className="bg-[#00334f] text-white px-3 py-1.5 rounded-lg font-bold">
+                  Add item
+                </button>
+              </div>
+            </form>
+          )}
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -593,28 +675,76 @@ export default function PracticeManagerView({
                   <th className="py-3 px-4">MBS Schedule Fee</th>
                   <th className="py-3 px-4">Private Fee</th>
                   <th className="py-3 px-4">Out-of-Pocket Gap</th>
-                  <th className="py-3 px-4">Bulk Billable</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {feeSchedule.map((f) => (
-                  <tr key={f.id} className="hover:bg-slate-50/70">
-                    <td className="py-3 px-4 font-mono font-black text-slate-900">{f.mbsItemNumber}</td>
-                    <td className="py-3 px-4 font-bold text-slate-800">{f.description}</td>
+                  <tr key={f.id} className="hover:bg-sky-50/40">
                     <td className="py-3 px-4">
-                      <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-semibold">
-                        {f.category}
-                      </span>
+                      {isAdmin ? (
+                        <input
+                          value={f.mbsItemNumber}
+                          onChange={(e) => updateFeeField(f.id, "mbsItemNumber", e.target.value)}
+                          className="font-mono font-black text-slate-900 w-28 border rounded px-1.5 py-1"
+                        />
+                      ) : (
+                        <span className="font-mono font-black text-slate-900">{f.mbsItemNumber}</span>
+                      )}
                     </td>
-                    <td className="py-3 px-4 font-mono font-bold text-emerald-700">${f.mbsScheduleFee.toFixed(2)}</td>
-                    <td className="py-3 px-4 font-mono font-bold text-slate-900">${f.privateFee.toFixed(2)}</td>
+                    <td className="py-3 px-4">
+                      {isAdmin ? (
+                        <input
+                          value={f.description}
+                          onChange={(e) => updateFeeField(f.id, "description", e.target.value)}
+                          className="font-bold text-slate-800 w-full min-w-[12rem] border rounded px-1.5 py-1"
+                        />
+                      ) : (
+                        <span className="font-bold text-slate-800">{f.description}</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {isAdmin ? (
+                        <select
+                          value={f.category}
+                          onChange={(e) => updateFeeField(f.id, "category", e.target.value)}
+                          className="text-[10px] bg-slate-100 text-slate-700 px-2 py-1 rounded font-semibold border"
+                        >
+                          {FEE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      ) : (
+                        <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-semibold">
+                          {f.category}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {isAdmin ? (
+                        <input
+                          type="number"
+                          min={0}
+                          value={f.mbsScheduleFee}
+                          onChange={(e) => updateFeeField(f.id, "mbsScheduleFee", Number(e.target.value))}
+                          className="font-mono font-bold text-emerald-700 w-24 border rounded px-1.5 py-1"
+                        />
+                      ) : (
+                        <span className="font-mono font-bold text-emerald-700">Rs. {f.mbsScheduleFee.toFixed(2)}</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {isAdmin ? (
+                        <input
+                          type="number"
+                          min={0}
+                          value={f.privateFee}
+                          onChange={(e) => updateFeeField(f.id, "privateFee", Number(e.target.value))}
+                          className="font-mono font-bold text-slate-900 w-24 border rounded px-1.5 py-1"
+                        />
+                      ) : (
+                        <span className="font-mono font-bold text-slate-900">Rs. {f.privateFee.toFixed(2)}</span>
+                      )}
+                    </td>
                     <td className="py-3 px-4 font-mono font-extrabold text-amber-700">
-                      {f.gapFee > 0 ? `$${f.gapFee.toFixed(2)}` : "$0.00 (No Gap)"}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
-                        Bulk Bill Eligible
-                      </span>
+                      {f.gapFee > 0 ? `Rs. ${f.gapFee.toFixed(2)}` : "Rs. 0.00 (No Gap)"}
                     </td>
                   </tr>
                 ))}

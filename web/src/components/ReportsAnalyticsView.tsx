@@ -30,9 +30,13 @@ import {
   Layers,
   Sparkles,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  FileSpreadsheet,
+  FileText
 } from "lucide-react";
 import { Patient, Appointment, Billing, RecallRecord } from "../types";
+import ClinicMonthCalendar from "./ClinicMonthCalendar";
+import { formatDateKey, formatLongDate } from "../utils/clinicCalendar";
 
 interface Props {
   patients?: Patient[];
@@ -103,18 +107,157 @@ export default function ReportsAnalyticsView({
 }: Props) {
   const [reportTab, setReportTab] = useState<"PRACTICE" | "CLINICAL">("PRACTICE");
   const [timeRange, setTimeRange] = useState<"THIS_MONTH" | "LAST_QUARTER" | "YEAR_TO_DATE">("THIS_MONTH");
+  const todayKey = formatDateKey(new Date());
+  const [selectedDate, setSelectedDate] = useState(todayKey);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const n = new Date();
+    return { year: n.getFullYear(), month: n.getMonth() };
+  });
 
-  const totalPatients = patients.length || 1420;
-  const newPatientsThisMonth = 58;
-  const totalConsultsMonth = 786;
-  const dnaAppointments = 12;
-  const dnaRate = "1.5%";
+  const settled = (inv: Billing) => inv.status === "PAID" || inv.status === "BULK_BILLED";
+
+  const dateInRange = (iso?: string) => {
+    if (!iso || iso.length < 7) return false;
+    const y = Number(iso.slice(0, 4));
+    const m = Number(iso.slice(5, 7));
+    const now = new Date();
+    if (timeRange === "YEAR_TO_DATE") {
+      return y === 2026 && iso.slice(0, 10) <= todayKey;
+    }
+    if (timeRange === "THIS_MONTH") {
+      return y === now.getFullYear() && m === now.getMonth() + 1;
+    }
+    const q = Math.floor(now.getMonth() / 3);
+    let lastQ = q - 1;
+    let year = now.getFullYear();
+    if (lastQ < 0) {
+      lastQ = 3;
+      year -= 1;
+    }
+    const startM = lastQ * 3 + 1;
+    const endM = startM + 2;
+    return y === year && m >= startM && m <= endM;
+  };
+
+  const rangeLabel =
+    timeRange === "THIS_MONTH"
+      ? new Date().toLocaleString("en-LK", { month: "long", year: "numeric" })
+      : timeRange === "YEAR_TO_DATE"
+      ? `Year to date 2026 (1 Jan – ${formatLongDate(todayKey)})`
+      : (() => {
+          const now = new Date();
+          const q = Math.floor(now.getMonth() / 3);
+          let lastQ = q - 1;
+          let year = now.getFullYear();
+          if (lastQ < 0) {
+            lastQ = 3;
+            year -= 1;
+          }
+          const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+          const start = lastQ * 3;
+          return `${months[start]}–${months[start + 2]} ${year}`;
+        })();
+
+  const rangeBilling = billingList.filter((inv) => dateInRange(inv.date));
+  const rangeAppointments = appointments.filter((a) => dateInRange(a.date));
+  const rangeCollected = rangeBilling.filter(settled).reduce((sum, b) => sum + (b.amount || 0), 0);
+  const rangeOutstanding = rangeBilling.filter((b) => !settled(b)).reduce((sum, b) => sum + (b.amount || 0), 0);
+  const rangeCompleted = rangeAppointments.filter((a) => a.status === "COMPLETED");
+  const rangeDna = rangeAppointments.filter((a) => /dna|no.?show|cancelled/i.test(a.status || "")).length;
+
+  const collectedTotal = rangeCollected;
+  const outstandingTotal = rangeOutstanding;
+  const completedConsultsAll = rangeCompleted.length;
+  const dnaAppointments = rangeDna;
+
+  const dayInvoices = billingList.filter((inv) => inv.date === selectedDate);
+  const dayAppointments = appointments.filter((a) => a.date === selectedDate);
+  const dayCompleted = dayAppointments.filter((a) => a.status === "COMPLETED");
+  const dayCollected = dayInvoices.filter(settled).reduce((sum, b) => sum + (b.amount || 0), 0);
+  const dayOutstanding = dayInvoices.filter((b) => !settled(b)).reduce((sum, b) => sum + (b.amount || 0), 0);
+  const dayInvoiceTotal = dayInvoices.reduce((sum, b) => sum + (b.amount || 0), 0);
+
+  const countsByDate = appointments.reduce((acc, a) => {
+    if (!a.date) return acc;
+    acc[a.date] = (acc[a.date] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  billingList.forEach((inv) => {
+    if (!inv.date) return;
+    countsByDate[inv.date] = (countsByDate[inv.date] || 0) + 1;
+  });
+
+  const totalPatients = patients.length || 0;
+  const newPatientsThisMonth = patients.filter((p) => (p as Patient & { createdAt?: string }).createdAt?.startsWith(todayKey.slice(0, 7))).length;
+  const totalConsultsMonth = completedConsultsAll;
+  const dnaRate = rangeAppointments.length ? `${((dnaAppointments / rangeAppointments.length) * 100).toFixed(1)}%` : "0%";
   const avgWaitTimeMinutes = 8.5;
-  const totalRevenueMonth = 1845000;
-  const outstandingInvoices = 142500;
+  const totalRevenueMonth = collectedTotal;
+  const outstandingInvoices = outstandingTotal;
 
-  const handleExportReport = () => {
-    alert("Exporting official Sri Lanka Medical Practice Performance & MoH Clinical Analytics Report (PDF / Excel)...");
+  const downloadBlob = (content: string, filename: string, mime: string) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const buildReportText = () => {
+    const lines = [
+      "Sri Lankan GP Care — Practice Performance Report",
+      `Period: ${rangeLabel}`,
+      `Generated: ${todayKey}`,
+      "",
+      `Collected (paid): Rs. ${rangeCollected.toLocaleString()}`,
+      `Outstanding: Rs. ${rangeOutstanding.toLocaleString()}`,
+      `Invoices in period: ${rangeBilling.length}`,
+      `Completed consults: ${rangeCompleted.length}`,
+      `Booked appointments: ${rangeAppointments.length}`,
+      `DNA / cancelled: ${rangeDna}`,
+      "",
+      "INVOICES",
+      "Date,Patient,Service,Status,Amount",
+      ...rangeBilling.map((b) => `${b.date},${b.patientName},${(b.service || "").replace(/,/g, " ")},${b.status},${b.amount}`),
+      "",
+      "COMPLETED CONSULTS",
+      "Date,Time,Patient,Reason,Status",
+      ...rangeCompleted.map((a) => `${a.date},${a.time},${a.patientName || a.patientId},${(a.reason || "").replace(/,/g, " ")},${a.status}`),
+    ];
+    return lines.join("\n");
+  };
+
+  const exportExcel = () => {
+    const csv = [
+      "Type,Date,Patient,Detail,Status,Amount (LKR)",
+      ...rangeBilling.map((b) => `Invoice,${b.date},"${b.patientName}","${(b.service || "").replace(/"/g, "'")}",${b.status},${b.amount}`),
+      ...rangeCompleted.map((a) => `Completed consult,${a.date},"${a.patientName || a.patientId}","${(a.reason || "").replace(/"/g, "'")}",${a.status},`),
+    ].join("\n");
+    downloadBlob("\uFEFF" + csv, `GP_Care_Report_${timeRange}.csv`, "text/csv;charset=utf-8");
+  };
+
+  const exportNotepad = () => {
+    downloadBlob(buildReportText(), `GP_Care_Report_${timeRange}.txt`, "text/plain;charset=utf-8");
+  };
+
+  const exportPdf = () => {
+    const w = window.open("", "_blank", "noopener,noreferrer");
+    if (!w) {
+      alert("Allow pop-ups to export PDF, then use Print → Save as PDF.");
+      return;
+    }
+    const htmlBody = buildReportText().replace(/</g, "&lt;").replace(/\n/g, "<br/>");
+    w.document.write(`<!DOCTYPE html><html><head><title>GP Care Report ${rangeLabel}</title>
+      <style>body{font-family:Georgia,serif;color:#00334f;padding:28px;max-width:800px;margin:0 auto}
+      h1{font-size:18px} pre,div.report{font-size:12px;line-height:1.45}</style></head>
+      <body><h1>Practice Performance Report</h1><p>${rangeLabel}</p><div class="report">${htmlBody}</div></body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
   };
 
   return (
@@ -170,11 +313,28 @@ export default function ReportsAnalyticsView({
             </div>
 
             <button
-              onClick={handleExportReport}
-              className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3.5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+              type="button"
+              onClick={exportExcel}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              Excel
+            </button>
+            <button
+              type="button"
+              onClick={exportNotepad}
+              className="bg-slate-700 hover:bg-slate-800 text-white px-3 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+            >
+              <FileText className="w-4 h-4" />
+              Notepad
+            </button>
+            <button
+              type="button"
+              onClick={exportPdf}
+              className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
               <Download className="w-4 h-4" />
-              Export Analytics PDF
+              PDF
             </button>
           </div>
         </div>
@@ -207,11 +367,175 @@ export default function ReportsAnalyticsView({
         </div>
       </div>
 
+      <div className="bg-white p-5 border rounded-xl shadow-xs space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-2 border-b pb-3">
+          <div>
+            <h2 className="font-bold text-sm text-[#00334f]">Results for {rangeLabel}</h2>
+            <p className="text-[11px] text-slate-500">
+              Synced with Receipts & Invoices and completed consultations. Change This Month / Last Quarter / YTD 2026 above to refresh this panel.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+            <span className="text-[10px] font-bold uppercase text-emerald-800">Collected</span>
+            <div className="text-lg font-black text-emerald-900">Rs. {rangeCollected.toLocaleString()}</div>
+          </div>
+          <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+            <span className="text-[10px] font-bold uppercase text-amber-900">Outstanding</span>
+            <div className="text-lg font-black text-amber-950">Rs. {rangeOutstanding.toLocaleString()}</div>
+          </div>
+          <div className="bg-sky-50 border border-sky-100 rounded-xl p-3">
+            <span className="text-[10px] font-bold uppercase text-sky-800">Invoices</span>
+            <div className="text-lg font-black text-sky-950">{rangeBilling.length}</div>
+          </div>
+          <div className="bg-violet-50 border border-violet-100 rounded-xl p-3">
+            <span className="text-[10px] font-bold uppercase text-violet-800">Completed consults</span>
+            <div className="text-lg font-black text-violet-950">{rangeCompleted.length}</div>
+          </div>
+        </div>
+        <div className="overflow-x-auto max-h-56 overflow-y-auto border rounded-lg">
+          <table className="w-full text-xs text-left">
+            <thead className="bg-slate-50 text-slate-600 sticky top-0">
+              <tr>
+                <th className="p-2 font-bold">Date</th>
+                <th className="p-2 font-bold">Patient / service</th>
+                <th className="p-2 font-bold">Status</th>
+                <th className="p-2 font-bold text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {rangeBilling.length === 0 && rangeCompleted.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="p-4 text-center text-slate-400 italic">No invoices or completed consults in this period.</td>
+                </tr>
+              ) : (
+                <>
+                  {rangeBilling.map((inv) => (
+                    <tr key={inv.id} className={!settled(inv) ? "bg-amber-50/80" : ""}>
+                      <td className="p-2 font-mono text-slate-500">{inv.date}</td>
+                      <td className="p-2">
+                        <span className="font-bold text-slate-900">{inv.patientName}</span>
+                        <span className="block text-[10px] text-slate-500">{inv.service}</span>
+                      </td>
+                      <td className="p-2 font-bold">{inv.status}</td>
+                      <td className="p-2 text-right font-mono">Rs. {inv.amount.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {rangeCompleted.map((apt) => (
+                    <tr key={`rc-${apt.id}`} className="bg-violet-50/50">
+                      <td className="p-2 font-mono text-slate-500">{apt.date}</td>
+                      <td className="p-2">
+                        <span className="font-bold text-slate-900">{apt.patientName || apt.patientId}</span>
+                        <span className="block text-[10px] text-slate-500">Completed · {apt.time} · {apt.reason}</span>
+                      </td>
+                      <td className="p-2 font-bold text-emerald-800">COMPLETED</td>
+                      <td className="p-2 text-right text-slate-400">—</td>
+                    </tr>
+                  ))}
+                </>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* ============================================================ */}
       {/* 1. PRACTICE & OPERATIONAL REPORTS */}
       {/* ============================================================ */}
       {reportTab === "PRACTICE" && (
         <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            <div className="lg:col-span-8 space-y-4">
+              <div className="bg-white p-5 border rounded-xl shadow-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 mb-3">
+                  <div>
+                    <h3 className="font-bold text-sm text-[#00334f]">Daily financial situation</h3>
+                    <p className="text-[11px] text-slate-500">
+                      {formatLongDate(selectedDate)} — synced with Receipts & Invoices and completed consultations.
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                    <span className="text-[10px] font-bold uppercase text-emerald-800">Collected</span>
+                    <div className="text-lg font-black text-emerald-900">Rs. {dayCollected.toLocaleString()}</div>
+                  </div>
+                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                    <span className="text-[10px] font-bold uppercase text-amber-900">Outstanding</span>
+                    <div className="text-lg font-black text-amber-950">Rs. {dayOutstanding.toLocaleString()}</div>
+                  </div>
+                  <div className="bg-sky-50 border border-sky-100 rounded-xl p-3">
+                    <span className="text-[10px] font-bold uppercase text-sky-800">Invoiced</span>
+                    <div className="text-lg font-black text-sky-950">Rs. {dayInvoiceTotal.toLocaleString()}</div>
+                    <p className="text-[10px] text-slate-500">{dayInvoices.length} receipt{dayInvoices.length === 1 ? "" : "s"}</p>
+                  </div>
+                  <div className="bg-violet-50 border border-violet-100 rounded-xl p-3">
+                    <span className="text-[10px] font-bold uppercase text-violet-800">Completed consults</span>
+                    <div className="text-lg font-black text-violet-950">{dayCompleted.length}</div>
+                    <p className="text-[10px] text-slate-500">{dayAppointments.length} booked that day</p>
+                  </div>
+                </div>
+                <div className="mt-4 overflow-x-auto max-h-64 overflow-y-auto border rounded-lg">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-50 text-slate-600 sticky top-0">
+                      <tr>
+                        <th className="p-2 font-bold">Patient / service</th>
+                        <th className="p-2 font-bold">Status</th>
+                        <th className="p-2 font-bold text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {dayInvoices.length === 0 && dayCompleted.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="p-4 text-center text-slate-400 italic">No invoices or completed consults on this date.</td>
+                        </tr>
+                      ) : (
+                        <>
+                          {dayInvoices.map((inv) => (
+                            <tr key={inv.id} className={!settled(inv) ? "bg-amber-50/80" : ""}>
+                              <td className="p-2">
+                                <span className="font-bold text-slate-900">{inv.patientName}</span>
+                                <span className="block text-[10px] text-slate-500">{inv.service}</span>
+                              </td>
+                              <td className="p-2 font-bold">{inv.status}</td>
+                              <td className="p-2 text-right font-mono">Rs. {inv.amount.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                          {dayCompleted.map((apt) => (
+                            <tr key={`c-${apt.id}`} className="bg-violet-50/50">
+                              <td className="p-2">
+                                <span className="font-bold text-slate-900">{apt.patientName || apt.patientId}</span>
+                                <span className="block text-[10px] text-slate-500">Completed consult · {apt.time} · {apt.reason}</span>
+                              </td>
+                              <td className="p-2 font-bold text-emerald-800">COMPLETED</td>
+                              <td className="p-2 text-right text-slate-400">—</td>
+                            </tr>
+                          ))}
+                        </>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <div className="lg:col-span-4">
+              <ClinicMonthCalendar
+                year={calendarMonth.year}
+                month={calendarMonth.month}
+                selectedDate={selectedDate}
+                todayKey={todayKey}
+                countsByDate={countsByDate}
+                onSelectDate={setSelectedDate}
+                onChangeMonth={(year, month) => setCalendarMonth({ year, month })}
+                onJumpToToday={() => {
+                  const n = new Date();
+                  setCalendarMonth({ year: n.getFullYear(), month: n.getMonth() });
+                  setSelectedDate(formatDateKey(n));
+                }}
+              />
+            </div>
+          </div>
           {/* Key Stat Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="bg-white p-4 border rounded-xl shadow-xs">
@@ -225,7 +549,7 @@ export default function ReportsAnalyticsView({
             <div className="bg-white p-4 border rounded-xl shadow-xs">
               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Consults Completed</span>
               <div className="text-2xl font-black text-sky-900 mt-1">{totalConsultsMonth}</div>
-              <p className="text-[10px] text-slate-500 mt-0.5">22% Telehealth Video</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">From appointment queue (Completed)</p>
             </div>
 
             <div className="bg-white p-4 border rounded-xl shadow-xs">
@@ -243,13 +567,13 @@ export default function ReportsAnalyticsView({
             <div className="bg-white p-4 border rounded-xl shadow-xs">
               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Total Revenue</span>
               <div className="text-2xl font-black text-emerald-900 mt-1">Rs. {totalRevenueMonth.toLocaleString()}</div>
-              <p className="text-[10px] text-emerald-600 font-bold mt-0.5">+12.4% vs last month</p>
+              <p className="text-[10px] text-emerald-600 font-bold mt-0.5">Paid invoices (Receipts & Invoices)</p>
             </div>
 
             <div className="bg-white p-4 border rounded-xl shadow-xs">
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Outstanding Claims</span>
-              <div className="text-2xl font-black text-slate-800 mt-1">Rs. {outstandingInvoices.toLocaleString()}</div>
-              <p className="text-[10px] text-slate-400 mt-0.5">96.8% Collection Rate</p>
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Outstanding</span>
+              <div className="text-2xl font-black text-amber-900 mt-1">Rs. {outstandingInvoices.toLocaleString()}</div>
+              <p className="text-[10px] text-slate-400 mt-0.5">Pending / overdue invoices</p>
             </div>
           </div>
 

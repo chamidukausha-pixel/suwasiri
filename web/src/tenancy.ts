@@ -200,8 +200,8 @@ export function cloneHospitalRoles(hospitalId: string): RoleDefinition[] {
 }
 
 export const DEFAULT_HOSPITALS: Hospital[] = [
-  { id: HOSPITAL_PRIMECARE, name: "PrimeCare Medical Group", status: "ACTIVE" },
-  { id: HOSPITAL_SOUTHERN, name: "Southern Coast Hospitals", status: "ACTIVE" },
+  { id: HOSPITAL_PRIMECARE, name: "PrimeCare Medical Group", status: "ACTIVE", district: "Colombo" },
+  { id: HOSPITAL_SOUTHERN, name: "Southern Coast Hospitals", status: "ACTIVE", district: "Galle" },
 ];
 
 export const DEFAULT_BRANCHES: Branch[] = [
@@ -493,6 +493,7 @@ export function isGovernanceEditor(role: RoleDefinition | undefined, isPlatformS
 }
 
 export function tabAllowed(tab: string, role: RoleDefinition | undefined, isPlatformSA: boolean): boolean {
+  if (tab === "ai_features" || tab === "calculators") return false;
   if (isPlatformSA) return true;
   if (role?.name === "Hospital Super Admin" && role.enabled) {
     return tab !== "platform";
@@ -508,11 +509,10 @@ export function tabAllowed(tab: string, role: RoleDefinition | undefined, isPlat
     case "pathology":
       return role.canOrderDiagnosticsAndLabs;
     case "documents":
-      return role.canViewClinicalNotes;
+      return false;
     case "ai_features":
-      return role.canEditClinicalNotes;
     case "calculators":
-      return role.canAccessDoctorDashboard || role.canEditClinicalNotes;
+      return false;
     case "recalls":
       return role.canManageRecalls || role.name === "Receptionist";
     case "patients":
@@ -520,7 +520,8 @@ export function tabAllowed(tab: string, role: RoleDefinition | undefined, isPlat
     case "telehealth":
       return role.canAccessTelehealthSuite;
     case "calendar":
-      return role.canManageCashierAndInvoicing || role.canAccessDoctorDashboard;
+      // Reception / cashier only — doctors must not reorder lobby queue places.
+      return role.canManageCashierAndInvoicing || role.name === "Receptionist";
     case "billing":
       return role.canViewBilling;
     case "sampleCollection":

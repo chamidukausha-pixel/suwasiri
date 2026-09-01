@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { 
   BellRing, AlertTriangle, CheckCircle, Send, Calendar, Phone, Mail, 
-  Smartphone, Filter, Search, Plus, Clock, UserCheck, Sparkles, Check, RefreshCw
+  Smartphone, Filter, Search, Plus, Clock, UserCheck, Sparkles, Check, RefreshCw,
+  Activity, Syringe, FlaskConical, Heart
 } from "lucide-react";
 import { RecallRecord, Patient } from "../types";
 
@@ -9,7 +10,7 @@ interface Props {
   patients: Patient[];
   recalls: RecallRecord[];
   onSendNotification: (recallId: string, method: "SMS" | "Email" | "App Notification") => void;
-  onBookAppointment: (recall: RecallRecord) => void;
+  onBookAppointment: (recall: RecallRecord, consultMode?: "clinic" | "video") => void;
   onCreateRecall: (newRecall: Partial<RecallRecord>) => void;
   onMarkComplete: (recallId: string) => void;
 }
@@ -42,12 +43,48 @@ export default function RecallsDashboard({
 
   // Category counts matching the user's specific clinical benchmark
   const categories = [
-    { id: "All", label: "All Active Recalls", count: activeRecalls.length, color: "border-slate-300 text-slate-700 bg-white" },
-    { id: "Diabetes Review", label: "🔴 Diabetes Review", count: activeRecalls.filter(r => r.category === "Diabetes Review").length, color: "border-red-300 text-red-700 bg-red-50" },
-    { id: "Immunisation", label: "🔴 Immunisation Due", count: activeRecalls.filter(r => r.category === "Immunisation").length, color: "border-red-300 text-red-700 bg-red-50" },
-    { id: "Cervical Screening", label: "🟠 Cervical Screening", count: activeRecalls.filter(r => r.category === "Cervical Screening").length, color: "border-orange-300 text-orange-700 bg-orange-50" },
-    { id: "Pathology Follow-up", label: "🟠 Pathology Follow-up", count: activeRecalls.filter(r => r.category === "Pathology Follow-up").length, color: "border-orange-300 text-orange-700 bg-orange-50" },
-    { id: "Care Plan Review", label: "🟡 Care Plan Review", count: activeRecalls.filter(r => r.category === "Care Plan Review").length, color: "border-amber-300 text-amber-700 bg-amber-50" },
+    {
+      id: "All",
+      label: "All Active Recalls",
+      count: activeRecalls.length,
+      card: "from-sky-500 via-blue-500 to-indigo-600",
+      Icon: BellRing,
+    },
+    {
+      id: "Diabetes Review",
+      label: "Diabetes Review",
+      count: activeRecalls.filter((r) => r.category === "Diabetes Review").length,
+      card: "from-rose-500 via-red-500 to-orange-500",
+      Icon: Activity,
+    },
+    {
+      id: "Immunisation",
+      label: "Immunisation Due",
+      count: activeRecalls.filter((r) => r.category === "Immunisation").length,
+      card: "from-emerald-500 via-green-500 to-teal-500",
+      Icon: Syringe,
+    },
+    {
+      id: "Cervical Screening",
+      label: "Cervical Screening",
+      count: activeRecalls.filter((r) => r.category === "Cervical Screening").length,
+      card: "from-amber-400 via-orange-500 to-rose-500",
+      Icon: UserCheck,
+    },
+    {
+      id: "Pathology Follow-up",
+      label: "Pathology Follow-up",
+      count: activeRecalls.filter((r) => r.category === "Pathology Follow-up").length,
+      card: "from-violet-500 via-purple-600 to-fuchsia-600",
+      Icon: FlaskConical,
+    },
+    {
+      id: "Care Plan Review",
+      label: "Care Plan Review",
+      count: activeRecalls.filter((r) => r.category === "Care Plan Review").length,
+      card: "from-teal-500 via-cyan-500 to-sky-600",
+      Icon: Heart,
+    },
   ];
 
   const filteredRecalls = activeRecalls.filter(r => {
@@ -147,23 +184,24 @@ export default function RecallsDashboard({
 
       {/* Benchmark Category Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {categories.map(cat => {
+        {categories.map((cat) => {
           const isSelected = activeCategory === cat.id;
+          const Icon = cat.Icon;
           return (
             <button
               key={cat.id}
+              type="button"
               onClick={() => setActiveCategory(cat.id)}
-              className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
-                isSelected 
-                  ? "ring-2 ring-[#00334f] shadow-md scale-[1.02] " + cat.color
-                  : "hover:border-slate-400 bg-white border-slate-200"
+              className={`bg-gradient-to-br ${cat.card} p-4 rounded-xl text-left text-white shadow-md hover:shadow-lg transition cursor-pointer ${
+                isSelected ? "ring-2 ring-white ring-offset-2 ring-offset-slate-100 scale-[1.02]" : ""
               }`}
             >
-              <div className="flex justify-between items-start">
-                <span className="text-[11px] font-bold truncate block">{cat.label}</span>
+              <div className="flex items-start justify-between mb-1 gap-2">
+                <span className="text-[11px] uppercase font-extrabold tracking-wider leading-tight">{cat.label}</span>
+                <Icon className="w-5 h-5 text-white/90 shrink-0" />
               </div>
-              <p className="text-2xl font-black mt-2 text-slate-900">{cat.count}</p>
-              <span className="text-[10px] text-slate-500 font-medium">Patients Pending</span>
+              <div className="text-3xl font-black">{cat.count}</div>
+              <p className="text-[11px] text-white/85 mt-1 font-semibold">Patients pending</p>
             </button>
           );
         })}
@@ -205,7 +243,7 @@ export default function RecallsDashboard({
               {filteredRecalls.map(r => {
                 const isOverdue = new Date(r.dueDate) < new Date();
                 return (
-                  <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
+                  <tr key={r.id} className={`hover:bg-slate-50/80 transition-colors ${r.urgency === "HIGH" && r.category === "Pathology Follow-up" ? "bg-red-50" : ""}`}>
                     <td className="py-3 px-4 font-bold text-slate-900">
                       <div>{r.patientName}</div>
                       <div className="text-[10px] font-normal text-slate-500">{r.patientPhone} • {r.patientEmail}</div>
@@ -272,14 +310,41 @@ export default function RecallsDashboard({
                           <span>Email</span>
                         </button>
 
-                        {/* Direct Auto-Schedule */}
                         <button
-                          onClick={() => onBookAppointment(r)}
-                          title="Direct Book Appointment"
+                          onClick={() => {
+                            const live = patients.find(p => p.id === r.patientId);
+                            const phone = (live?.phone || r.patientPhone || "").replace(/\s+/g, "");
+                            if (!phone) {
+                              setSuccessToast(`No registered phone number for ${r.patientName}`);
+                              setTimeout(() => setSuccessToast(null), 3000);
+                              return;
+                            }
+                            window.open(`tel:${phone}`, "_self");
+                            setSuccessToast(`Calling ${r.patientName} at ${phone}`);
+                            setTimeout(() => setSuccessToast(null), 3000);
+                          }}
+                          title={`Call ${r.patientPhone}`}
+                          className="p-1.5 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 rounded border border-emerald-300 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                          <span>Call</span>
+                        </button>
+
+                        <button
+                          onClick={() => onBookAppointment(r, "clinic")}
+                          title="Rebook in-person clinic visit"
                           className="p-1.5 bg-[#00334f] text-white hover:bg-[#0c4a6e] rounded text-[11px] font-bold flex items-center gap-1 cursor-pointer"
                         >
                           <Calendar className="w-3.5 h-3.5" />
-                          <span>Book</span>
+                          <span>In person</span>
+                        </button>
+                        <button
+                          onClick={() => onBookAppointment(r, "video")}
+                          title="Rebook video / online consult"
+                          className="p-1.5 bg-purple-700 text-white hover:bg-purple-800 rounded text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                        >
+                          <Smartphone className="w-3.5 h-3.5" />
+                          <span>Video</span>
                         </button>
 
                         {/* Mark Complete */}

@@ -79,10 +79,10 @@ abstract final class AppTheme {
           backgroundColor: AppColors.trustBlue,
           foregroundColor: Colors.white,
           minimumSize: const Size(48, 48),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
+          shape: const StadiumBorder(),
+          elevation: 2,
+          shadowColor: AppColors.trustBlue.withValues(alpha: 0.35),
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w700),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -90,9 +90,7 @@ abstract final class AppTheme {
           foregroundColor: AppColors.trustBlue,
           minimumSize: const Size(48, 48),
           side: const BorderSide(color: AppColors.trustBlue),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape: const StadiumBorder(),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
@@ -218,10 +216,9 @@ abstract final class AppTheme {
           backgroundColor: AppColors.trustBlue,
           foregroundColor: Colors.white,
           minimumSize: const Size(48, 48),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
+          shape: const StadiumBorder(),
+          elevation: 2,
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w700),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -229,9 +226,7 @@ abstract final class AppTheme {
           foregroundColor: Colors.white,
           minimumSize: const Size(48, 48),
           side: const BorderSide(color: Colors.white54),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape: const StadiumBorder(),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(

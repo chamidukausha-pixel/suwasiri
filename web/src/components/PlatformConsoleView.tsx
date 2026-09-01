@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Building2, Plus, ShieldAlert, UserCheck, Users } from "lucide-react";
 import type { Branch, Hospital, RoleDefinition, StaffMembership, StaffProvider, StaffUser } from "../types";
 import { DOCTOR_SPECIALTIES } from "../catalogs/doctorSpecialties";
+import { SRI_LANKA_DISTRICTS } from "../catalogs/sriLankaDistricts";
 
 interface Props {
   hospitals: Hospital[];
@@ -10,7 +11,7 @@ interface Props {
   roles: RoleDefinition[];
   branches: Branch[];
   staffDirectory: StaffProvider[];
-  onCreateHospital: (name: string) => void;
+  onCreateHospital: (name: string, district: string) => void;
   onToggleHospitalStatus: (hospitalId: string, status: "ACTIVE" | "SUSPENDED") => void;
   onCreateStaff: (payload: {
     hospitalId: string;
@@ -21,6 +22,7 @@ interface Props {
     phone?: string;
     specialty?: string;
   }) => Promise<void> | void;
+  onRemoveStaff: (payload: { staffId: string; hospitalId: string }) => Promise<void> | void;
 }
 
 const STAFF_ROLES = ["Doctor", "Receptionist", "Nurse", "Practice Manager", "Hospital Super Admin", "Pharmacist"];
@@ -35,8 +37,10 @@ export default function PlatformConsoleView({
   onCreateHospital,
   onToggleHospitalStatus,
   onCreateStaff,
+  onRemoveStaff,
 }: Props) {
   const [newName, setNewName] = useState("");
+  const [newDistrict, setNewDistrict] = useState("Colombo");
   const [openHospitalId, setOpenHospitalId] = useState<string | null>(null);
   const [staffName, setStaffName] = useState("");
   const [staffEmail, setStaffEmail] = useState("");
@@ -54,9 +58,9 @@ export default function PlatformConsoleView({
             <ShieldAlert className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-[#00334f]">Platform Super Admin</h1>
+            <h1 className="text-xl font-bold text-[#00334f]">Operations & Governance portal</h1>
             <p className="text-xs text-slate-500">
-              Create hospital tenants and add doctors, receptionists, nurses, and other staff. New staff receive a membership so they appear in Practice Manager, Security & RBAC, and login.
+              Platform Super Admin: create hospital tenants, add employees, and remove staff who have resigned from a clinic. New medical centres and doctors sync to the Suwasiri app so patients can search by doctor name, clinic name, and district.
             </p>
           </div>
         </div>
@@ -69,23 +73,32 @@ export default function PlatformConsoleView({
               <Building2 className="w-4 h-4 text-sky-700" />
               Hospital tenants
             </h2>
-            <p className="text-xs text-slate-500">Click a hospital name to add staff and see who is already linked.</p>
+            <p className="text-xs text-slate-500">Click a hospital name to add staff. New centres and doctors appear in the Suwasiri app.</p>
           </div>
           <form
-            className="flex gap-2"
+            className="flex flex-wrap gap-2 items-center"
             onSubmit={(e) => {
               e.preventDefault();
               if (!newName.trim()) return;
-              onCreateHospital(newName.trim());
+              onCreateHospital(newName.trim(), newDistrict);
               setNewName("");
             }}
           >
             <input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              placeholder="New hospital name"
+              placeholder="New medical centre / hospital name"
               className="border rounded-lg px-3 py-1.5 text-xs outline-none focus:border-[#00334f]"
             />
+            <select
+              value={newDistrict}
+              onChange={(e) => setNewDistrict(e.target.value)}
+              className="border rounded-lg px-3 py-1.5 text-xs outline-none focus:border-[#00334f]"
+            >
+              {SRI_LANKA_DISTRICTS.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
             <button type="submit" className="bg-[#00334f] text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1">
               <Plus className="w-3.5 h-3.5" />
               Create hospital
@@ -100,7 +113,7 @@ export default function PlatformConsoleView({
               .filter((m) => m.hospitalId === h.id && hsaRoleIds.includes(m.roleId) && m.active)
               .map((m) => staffUsers.find((u) => u.id === m.userId)?.name)
               .filter(Boolean);
-            const hospitalStaff = staffDirectory.filter((s) => s.hospitalId === h.id);
+            const hospitalStaff = staffDirectory.filter((s) => s.hospitalId === h.id && s.active !== false);
             const hospitalBranches = branches.filter((b) => b.hospitalId === h.id);
             const hospitalRoles = roles.filter((r) => r.hospitalId === h.id && r.enabled && r.name !== "Patient");
             const open = openHospitalId === h.id;
@@ -116,14 +129,14 @@ export default function PlatformConsoleView({
                     }}
                   >
                     <p className="font-bold text-sm text-slate-900 hover:underline">{h.name}</p>
-                    <p className="text-[11px] text-slate-500 font-mono">{h.id}</p>
+                    <p className="text-[11px] text-slate-500 font-mono">{h.id}{h.district ? ` · ${h.district}` : ""}</p>
                     <p className="text-[11px] text-slate-600 mt-1 flex items-center gap-1">
                       <UserCheck className="w-3.5 h-3.5" />
                       Hospital Super Admin: {admins.length ? admins.join(", ") : "Not assigned"}
                     </p>
                     <p className="text-[11px] text-sky-800 mt-0.5 flex items-center gap-1">
                       <Users className="w-3.5 h-3.5" />
-                      {hospitalStaff.length} staff linked · click name to add Doctor / Receptionist / Nurse
+                      {hospitalStaff.length} employees · click name to add or remove staff
                     </p>
                   </button>
                   <div className="flex items-center gap-2">
@@ -145,15 +158,27 @@ export default function PlatformConsoleView({
                 {open && (
                   <div className="border-t bg-slate-50 p-4 space-y-4">
                     <div>
-                      <h3 className="text-xs font-bold text-[#00334f] uppercase tracking-wider mb-2">Registered staff</h3>
+                      <h3 className="text-xs font-bold text-[#00334f] uppercase tracking-wider mb-2">Employees at this clinic</h3>
                       {hospitalStaff.length === 0 ? (
                         <p className="text-xs text-slate-500 italic">No staff yet. Add a doctor, receptionist, or nurse below.</p>
                       ) : (
                         <div className="grid gap-1.5">
                           {hospitalStaff.map((s) => (
-                            <div key={s.id} className="bg-white border rounded-lg px-3 py-2 text-xs flex flex-wrap justify-between gap-2">
-                              <span className="font-bold text-slate-900">{s.name}</span>
-                              <span className="text-slate-500">{s.role}{s.specialty ? ` · ${s.specialty}` : ""} · {s.email}</span>
+                            <div key={s.id} className="bg-white border rounded-lg px-3 py-2 text-xs flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <span className="font-bold text-slate-900">{s.name}</span>
+                                <span className="text-slate-500 ml-2">{s.role}{s.specialty ? ` · ${s.specialty}` : ""} · {s.email}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (!window.confirm(`Remove ${s.name} after resignation from ${h.name}? They will no longer appear in Practice Manager or login for this clinic.`)) return;
+                                  await onRemoveStaff({ staffId: s.id, hospitalId: h.id });
+                                }}
+                                className="text-[10px] font-bold text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-1 rounded"
+                              >
+                                Remove (resigned)
+                              </button>
                             </div>
                           ))}
                         </div>
@@ -189,6 +214,7 @@ export default function PlatformConsoleView({
                       }}
                     >
                       <p className="text-[11px] font-bold text-slate-700 uppercase">Add staff to {h.name}</p>
+                      <p className="text-[10px] text-sky-800">Doctors sync to Suwasiri (search by name, {h.district || "district"}, and this clinic name).</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <input
                           value={staffName}

@@ -24,10 +24,13 @@ service cloud.firestore {
     }
 
     match /vault/{reportId} {
-      allow read, write: if isSignedIn()
+      // Patients read household lab reports. GP Care staff create after reviewing pathology.
+      allow read: if isSignedIn()
         && isHouseholdPatient(resource.data.patientId);
-      allow create: if isSignedIn()
-        && isHouseholdPatient(request.resource.data.patientId);
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn()
+        && (isHouseholdPatient(resource.data.patientId)
+            || request.resource.data.patientId == resource.data.patientId);
     }
 
     match /vaccinations/{vaccineId} {
@@ -96,6 +99,11 @@ service cloud.firestore {
     }
 
     match /clinic_doctors/{doctorId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
+    }
+
+    match /clinic_centers/{centerId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isSignedIn();
     }

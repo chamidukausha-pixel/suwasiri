@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
@@ -14,6 +16,7 @@ import '../../data/models/appointment.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/liquid_button.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/sheet_close_bar.dart';
 import 'booking_confirm_step.dart';
@@ -175,9 +178,9 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
   String _visitReason = 'Follow up';
 
   static const _venueFee = 350;
-  static const _paymentMethod = 'Pay at reception';
 
-  List<TimeOfDay> get _times => DoctorScheduleSlots.times;
+  List<TimeOfDay> get _times =>
+      DoctorScheduleSlots.timesFor(widget.doctor, _selectedDate);
 
   int get _consultFee => widget.doctor.feeLkr;
   int get _total => _consultFee + _venueFee;
@@ -193,12 +196,24 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
   }
 
   void _ensureSelectedTimeAvailable() {
-    if (!_isBooked(_selectedTime)) return;
+    if (_times.isEmpty) return;
+    if (!_isBooked(_selectedTime) && _times.contains(_selectedTime)) return;
     for (final t in _times) {
       if (!_isBooked(t)) {
         _selectedTime = t;
         return;
       }
+    }
+    _selectedTime = _times.first;
+  }
+
+  void _pickFirstOpenDate() {
+    for (final d in _dates) {
+      final times = DoctorScheduleSlots.timesFor(widget.doctor, d);
+      if (times.isEmpty) continue;
+      _selectedDate = d;
+      _selectedTime = times.first;
+      return;
     }
   }
 
@@ -209,8 +224,10 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
     if (reason != null && reason.isNotEmpty) {
       _visitReason = reason;
     }
-    _selectedDate = _dates.length > 3 ? _dates[3] : _dates.first;
-    _selectedTime = _times.first;
+    _selectedDate = _dates.first;
+    final firstTimes = DoctorScheduleSlots.timesFor(widget.doctor, _selectedDate);
+    _selectedTime = firstTimes.isNotEmpty ? firstTimes.first : DoctorScheduleSlots.times.first;
+    _pickFirstOpenDate();
     _bookedSub = context
         .read<HealthRepository>()
         .watchDoctorBookedSlots(widget.doctor.id)
@@ -230,8 +247,13 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
     super.dispose();
   }
 
-  Future<void> _completeBooking() async {
-    if (_isBooked(_selectedTime)) {
+  Future<void> _completeBooking({
+    required String paymentMethod,
+    String paymentStatus = 'PAID',
+    bool paidBySuwasiri = false,
+    String? suwasiriReceiptUrl,
+  }) async {
+    if (_times.isEmpty || _isBooked(_selectedTime)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -253,7 +275,10 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
         patientName: user.displayName,
         patientEmail: user.email,
         patientPhone: user.mobileNo,
-        paymentMethod: _paymentMethod,
+        paymentMethod: paymentMethod,
+        paymentStatus: paymentStatus,
+        paidBySuwasiri: paidBySuwasiri,
+        suwasiriReceiptUrl: suwasiriReceiptUrl,
       );
       if (!mounted) return;
       await context.read<NotificationCubit>().load();
@@ -266,7 +291,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
       Navigator.of(context).pop(
         _BookingResult(
           appointment: appt,
-          paymentMethod: _paymentMethod,
+          paymentMethod: paymentMethod,
           slot: _slotDateTime,
           doctor: widget.doctor,
           consultMode: _mode,
@@ -315,7 +340,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
                 },
                 onReason: (r) => setState(() => _visitReason = r),
                 onProceed: () {
-                  if (_isBooked(_selectedTime)) {
+                  if (_times.isEmpty || _isBooked(_selectedTime)) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text(
@@ -328,7 +353,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
                   setState(() => _step = _CheckoutStep.pay);
                 },
               )
-            : _PayAtReceptionStep(
+            : _PaymentChannelStep(
                 key: const ValueKey('pay'),
                 doctor: widget.doctor,
                 slot: _slotDateTime,
@@ -343,8 +368,8 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
   }
 }
 
-class _PayAtReceptionStep extends StatelessWidget {
-  const _PayAtReceptionStep({
+class _PaymentChannelStep extends StatefulWidget {
+  const _PaymentChannelStep({
     super.key,
     required this.doctor,
     required this.slot,
@@ -361,13 +386,112 @@ class _PayAtReceptionStep extends StatelessWidget {
   final bool paying;
   final VoidCallback onBack;
   final VoidCallback onClose;
-  final VoidCallback onConfirm;
+  final Future<void> Function({
+    required String paymentMethod,
+    String paymentStatus,
+    bool paidBySuwasiri,
+    String? suwasiriReceiptUrl,
+  }) onConfirm;
+
+  @override
+  State<_PaymentChannelStep> createState() => _PaymentChannelStepState();
+}
+
+enum _PayChannel { counter, card, slip }
+
+class _PaymentChannelStepState extends State<_PaymentChannelStep> {
+  _PayChannel _channel = _PayChannel.counter;
+  final _cardName = TextEditingController();
+  final _cardNumber = TextEditingController();
+  final _cardExpiry = TextEditingController();
+  final _cardCvv = TextEditingController();
+  String? _slipDataUrl;
+  bool _picking = false;
+
+  @override
+  void dispose() {
+    _cardName.dispose();
+    _cardNumber.dispose();
+    _cardExpiry.dispose();
+    _cardCvv.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickSlip() async {
+    setState(() => _picking = true);
+    try {
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1280,
+        imageQuality: 72,
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      setState(() {
+        _slipDataUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+      });
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
+  }
+
+  Future<void> _submit() async {
+    final l = AppLocalizations.of(context);
+    switch (_channel) {
+      case _PayChannel.counter:
+        await widget.onConfirm(
+          paymentMethod: l.t('payAtCounter'),
+          paymentStatus: 'PENDING',
+        );
+        return;
+      case _PayChannel.card:
+        final digits = _cardNumber.text.replaceAll(RegExp(r'\D'), '');
+        if (_cardName.text.trim().isEmpty || digits.length < 12) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Enter cardholder name and a valid card number.'),
+            ),
+          );
+          return;
+        }
+        await widget.onConfirm(
+          paymentMethod: l.t('onlineDebitCard'),
+          paymentStatus: 'PAID',
+        );
+        return;
+      case _PayChannel.slip:
+        if (_slipDataUrl == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l.t('attachSlipFirst'))),
+          );
+          return;
+        }
+        await widget.onConfirm(
+          paymentMethod: l.t('manualBankSlip'),
+          paymentStatus: 'PAID',
+          paidBySuwasiri: true,
+          suwasiriReceiptUrl: _slipDataUrl,
+        );
+    }
+  }
+
+  String _cta(AppLocalizations l) {
+    switch (_channel) {
+      case _PayChannel.counter:
+        return l.t('confirmBookingPayAtCounter');
+      case _PayChannel.card:
+        return l.t('authorizePay');
+      case _PayChannel.slip:
+        return l.t('submitReceiptBook');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final money = NumberFormat.decimalPattern();
-    final slotLabel = DateFormat('MMM d, yyyy \'at\' hh:mm a').format(slot);
+    final slotLabel =
+        DateFormat('MMM d, yyyy \'at\' hh:mm a').format(widget.slot);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -376,7 +500,7 @@ class _PayAtReceptionStep extends StatelessWidget {
           children: [
             MinTap(
               enforceMinSize: false,
-              onTap: onBack,
+              onTap: widget.onBack,
               child: Row(
                 children: [
                   const Icon(Icons.arrow_back_ios_new,
@@ -393,7 +517,7 @@ class _PayAtReceptionStep extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            SheetCloseActions(onClose: onClose),
+            SheetCloseActions(onClose: widget.onClose),
           ],
         ),
         const SizedBox(height: 8),
@@ -427,7 +551,7 @@ class _PayAtReceptionStep extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          '${l.t('doctor')}: ${doctor.name} • ${l.t('slot')}: $slotLabel',
+          '${l.t('doctor')}: ${widget.doctor.name} • ${l.t('slot')}: $slotLabel',
           style: const TextStyle(color: AppColors.slateMuted, fontSize: 13),
         ),
         const SizedBox(height: 14),
@@ -465,9 +589,9 @@ class _PayAtReceptionStep extends StatelessWidget {
                 ),
               ),
               Text(
-                'LKR ${money.format(total)}',
+                'LKR ${money.format(widget.total)}',
                 style: const TextStyle(
-                  color: Color(0xFF00E676),
+                  color: AppColors.limePrice,
                   fontWeight: FontWeight.w800,
                   fontSize: 22,
                 ),
@@ -475,77 +599,172 @@ class _PayAtReceptionStep extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border),
+        const SizedBox(height: 18),
+        Text(
+          l.t('selectPaymentChannel'),
+          style: const TextStyle(
+            color: AppColors.trustBlueDark,
+            fontWeight: FontWeight.w800,
+            fontSize: 15,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.trustBlueSoft,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.storefront_outlined,
-                      color: AppColors.trustBlue,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      l.t('payAtReception'),
-                      style: const TextStyle(
-                        color: AppColors.trustBlueDark,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ],
+        ),
+        const SizedBox(height: 10),
+        LiquidChoiceChip(
+          label: l.t('payAtCounter'),
+          selected: _channel == _PayChannel.counter,
+          onTap: () => setState(() => _channel = _PayChannel.counter),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: LiquidChoiceChip(
+                label: l.t('onlineDebitCard'),
+                selected: _channel == _PayChannel.card,
+                onTap: () => setState(() => _channel = _PayChannel.card),
               ),
-              const SizedBox(height: 12),
-              Text(
-                l.t('payAtReceptionHint'),
-                style: const TextStyle(
-                  color: AppColors.slateMuted,
-                  fontSize: 13,
-                  height: 1.45,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: LiquidChoiceChip(
+                label: l.t('manualBankSlip'),
+                selected: _channel == _PayChannel.slip,
+                onTap: () => setState(() => _channel = _PayChannel.slip),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (_channel == _PayChannel.counter)
+          Text(
+            l.t('payAtCounterHint'),
+            style: const TextStyle(
+              color: AppColors.slateMuted,
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
+        if (_channel == _PayChannel.card) ...[
+          TextField(
+            controller: _cardName,
+            textCapitalization: TextCapitalization.words,
+            decoration: InputDecoration(labelText: l.t('cardholderName')),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _cardNumber,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(labelText: l.t('cardNumber')),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _cardExpiry,
+                  decoration: InputDecoration(labelText: l.t('expiry')),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _cardCvv,
+                  obscureText: true,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(labelText: l.t('cvv')),
                 ),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 18),
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: FilledButton(
-            onPressed: paying ? null : onConfirm,
-            child: paying
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : Text(
-                    l.t('confirmBookingPayAtReception'),
-                    style: const TextStyle(fontWeight: FontWeight.w800),
+        ],
+        if (_channel == _PayChannel.slip) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l.t('depositToAccount'),
+                  style: const TextStyle(
+                    color: AppColors.slateMuted,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
+                    letterSpacing: 0.5,
                   ),
+                ),
+                const SizedBox(height: 8),
+                Text('${l.t('bank')}: Commercial Bank of Ceylon PLC',
+                    style: const TextStyle(
+                        color: AppColors.trustBlueDark, fontSize: 13)),
+                Text('${l.t('accountName')}: Suwasiri GP Care Ltd',
+                    style: const TextStyle(
+                        color: AppColors.trustBlueDark, fontSize: 13)),
+                Text('${l.t('accountNumber')}: 1000 4829 3491',
+                    style: const TextStyle(
+                        color: AppColors.trustBlueDark, fontSize: 13)),
+                Text('${l.t('branch')}: Colombo Fort Branch',
+                    style: const TextStyle(
+                        color: AppColors.trustBlueDark, fontSize: 13)),
+              ],
+            ),
           ),
+          const SizedBox(height: 10),
+          MinTap(
+            onTap: _picking ? null : _pickSlip,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: AppColors.trustBlue.withValues(alpha: 0.45),
+                  style: BorderStyle.solid,
+                ),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    _slipDataUrl == null
+                        ? Icons.add_photo_alternate_outlined
+                        : Icons.check_circle_rounded,
+                    color: _slipDataUrl == null
+                        ? AppColors.trustBlue
+                        : AppColors.emerald,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _slipDataUrl == null
+                        ? l.t('attachReceiptSlip')
+                        : 'Receipt attached',
+                    style: const TextStyle(
+                      color: AppColors.trustBlue,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    l.t('uploadDepositSlip'),
+                    style: const TextStyle(
+                      color: AppColors.slateMuted,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 18),
+        LiquidButton(
+          onPressed: widget.paying ? null : _submit,
+          label: _cta(l),
+          busy: widget.paying,
         ),
       ],
     );

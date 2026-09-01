@@ -4,7 +4,6 @@ import {
   VideoOff,
   Mic,
   MicOff,
-  Clipboard,
   MessageSquare,
   Send,
   CheckCircle,
@@ -20,12 +19,10 @@ import {
   Trash2,
   Clock,
   AlertCircle,
-  ShieldCheck,
-  QrCode,
   Share2,
   Loader2,
 } from "lucide-react";
-import { Patient, Appointment, DrugFormularyItem } from "../types";
+import { Patient, Appointment, DrugFormularyItem, Billing, PrescriptionRecord } from "../types";
 import {
   canStartTelehealthCall,
   isVideoBooking,
@@ -37,12 +34,26 @@ import {
 } from "../sync/suwasiriAppointments";
 import { startDoctorTelehealthCall, type TelehealthCallHandle, type TelehealthCallStatus } from "../sync/telehealthRtc";
 import { issuePrescriptionsToSuwasiri } from "../sync/suwasiriPrescriptions";
+import PatientSexAgeBadge from "./PatientSexAgeBadge";
+import DoctorDigitalSeal from "./DoctorDigitalSeal";
+import DoctorClinicalRecordModal from "./DoctorClinicalRecordModal";
+import { mergeClinicalDocuments } from "./DocumentManagementHub";
 import {
   saveConsultationNote,
   sendTelehealthChatMessage,
   subscribeTelehealthChat,
   type TelehealthChatMessage,
 } from "../sync/suwasiriConsultSync";
+
+function appointmentBelongsToDoctor(apt: Appointment, doctorName: string): boolean {
+  const normalize = (name: string) =>
+    name.toLowerCase().replace(/^dr\.?\s*/, "").replace(/[^a-z0-9]+/g, " ").trim();
+  const me = normalize(doctorName || "");
+  if (!me || me === "gp") return true;
+  const assigned = normalize(apt.doctorName || "");
+  if (!assigned) return true;
+  return assigned === me || assigned.includes(me) || me.includes(assigned);
+}
 
 function overlayBookingIdentity(apt: Appointment, patient: Patient): Patient {
   const displayName = appointmentPatientName(apt, patient);
@@ -71,6 +82,21 @@ interface Props {
   onOpenClinicalHub?: (patient: Patient) => void;
   onSelectVideoPatient?: (patient: Patient, appointmentId: string) => void;
   onSealConsultation?: (patient: Patient, medicines: string[], notes: string) => void;
+  billingList?: Billing[];
+  currentRole?: string;
+  clinicName?: string;
+  onUpdatePatient?: (updated: Patient) => void;
+  onBookAppointment?: (payload: {
+    patientId: string;
+    date: string;
+    time: string;
+    reason: string;
+    consultMode?: "clinic" | "video";
+    paymentMethod?: string;
+  }) => Promise<void> | void;
+  onOrderPathology?: (testName: string, remarks: string) => void;
+  onRenderPrescription?: (rx: PrescriptionRecord) => void;
+  onUpdateAppointment?: (updated: Appointment) => void;
 }
 
 export default function TelehealthRoom({
@@ -89,8 +115,16 @@ export default function TelehealthRoom({
   onOpenClinicalHub,
   onSelectVideoPatient,
   onSealConsultation,
+  billingList = [],
+  currentRole = "Doctor",
+  clinicName,
+  onUpdatePatient,
+  onBookAppointment,
+  onOrderPathology,
+  onRenderPrescription,
+  onUpdateAppointment,
 }: Props) {
-  const [selectedPat, setSelectedPat] = useState<Patient | null>(activePatient || patients[0] || null);
+  const [selectedPat, setSelectedPat] = useState<Patient | null>(null);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -182,13 +216,15 @@ export default function TelehealthRoom({
   });
 
   const dayKey = sessionDate || new Date().toISOString().split("T")[0];
+  const todayKey = new Date().toISOString().split("T")[0];
+  const listingToday = dayKey === todayKey;
 
   const dayVideoAppointments = useMemo(() => {
     return appointments
-      .filter((a) => isVideoBookingOnDate(a, dayKey))
+      .filter((a) => isVideoBookingOnDate(a, dayKey) && appointmentBelongsToDoctor(a, sessionDoctorName))
       .slice()
       .sort((a, b) => (parseSlot(a)?.getTime() || 0) - (parseSlot(b)?.getTime() || 0));
-  }, [appointments, dayKey]);
+  }, [appointments, dayKey, sessionDoctorName]);
 
   const rosterPatients = useMemo(() => {
     const byId = new Map<string, Patient>();
@@ -197,25 +233,30 @@ export default function TelehealthRoom({
       const base = existing || stubPatientFromBooking(apt);
       byId.set(apt.patientId, overlayBookingIdentity(apt, base));
     }
-    if (selectedPat && !byId.has(selectedPat.id)) byId.set(selectedPat.id, selectedPat);
     return [...byId.values()];
-  }, [patients, dayVideoAppointments, selectedPat?.id]);
+  }, [patients, dayVideoAppointments]);
 
   useEffect(() => {
-    const focused =
-      (focusPatientId && rosterPatients.find((p) => p.id === focusPatientId)) ||
-      activePatient ||
-      null;
-    if (focused) {
-      setSelectedPat(focused);
-      setTelehealthNotes(focused.notes || "");
+    const videoIds = new Set(dayVideoAppointments.map((a) => a.patientId));
+    const focusedId =
+      (focusPatientId && videoIds.has(focusPatientId) && focusPatientId) ||
+      (activePatient?.id && videoIds.has(activePatient.id) ? activePatient.id : null);
+    if (focusedId) {
+      const focused = rosterPatients.find((p) => p.id === focusedId);
+      if (focused) {
+        setSelectedPat(focused);
+        setTelehealthNotes(focused.notes || "");
+      }
       return;
     }
-    if (rosterPatients.length > 0 && !selectedPat) {
-      setSelectedPat(rosterPatients[0]);
-      setTelehealthNotes(rosterPatients[0].notes || "");
+    if (selectedPat && !videoIds.has(selectedPat.id)) {
+      setSelectedPat(null);
+      setTelehealthNotes("");
     }
-  }, [activePatient?.id, focusPatientId, rosterPatients.length]);
+    if (dayVideoAppointments.length === 0) {
+      setSelectedPat(null);
+    }
+  }, [activePatient?.id, focusPatientId, dayVideoAppointments, rosterPatients]);
 
   useEffect(() => {
     if (!selectedPat) return;
@@ -227,7 +268,8 @@ export default function TelehealthRoom({
       fresh.activeMedications !== selectedPat.activeMedications
     ) {
       const apt = dayVideoAppointments.find((a) => a.patientId === fresh.id);
-      setSelectedPat(apt ? overlayBookingIdentity(apt, fresh) : fresh);
+      if (!apt) return;
+      setSelectedPat(overlayBookingIdentity(apt, fresh));
     }
   }, [patients, selectedPat?.id]);
 
@@ -249,27 +291,12 @@ export default function TelehealthRoom({
     };
   }, []);
 
-  const dueVideoAppointments = useMemo(() => {
-    const now = new Date(nowTick);
-    return dayVideoAppointments.filter((a) => canStartTelehealthCall(a, now));
-  }, [dayVideoAppointments, nowTick]);
-
   const selectedVideoApt =
-    appointments.find((a) => a.id === focusAppointmentId) ||
-    dueVideoAppointments.find((a) => a.patientId === selectedPat?.id) ||
-    appointments.find((a) => a.patientId === selectedPat?.id && isVideoBooking(a));
+    dayVideoAppointments.find((a) => a.id === focusAppointmentId) ||
+    dayVideoAppointments.find((a) => a.patientId === selectedPat?.id) ||
+    undefined;
 
-  const callTargetApt =
-    (focusAppointmentId && appointments.find((a) => a.id === focusAppointmentId)) ||
-    selectedVideoApt ||
-    dueVideoAppointments[0] ||
-    appointments.find(
-      (a) =>
-        a.patientId === selectedPat?.id &&
-        isVideoBooking(a) &&
-        a.status !== "COMPLETED" &&
-        a.status !== "CANCELLED"
-    );
+  const callTargetApt = selectedVideoApt;
 
   useEffect(() => {
     const aptId = callTargetApt?.id;
@@ -589,9 +616,9 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
   const canCallNow = callTargetApt ? canStartTelehealthCall(callTargetApt, new Date(nowTick)) : false;
 
   return (
-    <div className="space-y-6">
-      {/* Top Header & Patient Selection */}
-      <div className="bg-white border rounded-xl p-4 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+    <div className="flex flex-col gap-4 h-[calc(100vh-10.5rem)] min-h-0">
+      {/* Top Header */}
+      <div className="bg-white border rounded-xl p-4 shadow-xs shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-[#00334f] text-white flex items-center justify-center font-bold">
             <Video className="w-5 h-5" />
@@ -607,43 +634,20 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
               </span>
             </div>
             <p className="text-xs text-slate-500">
-              Today’s video consults only. Click a patient name to open Active Clinical Consultation Room. Call start unlocks 2 minutes before the slot.
+              {listingToday ? "Today’s" : dayKey} video consults assigned to you. Click a name in the list below to open that patient’s file.
             </p>
           </div>
         </div>
-
-        {/* Patient Selection Dropdown — video bookings for this day only */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-slate-600">Video booking:</span>
-          <select
-            value={selectedPat?.id || ""}
-            onChange={(e) => {
-              const apt = dayVideoAppointments.find((a) => a.patientId === e.target.value);
-              if (apt) openVideoPatient(apt);
-            }}
-            className="p-2 border rounded-lg bg-white text-xs font-bold text-[#00334f] outline-none focus:border-[#00334f]"
-          >
-            {dayVideoAppointments.length === 0 && (
-              <option value="">No video bookings today</option>
-            )}
-            {dayVideoAppointments.map((apt) => {
-              const p = patients.find((x) => x.id === apt.patientId);
-              return (
-                <option key={apt.id} value={apt.patientId}>
-                  {appointmentPatientName(apt, p)} · {apt.time}
-                </option>
-              );
-            })}
-          </select>
-        </div>
       </div>
 
-      <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 shadow-xs space-y-3">
+      <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 shadow-xs space-y-2 shrink-0 max-h-52 overflow-y-auto">
           <div className="flex items-center justify-between gap-2">
             <div>
-              <h3 className="text-sm font-bold text-purple-950">Video call consultations — {dayKey}</h3>
+              <h3 className="text-sm font-bold text-purple-950">
+                {listingToday ? "Today’s available video consultations" : `Video consultations — ${dayKey}`}
+              </h3>
               <p className="text-[11px] text-purple-800">
-                Clinic walk-ins are not listed here. Click a patient name to load Active Clinical Consultation Room. Call start is available 2 minutes before the booked time, not earlier.
+                Patients booked with you for video on this day. Click a name to load their clinical profile.
               </p>
             </div>
             <span className="text-[10px] font-bold uppercase tracking-wider bg-white border border-purple-200 text-purple-800 px-2 py-1 rounded-full">
@@ -652,7 +656,7 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
           </div>
           {dayVideoAppointments.length === 0 ? (
             <p className="text-xs text-purple-800 bg-white border border-dashed border-purple-200 rounded-lg p-3">
-              No Suwasiri video consults booked for this day.
+              No video consultations booked for you {listingToday ? "today" : `on ${dayKey}`}. No patient file is shown until a video appointment is scheduled.
             </p>
           ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -666,6 +670,7 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
                 <div key={apt.id} className={`bg-white border rounded-lg p-3 flex items-center justify-between gap-3 ${selected ? "border-[#00334f] ring-1 ring-[#00334f]/30" : "border-purple-100"}`}>
                   <button type="button" className="text-left min-w-0" onClick={() => openVideoPatient(apt)}>
                     <p className="text-sm font-bold text-[#00334f] hover:underline">{appointmentPatientName(apt, p)}</p>
+                    {p ? <PatientSexAgeBadge gender={p.gender} age={p.age} /> : null}
                     <p className="text-[11px] text-slate-500">
                       {apt.time} · {apt.doctorName || sessionDoctorName}
                       {apt.token ? ` · ${apt.token}` : ""}
@@ -696,11 +701,11 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
           )}
         </div>
 
-      {/* Main Grid: Video Room (Left) + Clinical Prescribing & Drug History (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Video Room & Live Stream (7 Cols) */}
-        <div className="lg:col-span-7 space-y-4">
-          <div className="bg-slate-950 rounded-xl overflow-hidden shadow-md flex flex-col h-[520px] relative border border-slate-800">
+      {/* Main split: video stays put; patient file scrolls independently */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0">
+        {/* Left Column: Video Room — does not scroll with the chart */}
+        <div className="lg:col-span-5 flex flex-col min-h-0 gap-3 h-full">
+          <div className="bg-slate-950 rounded-xl overflow-hidden shadow-md flex flex-col flex-1 min-h-[280px] relative border border-slate-800">
             {/* Top Video Status Overlay */}
             <div className="absolute top-3 left-3 right-3 z-10 flex items-center justify-between pointer-events-none">
               <div className="bg-black/70 backdrop-blur-xs text-white px-3 py-1 rounded-full flex items-center gap-2 text-xs">
@@ -720,9 +725,9 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
             {/* Video Streams Container */}
             <div className="flex-1 p-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
               {/* Remote Patient Box */}
-              <div className="bg-slate-900 rounded-lg overflow-hidden border border-slate-800 relative h-full max-h-[380px] flex flex-col items-center justify-center">
+              <div className="bg-slate-900 rounded-lg overflow-hidden border border-slate-800 relative h-full flex flex-col items-center justify-center">
                 <div className="absolute top-2 right-2 z-10 bg-black/60 text-white px-2 py-0.5 rounded text-[10px] font-bold">
-                  Patient waiting — {selectedPat?.name || "Patient"} camera
+                  Patient waiting — {selectedPat?.name || "No video patient"} camera
                 </div>
                 <video
                   ref={remoteVideoRef}
@@ -739,15 +744,21 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
                     />
                   ) : (
                     <div className="text-center px-4">
-                      <div className="w-20 h-20 rounded-full bg-sky-900 text-white font-bold text-2xl flex items-center justify-center mx-auto mb-3">
-                        {(selectedPat?.name || "P").split(" ").map((n) => n[0]).join("")}
-                      </div>
+                      {selectedPat ? (
+                        <div className="w-20 h-20 rounded-full bg-sky-900 text-white font-bold text-2xl flex items-center justify-center mx-auto mb-3">
+                          {selectedPat.name.split(" ").map((n) => n[0]).join("")}
+                        </div>
+                      ) : (
+                        <Video className="w-12 h-12 mx-auto mb-3 text-slate-600" />
+                      )}
                       <p className="text-xs text-slate-300">
                         {callStatus === "connecting"
                           ? "Waiting for the patient to join from the Suwasiri App…"
                           : selectedVideoApt
                             ? `Video consult at ${selectedVideoApt.time}. Start the call when you are ready.`
-                            : "No live Suwasiri video booking in this room yet."}
+                            : dayVideoAppointments.length === 0
+                              ? "No video consultation booked for you today."
+                              : "Click a patient in today’s video list to load their file."}
                       </p>
                     </div>
                   )
@@ -759,7 +770,7 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
               </div>
 
               {/* Doctor Box */}
-              <div className="bg-slate-900 rounded-lg overflow-hidden border border-slate-800 relative h-full max-h-[380px] flex flex-col items-center justify-center">
+              <div className="bg-slate-900 rounded-lg overflow-hidden border border-slate-800 relative h-full flex flex-col items-center justify-center">
                 <div className="absolute top-2 right-2 z-10 bg-black/60 text-white px-2 py-0.5 rounded text-[10px] font-bold">
                   GP room cam — {sessionDoctorName}
                 </div>
@@ -864,42 +875,15 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
             </div>
           </div>
 
-          {/* Consultation Notes Box */}
-          <div className="bg-white border rounded-xl p-4 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Clipboard className="w-4 h-4 text-[#00334f]" />
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  Live Consultation Notes & Clinical Impressions
-                </h3>
-              </div>
-              <button
-                onClick={handleSaveNotes}
-                disabled={savingNotes}
-                className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-60"
-              >
-                <CheckCircle className="w-3 h-3" />
-                {savingNotes ? "Saving…" : "Save Notes"}
-              </button>
-            </div>
-            <textarea
-              rows={3}
-              value={telehealthNotes}
-              onChange={(e) => setTelehealthNotes(e.target.value)}
-              placeholder="Record clinical history, presenting symptoms, virtual observations, and advice given during video call..."
-              className="w-full text-xs p-2.5 border rounded-lg outline-none focus:border-[#00334f]"
-            />
-          </div>
-
           {/* Live In-Call Messaging */}
-          <div className="bg-white border rounded-xl p-4 shadow-xs space-y-3">
+          <div className="bg-white border rounded-xl p-3 shadow-xs space-y-2 shrink-0">
             <div className="flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-sky-700" />
               <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                 In-Call Patient Secure Messaging
               </h3>
             </div>
-            <div className="bg-slate-50 border rounded-lg p-3 max-h-32 overflow-y-auto space-y-1.5 text-xs">
+            <div className="bg-slate-50 border rounded-lg p-3 max-h-24 overflow-y-auto space-y-1.5 text-xs">
               {videoChat.map((msg, i) => (
                 <div key={msg.id || i} className="leading-tight">
                   <strong className="text-[#00334f]">{msg.sender}: </strong>
@@ -926,19 +910,55 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
           </div>
         </div>
 
-        {/* Right Column: active patient details (mockup) + e-Rx */}
-        <div className="lg:col-span-5 space-y-4">
-          {selectedPat && (
-            <ActiveClinicalConsultationPanel
-              patient={selectedPat}
-              notes={telehealthNotes}
-              onNotesChange={setTelehealthNotes}
-              onOpenClinicalHub={() => onOpenClinicalHub?.(selectedPat)}
-            />
+        {/* Right: patient clinical profile — independent scrollbar so the video does not move */}
+        <div className="lg:col-span-7 min-h-0 h-full flex flex-col">
+          <div
+            className="flex-1 min-h-0 overflow-y-scroll overscroll-contain border border-slate-200 rounded-xl bg-slate-50/80 pr-1"
+            style={{ scrollbarWidth: "thin", scrollbarColor: "#64748b #e2e8f0" }}
+          >
+          {selectedPat ? (
+            <div className="p-1">
+              <div className="px-2 pt-2 pb-1">
+                <span className="bg-red-100 text-red-800 text-[9px] font-extrabold px-2 py-0.5 rounded tracking-wide uppercase">
+                  Active Clinical Consultation Room
+                </span>
+              </div>
+              <DoctorClinicalRecordModal
+                embedded
+                hideClose
+                heightMode="natural"
+                patient={(() => {
+                  const charted = patients.find((p) => p.id === selectedPat.id) || selectedPat;
+                  const apt =
+                    dayVideoAppointments.find((a) => a.patientId === selectedPat.id) || selectedVideoApt;
+                  return mergeClinicalDocuments(apt ? overlayBookingIdentity(apt, charted) : charted);
+                })()}
+                appointments={appointments}
+                billingList={billingList}
+                currentRole={currentRole}
+                clinicName={clinicName || selectedPat.medicalCenter}
+                sessionDoctorName={sessionDoctorName}
+                linkedAppointmentId={focusAppointmentId || selectedVideoApt?.id}
+                onClose={() => undefined}
+                onUpdatePatient={(updated) => onUpdatePatient?.(updated)}
+                onBookAppointment={onBookAppointment}
+                onOrderPathology={onOrderPathology}
+                onUpdateAppointment={onUpdateAppointment}
+                onRenderPrescription={onRenderPrescription}
+              />
+            </div>
+          ) : (
+            <div className="p-8 text-center text-sm text-slate-500">
+              {dayVideoAppointments.length === 0
+                ? "No video consultation today — the patient profile stays empty."
+                : "Click a patient name in today’s available video consultations to open their clinical profile."}
+            </div>
           )}
 
+          {selectedPat && (
+          <>
           {/* SEARCH MEDICATION & ADD TO PRESCRIPTION (RX) — exam-room mockup */}
-          <div className="bg-white border rounded-xl p-4 shadow-xs space-y-3.5">
+          <div className="bg-white border rounded-xl p-4 shadow-xs space-y-3.5 m-1 mb-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-2.5">
               <h3 className="font-bold text-xs uppercase tracking-wider text-[#00334f] flex items-center gap-1.5">
                 <Search className="w-4 h-4 text-teal-700" />
@@ -1228,7 +1248,7 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
                     SRI LANKAN GP CARE • TELEHEALTH
                   </h4>
                   <p className="text-[10px] text-slate-500 font-sans">
-                    Dr. Priyantha Silva (FRACGP, MBBS) • Provider: 4920192A
+                    {sessionDoctorName} (FRACGP, MBBS) • Provider: 4920192A
                   </p>
                 </div>
                 <div className="text-right">
@@ -1242,10 +1262,10 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
               </div>
 
               {/* Patient Banner */}
-              <div className="bg-white p-2 rounded border border-slate-200 font-sans text-[11px] flex justify-between items-center">
+              <div className="bg-white p-2 rounded border border-slate-200 font-sans text-[11px] flex justify-between items-start gap-2">
                 <div>
-                  <strong className="text-slate-900">{selectedPat?.name}</strong>{" "}
-                  <span className="text-slate-400">({selectedPat?.age}y / {selectedPat?.gender})</span>
+                  <strong className="text-slate-900 block">{selectedPat?.name}</strong>
+                  {selectedPat ? <PatientSexAgeBadge gender={selectedPat.gender} age={selectedPat.age} /> : null}
                 </div>
                 <div className="text-right text-[10px]">
                   <span>Allergies: </span>
@@ -1296,17 +1316,13 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
                 )}
               </div>
 
-              {/* Doctor Signature Stamp & Barcode */}
-              <div className="pt-2 border-t border-slate-200 flex items-center justify-between font-sans text-[10px]">
-                <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Dr. Silva Digital Signature Verified</span>
-                </div>
-                <div className="flex items-center gap-1 text-slate-400 font-mono">
-                  <QrCode className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Suwasiri Barcode: {selectedPat?.suwasiriBarcode || "LK-77192"}</span>
-                </div>
-              </div>
+              <DoctorDigitalSeal
+                doctorName={sessionDoctorName}
+                slmcNo="12908"
+                date={new Date().toISOString().split("T")[0]}
+                token={inviteToken}
+                compact
+              />
             </div>
           </div>
 
@@ -1351,6 +1367,9 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
               </div>
             )}
           </div>
+          </>
+          )}
+          </div>
         </div>
       </div>
 
@@ -1383,10 +1402,10 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
                     SRI LANKAN GP CARE MEDICAL PRACTICE
                   </h2>
                   <p className="text-xs text-slate-600 font-sans">
-                    Dr. Priyantha Silva • MBBS (Colombo), FRACGP, Dip. Fam. Med
+                    {sessionDoctorName} • MBBS (Colombo), FRACGP, Dip. Fam. Med
                   </p>
                   <p className="text-[11px] text-slate-500 font-sans">
-                    Provider No: 4920192A • SLMC No: 18492 • Telehealth Accredited
+                    Provider No: 4920192A • SLMC No: 12908 • Telehealth Accredited
                   </p>
                 </div>
                 <div className="text-right font-sans text-xs">
@@ -1399,9 +1418,10 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
               <div className="bg-slate-50 p-3 rounded-lg border font-sans text-xs grid grid-cols-2 gap-2">
                 <div>
                   <span className="text-slate-500">Patient: </span>
-                  <strong className="text-slate-900">{selectedPat?.name}</strong>
-                  <div className="text-[11px] text-slate-500">
-                    ID: {selectedPat?.id} • Age: {selectedPat?.age} yrs • {selectedPat?.gender}
+                  <strong className="text-slate-900 block">{selectedPat?.name}</strong>
+                  {selectedPat ? <PatientSexAgeBadge gender={selectedPat.gender} age={selectedPat.age} /> : null}
+                  <div className="text-[11px] text-slate-500 mt-1">
+                    ID: {selectedPat?.id}
                   </div>
                 </div>
                 <div className="text-right">
@@ -1437,19 +1457,12 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
                 </div>
               </div>
 
-              {/* Doctor Signature & Legal Disclaimer */}
-              <div className="pt-4 border-t flex items-end justify-between font-sans text-xs">
-                <div>
-                  <div className="w-36 h-10 border-b border-slate-400 flex items-center justify-center italic text-sky-900 font-serif font-bold text-sm">
-                    Dr. Priyantha Silva
-                  </div>
-                  <p className="text-[10px] text-slate-500 mt-1">Authorized Medical Practitioner</p>
-                </div>
-                <div className="text-right text-[10px] text-slate-400">
-                  <p>Certified Digital Prescription Delivery</p>
-                  <p>Suwasiri Mobile Integration Active</p>
-                </div>
-              </div>
+              <DoctorDigitalSeal
+                doctorName={sessionDoctorName}
+                slmcNo="12908"
+                date={new Date().toISOString().split("T")[0]}
+                token={inviteToken}
+              />
             </div>
 
             {/* Modal Actions */}
@@ -1484,76 +1497,6 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function ActiveClinicalConsultationPanel({
-  patient,
-  notes,
-  onNotesChange,
-  onOpenClinicalHub,
-}: {
-  patient: Patient;
-  notes: string;
-  onNotesChange: (value: string) => void;
-  onOpenClinicalHub: () => void;
-}) {
-  return (
-    <div className="bg-white border rounded-xl p-5 space-y-4 shadow-xs">
-      <div className="border-b pb-3">
-        <span className="bg-red-100 text-red-800 text-[9px] font-extrabold px-2 py-0.5 rounded tracking-wide uppercase">
-          Active Clinical Consultation Room
-        </span>
-        <h2 className="font-serif font-bold text-xl text-[#00334f] mt-1">{patient.name}</h2>
-        <p className="text-xs text-slate-500">
-          Age parameter: {patient.age} | ID: {patient.id} | Declared sensitivity:{" "}
-          <span className="font-bold text-red-600">{patient.allergies || "None declared"}</span>
-        </p>
-      </div>
-
-      <div className="bg-amber-50 border border-amber-200/60 p-3.5 rounded-lg flex flex-col gap-3 text-xs">
-        <div className="flex items-start gap-2.5">
-          <FileText className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-          <div>
-            <p className="font-bold text-amber-900">Patient asks for a Medical Certificate (MC)?</p>
-            <p className="text-[11px] text-slate-600 mt-0.5">
-              Directly open the Clinical Record Hub section for {patient.name} to view their full medical history and draft/issue certificates.
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onOpenClinicalHub}
-          className="bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 rounded-md font-extrabold text-[10px] uppercase tracking-wider transition-all self-start"
-        >
-          View Clinical Hub (MC Section) →
-        </button>
-      </div>
-
-      <div className="space-y-1.5 text-xs">
-        <label className="block text-[10px] font-extrabold text-slate-500 uppercase">
-          Consultation clinical findings &amp; vitals notes
-        </label>
-        <textarea
-          value={notes}
-          onChange={(e) => onNotesChange(e.target.value)}
-          placeholder="Include symptom onset duration, cardiovascular sounds, throat inflammation check..."
-          className="w-full h-24 p-3 border rounded focus:border-[#00334f] text-xs"
-        />
-      </div>
-
-      <div className="bg-amber-50/60 border border-amber-200 p-3 rounded-lg flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[10px] font-bold text-amber-900 uppercase tracking-wide">Patient known sensitivities &amp; allergies</p>
-          <p className="text-xs font-bold text-red-700 mt-0.5 truncate">{patient.allergies || "None declared"}</p>
-        </div>
-        {patient.allergies && patient.allergies !== "None declared" && (
-          <span className="bg-red-100 border border-red-300 text-red-800 text-[10px] px-2 py-1 rounded font-bold shrink-0">
-            ⚠️ Contraindication Shield Active
-          </span>
-        )}
-      </div>
     </div>
   );
 }

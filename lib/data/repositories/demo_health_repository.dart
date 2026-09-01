@@ -559,6 +559,9 @@ class DemoHealthRepository implements HealthRepository {
     String patientEmail = '',
     String? patientPhone,
     String? paymentMethod,
+    String paymentStatus = 'PAID',
+    bool paidBySuwasiri = false,
+    String? suwasiriReceiptUrl,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 500));
     final taken = await getDoctorBookedSlots(doctor.id);
@@ -585,6 +588,9 @@ class DemoHealthRepository implements HealthRepository {
       branchId: gp.branchId,
       paymentMethod: paymentMethod,
       feeLkr: doctor.feeLkr,
+      paymentStatus: paymentStatus,
+      paidBySuwasiri: paidBySuwasiri,
+      suwasiriReceiptUrl: suwasiriReceiptUrl,
     );
     final all = await _allAppointments();
     final next = [...all, appt];

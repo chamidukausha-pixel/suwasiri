@@ -678,6 +678,17 @@ abstract final class DoctorCatalog {
           feeLkr: 2500,
           bio: 'Family physician at PrimeCare Medical Centre — Colombo Central.',
         ),
+        _doctorAt(
+          id: 'd-chamidu-rathnayake',
+          name: 'Dr. Chamidu Rathnayake',
+          specialty: 'General Practitioner',
+          facility: primeCare,
+          rating: 4.8,
+          yearsExperience: 9,
+          feeLkr: 3000,
+          bio:
+              'General practitioner at PrimeCare Medical Centre — Colombo Central. Searchable from Suwasiri after GP Care Platform Console publish.',
+        ),
       ]);
     }
 

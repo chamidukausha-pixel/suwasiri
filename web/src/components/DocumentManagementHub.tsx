@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   FileText,
   Upload,
@@ -7,9 +7,8 @@ import {
   Eye,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Clock,
-  Search,
-  Filter,
   Download,
   Trash2,
   Edit3,
@@ -19,9 +18,6 @@ import {
   UserCheck,
   Sparkles,
   History,
-  FileSpreadsheet,
-  FileImage,
-  Layers,
   Copy,
   Printer,
   Stethoscope,
@@ -32,6 +28,7 @@ import {
   Plus
 } from "lucide-react";
 import { ClinicalDocument, DocumentCategory, DocumentTemplate, Patient } from "../types";
+import PatientSexAgeBadge from "./PatientSexAgeBadge";
 
 interface Props {
   patients: Patient[];
@@ -41,7 +38,9 @@ interface Props {
   onUpdateStatus?: (docId: string, status: ClinicalDocument["status"]) => void;
   onDigitalSign?: (docId: string, doctorName: string) => void;
   onOpenPatientEverything?: (patient: Patient) => void;
-  onStartConsultation?: (patient: Patient) => void;
+  onStartConsultation?: (patient: Patient, options?: { examTab?: "consultation" | "documents" }) => void;
+  onReviewDocument?: (doc: ClinicalDocument, opts?: { critical?: boolean }) => void;
+  onOpenPatientDocuments?: (patient: Patient) => void;
 }
 
 const SAMPLE_TEMPLATES: DocumentTemplate[] = [
@@ -138,7 +137,7 @@ RECOMMENDATION:
   }
 ];
 
-const INITIAL_DOCUMENTS: ClinicalDocument[] = [
+export const INITIAL_DOCUMENTS: ClinicalDocument[] = [
   {
     id: "doc-101",
     patientId: "9942-LK",
@@ -242,6 +241,16 @@ const INITIAL_DOCUMENTS: ClinicalDocument[] = [
   }
 ];
 
+/** Seed sample correspondence onto the chart so exam-room Documents history matches this hub. */
+export function mergeClinicalDocuments(patient: Patient): Patient {
+  const existing = patient.clinicalDocuments || [];
+  const seeded = INITIAL_DOCUMENTS.filter((d) => d.patientId === patient.id);
+  const byId = new Map<string, ClinicalDocument>();
+  seeded.forEach((d) => byId.set(d.id, d));
+  existing.forEach((d) => byId.set(d.id, d));
+  return { ...patient, clinicalDocuments: Array.from(byId.values()) };
+}
+
 export default function DocumentManagementHub({
   patients,
   documents: initialDocs = INITIAL_DOCUMENTS,
@@ -250,15 +259,12 @@ export default function DocumentManagementHub({
   onUpdateStatus,
   onDigitalSign,
   onOpenPatientEverything,
-  onStartConsultation
+  onStartConsultation,
+  onReviewDocument,
+  onOpenPatientDocuments,
 }: Props) {
   const [documents, setDocuments] = useState<ClinicalDocument[]>(initialDocs);
   const [selectedDoc, setSelectedDoc] = useState<ClinicalDocument | null>(documents[0] || null);
-  const [viewLayout, setViewLayout] = useState<"PATIENT_GROUPED" | "ALL_DOCS">("PATIENT_GROUPED");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
-  const [statusFilter, setStatusFilter] = useState<string>("ALL");
-  const [patientFilter, setPatientFilter] = useState<string>("ALL");
 
   // Upload & Scanner Modal State
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -266,6 +272,7 @@ export default function DocumentManagementHub({
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showVersionHistoryModal, setShowVersionHistoryModal] = useState(false);
   const [viewingDocModal, setViewingDocModal] = useState<ClinicalDocument | null>(null);
+  const [showAddDocChooser, setShowAddDocChooser] = useState(false);
   const [suwasiriSyncedDocs, setSuwasiriSyncedDocs] = useState<Record<string, string>>({});
   const [syncingDocId, setSyncingDocId] = useState<string | null>(null);
 
@@ -279,11 +286,15 @@ export default function DocumentManagementHub({
   const [newDocIsConfidential, setNewDocIsConfidential] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string>("");
   const [uploadedFileSize, setUploadedFileSize] = useState<number>(350);
+  const [uploadedFileDataUrl, setUploadedFileDataUrl] = useState<string>("");
+  const [dropActive, setDropActive] = useState(false);
 
   // Scanner Simulation State
   const [scannerStatus, setScannerStatus] = useState<"READY" | "SCANNING" | "CROPPING" | "COMPLETED">("READY");
   const [scanContrast, setScanContrast] = useState(100);
   const [scanDpi, setScanDpi] = useState("300 DPI");
+  const [scanPreviewUrl, setScanPreviewUrl] = useState("");
+  const [scannerCameraError, setScannerCameraError] = useState("");
 
   // Template State
   const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate>(SAMPLE_TEMPLATES[0]);
@@ -291,30 +302,42 @@ export default function DocumentManagementHub({
   const [templatePatientId, setTemplatePatientId] = useState(patients[0]?.id || "");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const scanFileInputRef = useRef<HTMLInputElement>(null);
+  const scanVideoRef = useRef<HTMLVideoElement>(null);
+  const scanStreamRef = useRef<MediaStream | null>(null);
 
-  // Filtered documents
-  const filteredDocs = documents.filter((doc) => {
-    const matchesSearch =
-      doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      doc.patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      doc.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (doc.summaryNotes && doc.summaryNotes.toLowerCase().includes(searchQuery.toLowerCase()));
+  useEffect(() => {
+    const fromPatients = patients.flatMap((p) => p.clinicalDocuments || []);
+    if (fromPatients.length === 0) return;
+    setDocuments((prev) => {
+      const map = new Map(prev.map((d) => [d.id, d]));
+      fromPatients.forEach((d) => map.set(d.id, d));
+      return Array.from(map.values());
+    });
+  }, [patients]);
 
-    const matchesCategory = categoryFilter === "ALL" || doc.category === categoryFilter;
-    const matchesStatus = statusFilter === "ALL" || doc.status === statusFilter;
-    const matchesPatient = patientFilter === "ALL" || doc.patientId === patientFilter;
+  const stopScannerCamera = () => {
+    scanStreamRef.current?.getTracks().forEach((t) => t.stop());
+    scanStreamRef.current = null;
+    if (scanVideoRef.current) scanVideoRef.current.srcObject = null;
+  };
 
-    return matchesSearch && matchesCategory && matchesStatus && matchesPatient;
-  });
+  const applyPickedFile = (file: File) => {
+    setUploadedFileName(file.name);
+    setUploadedFileSize(Math.round(file.size / 1024) || 1);
+    if (!newDocTitle) {
+      setNewDocTitle(file.name.replace(/\.[^/.]+$/, ""));
+    }
+    const reader = new FileReader();
+    reader.onload = () => setUploadedFileDataUrl(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  };
+
+  const filteredDocs = documents;
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setUploadedFileName(file.name);
-      setUploadedFileSize(Math.round(file.size / 1024));
-      if (!newDocTitle) {
-        setNewDocTitle(file.name.replace(/\.[^/.]+$/, ""));
-      }
+      applyPickedFile(e.target.files[0]);
     }
   };
 
@@ -327,8 +350,9 @@ export default function DocumentManagementHub({
       patientName: assignedPatient ? assignedPatient.name : "Unassigned Patient",
       title: newDocTitle || "Uploaded Clinical Document",
       category: newDocCategory,
-      fileType: uploadedFileName.endsWith(".png") || uploadedFileName.endsWith(".jpg") ? "IMAGE_JPEG" : "PDF",
+      fileType: uploadedFileName.match(/\.(png|jpe?g)$/i) ? "IMAGE_JPEG" : uploadedFileName.match(/\.png$/i) ? "IMAGE_PNG" : "PDF",
       fileSizeKb: uploadedFileSize || 450,
+      fileUrl: uploadedFileDataUrl || undefined,
       uploadedBy: "Practitioner Portal",
       uploadedDate: new Date().toISOString().replace("T", " ").substring(0, 16),
       allocatedDoctor: newDocDoctor,
@@ -351,6 +375,7 @@ export default function DocumentManagementHub({
     setDocuments((prev) => [newDoc, ...prev]);
     setSelectedDoc(newDoc);
     setShowUploadModal(false);
+    setUploadedFileDataUrl("");
     // Reset form
     setNewDocTitle("");
     setNewDocNotes("");
@@ -370,6 +395,68 @@ export default function DocumentManagementHub({
     }, 1200);
   };
 
+  const startScannerCamera = async () => {
+    setScannerCameraError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+      });
+      scanStreamRef.current = stream;
+      if (scanVideoRef.current) {
+        scanVideoRef.current.srcObject = stream;
+        await scanVideoRef.current.play();
+      }
+    } catch {
+      setScannerCameraError("Camera not available. Use Acquire from scanner, or Scan Now for the connected flatbed.");
+    }
+  };
+
+  const captureScannerFrame = () => {
+    const video = scanVideoRef.current;
+    if (!video || !video.videoWidth) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.filter = `contrast(${scanContrast}%)`;
+    ctx.drawImage(video, 0, 0);
+    setScanPreviewUrl(canvas.toDataURL("image/jpeg", 0.92));
+    setScannerStatus("COMPLETED");
+  };
+
+  const handleScanFilePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setScanPreviewUrl(String(reader.result || ""));
+      setScannerStatus("COMPLETED");
+      setUploadedFileName(file.name);
+      setUploadedFileSize(Math.round(file.size / 1024) || 1);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const openAddDocChooser = (patientId: string) => {
+    setNewDocPatientId(patientId);
+    setShowAddDocChooser(true);
+  };
+
+  const closeScannerModal = () => {
+    stopScannerCamera();
+    setShowScannerModal(false);
+    setScannerStatus("READY");
+    setScanPreviewUrl("");
+    setScannerCameraError("");
+  };
+
+  useEffect(() => {
+    if (!showScannerModal) return;
+    void startScannerCamera();
+    return () => stopScannerCamera();
+  }, [showScannerModal]);
+
   const handleSaveScannedDocument = () => {
     const assignedPatient = patients.find((p) => p.id === newDocPatientId) || patients[0];
     const newDoc: ClinicalDocument = {
@@ -379,8 +466,9 @@ export default function DocumentManagementHub({
       title: `Scanned Physical Record - ${new Date().toLocaleDateString()}`,
       category: "Specialist Letters",
       fileType: "SCANNED_DOC",
-      fileSizeKb: 890,
-      uploadedBy: "Flatbed TWAIN Scanner",
+      fileSizeKb: uploadedFileSize || 890,
+      fileUrl: scanPreviewUrl || undefined,
+      uploadedBy: "Clinic scanner / camera",
       uploadedDate: new Date().toISOString().replace("T", " ").substring(0, 16),
       allocatedDoctor: "Dr. Priyantha Silva",
       status: "PENDING_DOCTOR_REVIEW",
@@ -401,8 +489,8 @@ export default function DocumentManagementHub({
 
     setDocuments((prev) => [newDoc, ...prev]);
     setSelectedDoc(newDoc);
-    setShowScannerModal(false);
-    setScannerStatus("READY");
+    closeScannerModal();
+    if (onUploadDocument) onUploadDocument(newDoc);
     alert(`Scanned document successfully digitized and allocated to ${newDoc.patientName}!`);
   };
 
@@ -458,6 +546,7 @@ export default function DocumentManagementHub({
     setDocuments((prev) => [newDoc, ...prev]);
     setSelectedDoc(newDoc);
     setShowTemplateModal(false);
+    if (onUploadDocument) onUploadDocument(newDoc);
     alert(`Generated document "${newDoc.title}" and filed to patient record!`);
   };
 
@@ -502,6 +591,50 @@ export default function DocumentManagementHub({
     alert("Document successfully signed with Australian Digital Health Agency cryptographic verification token!");
   };
 
+  const handleReviewDocument = (doc: ClinicalDocument, critical: boolean, opts?: { openProfile?: boolean }) => {
+    const stamp = new Date().toISOString().replace("T", " ").substring(0, 16);
+    const next: ClinicalDocument = {
+      ...doc,
+      status: critical ? "ACTION_REQUIRED" : "REVIEWED_NORMAL",
+      versionHistory: [
+        ...doc.versionHistory,
+        {
+          versionNumber: doc.versionHistory.length + 1,
+          timestamp: stamp,
+          author: "Dr. Priyantha Silva",
+          notes: critical
+            ? "Marked Critical / Alert — reception should call and rebook"
+            : "Doctor reviewed — filed to patient document chart",
+          fileSizeKb: doc.fileSizeKb,
+        },
+      ],
+    };
+    setDocuments((prev) => prev.map((d) => (d.id === doc.id ? next : d)));
+    if (selectedDoc?.id === doc.id) setSelectedDoc(next);
+    setViewingDocModal((prev) => (prev?.id === doc.id ? next : prev));
+    if (onUploadDocument) onUploadDocument(next);
+    if (onReviewDocument) onReviewDocument(next, { critical });
+    if (opts?.openProfile === false) return;
+    setViewingDocModal(null);
+    const pat = patients.find((p) => p.id === next.patientId);
+    if (!pat || !onOpenPatientDocuments) return;
+    const existing = pat.clinicalDocuments || [];
+    const clinicalDocuments = existing.some((d) => d.id === next.id)
+      ? existing.map((d) => (d.id === next.id ? next : d))
+      : [next, ...existing];
+    onOpenPatientDocuments({ ...pat, clinicalDocuments });
+  };
+
+  const handleReviewPatientDocs = (patient: Patient, docs: ClinicalDocument[], critical: boolean) => {
+    const pending = docs.filter((d) => d.status !== "REVIEWED_NORMAL" && d.status !== "ARCHIVED");
+    const targets = pending.length > 0 ? pending : docs;
+    if (targets.length === 0) {
+      onOpenPatientDocuments?.(patient);
+      return;
+    }
+    targets.forEach((d, i) => handleReviewDocument(d, critical, { openProfile: i === targets.length - 1 }));
+  };
+
   const handleAllocate = (docId: string, newPatientId: string) => {
     const targetPatient = patients.find((p) => p.id === newPatientId);
     if (!targetPatient) return;
@@ -540,6 +673,13 @@ export default function DocumentManagementHub({
       );
     }
     if (onAllocateDocument) onAllocateDocument(docId, targetPatient.id, "Dr. Priyantha Silva");
+    const allocated: ClinicalDocument = {
+      ...(documents.find((d) => d.id === docId) as ClinicalDocument),
+      patientId: targetPatient.id,
+      patientName: targetPatient.name,
+      status: "PENDING_DOCTOR_REVIEW",
+    };
+    if (onUploadDocument) onUploadDocument(allocated);
     alert(`Document allocated to ${targetPatient.name}'s EMR record!`);
   };
 
@@ -600,6 +740,84 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
     URL.revokeObjectURL(url);
   };
 
+  const documentReviewActions = (doc: ClinicalDocument) => (
+    <div className="flex flex-col items-stretch gap-1.5 shrink-0 min-w-[132px]">
+      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Review</span>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleReviewDocument(doc, false);
+        }}
+        className="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer justify-center"
+        title="Review: file to this patient’s document chart, then open their profile Documents"
+      >
+        <CheckCircle2 className="w-3 h-3" />
+        Review
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleReviewDocument(doc, true);
+        }}
+        className="bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer justify-center"
+        title="Mark critical / alert, then open this patient’s profile Documents"
+      >
+        <AlertTriangle className="w-3 h-3" />
+        Critical / Alert
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleDownloadPdf(doc);
+        }}
+        className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-xs cursor-pointer justify-center"
+        title="Download this document as PDF"
+      >
+        <Download className="w-3 h-3" />
+        PDF
+      </button>
+    </div>
+  );
+
+  const patientReviewActions = (patient: Patient, docs: ClinicalDocument[]) => (
+    <div className="flex flex-col items-stretch gap-1.5 shrink-0 min-w-[132px]">
+      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Review</span>
+      <button
+        type="button"
+        onClick={() => handleReviewPatientDocs(patient, docs, false)}
+        className="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer justify-center"
+        title="Review this patient’s documents and open their profile Documents"
+      >
+        <CheckCircle2 className="w-3 h-3" />
+        Review
+      </button>
+      <button
+        type="button"
+        onClick={() => handleReviewPatientDocs(patient, docs, true)}
+        className="bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer justify-center"
+        title="Mark this patient’s documents critical and open their profile Documents"
+      >
+        <AlertTriangle className="w-3 h-3" />
+        Critical / Alert
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (docs[0]) handleDownloadPdf(docs[0]);
+        }}
+        disabled={docs.length === 0}
+        className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-xs cursor-pointer justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+        title="Download the latest document as PDF"
+      >
+        <Download className="w-3 h-3" />
+        PDF
+      </button>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       {/* Top Header & Quick Actions */}
@@ -630,103 +848,18 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
               Document Templates
             </button>
 
-            <button
-              onClick={() => setShowScannerModal(true)}
-              className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-3.5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
-            >
-              <Camera className="w-4 h-4 text-amber-600" />
-              Scan Documents (TWAIN)
-            </button>
-
-            <button
-              onClick={() => setShowUploadModal(true)}
-              className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
-            >
-              <Upload className="w-4 h-4" />
-              Upload PDF / Image
-            </button>
           </div>
         </div>
 
-        {/* Filter Toolbar & View Layout Switcher */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mt-6 pt-4 border-t border-slate-100 items-center">
-          <div className="relative md:col-span-4">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search title, patient, tags..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:border-[#00334f]"
-            />
-          </div>
-
-          <div className="md:col-span-3">
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none text-slate-700 bg-white"
-            >
-              <option value="ALL">All Categories ({documents.length})</option>
-              <option value="Pathology Reports">Pathology Reports</option>
-              <option value="Imaging Reports">Imaging Reports</option>
-              <option value="Specialist Letters">Specialist Letters</option>
-              <option value="Clinical Correspondence">Clinical Correspondence</option>
-              <option value="Medical Certificates">Medical Certificates</option>
-              <option value="Discharge Summaries">Discharge Summaries</option>
-            </select>
-          </div>
-
-          <div className="md:col-span-2">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none text-slate-700 bg-white"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="PENDING_DOCTOR_REVIEW">Pending Review</option>
-              <option value="REVIEWED_NORMAL">Reviewed & Normal</option>
-              <option value="ACTION_REQUIRED">Action Required</option>
-            </select>
-          </div>
-
-          <div className="md:col-span-3 flex items-center justify-end gap-1 bg-slate-100 p-1 rounded-lg border">
-            <button
-              type="button"
-              onClick={() => setViewLayout("PATIENT_GROUPED")}
-              className={`flex-1 py-1.5 px-2 rounded text-[11px] font-bold transition flex items-center justify-center gap-1 ${
-                viewLayout === "PATIENT_GROUPED"
-                  ? "bg-white text-[#00334f] shadow-xs border border-slate-200"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <FolderOpen className="w-3.5 h-3.5" />
-              Under Patient Names
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewLayout("ALL_DOCS")}
-              className={`flex-1 py-1.5 px-2 rounded text-[11px] font-bold transition flex items-center justify-center gap-1 ${
-                viewLayout === "ALL_DOCS"
-                  ? "bg-white text-[#00334f] shadow-xs border border-slate-200"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              All Documents
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* VIEW MODE 1: DOCUMENTS GROUPED UNDER PATIENT NAMES (Doctor-requested view) */}
-      {viewLayout === "PATIENT_GROUPED" ? (
-        <div className="space-y-4">
+      <div className="space-y-4">
           <div className="bg-sky-50 border border-sky-200 rounded-xl p-3.5 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FolderOpen className="w-4 h-4 text-sky-700 shrink-0" />
               <p className="text-xs text-sky-900">
-                <strong>Patient-Centric Document Index:</strong> Documents organized strictly under each patient. Click any <span className="font-bold underline cursor-pointer">Patient's Name</span> to view their complete 16-tab clinical file (everything) or launch the GP Exam Room.
+                <strong>Patient document index:</strong> Every patient shows Review / Critical / PDF. Completing a review files the document onto that patient’s profile <span className="font-bold">Documents</span> tab.
               </p>
             </div>
             <span className="text-xs font-bold text-sky-800 shrink-0">
@@ -758,25 +891,23 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
                           {patient.name.split(" ").map((n) => n[0]).join("")}
                         </div>
                         <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            {/* Patient name triggers Full Record view */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (onOpenPatientEverything) {
-                                  onOpenPatientEverything(patient);
-                                } else if (onStartConsultation) {
-                                  onStartConsultation(patient);
-                                }
-                              }}
-                              className="font-serif font-bold text-base text-[#00334f] hover:text-sky-700 hover:underline transition-colors flex items-center gap-1.5 text-left group cursor-pointer"
-                              title="Click to view complete 16-Tab Clinical Record (shows everything)"
-                            >
-                              <span>{patient.name}</span>
-                              <span className="text-[11px] font-sans font-normal text-sky-600 group-hover:underline">
-                                (Registered Patient)
-                              </span>
-                            </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onStartConsultation) {
+                                onStartConsultation(patient, { examTab: "documents" });
+                              }
+                            }}
+                            className="font-serif font-bold text-base text-[#00334f] hover:text-sky-700 hover:underline transition-colors flex items-center gap-1.5 text-left group cursor-pointer"
+                            title="Open GP Exam Room Documents history"
+                          >
+                            <span>{patient.name}</span>
+                            <span className="text-[11px] font-sans font-normal text-sky-600 group-hover:underline">
+                              (Registered Patient)
+                            </span>
+                          </button>
+                          <PatientSexAgeBadge gender={patient.gender} age={patient.age} />
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
                             <span className="text-xs text-slate-400 font-mono">[{patient.id}]</span>
                             {patient.medicareNumber && (
                               <span className="bg-sky-50 text-sky-800 text-[10px] font-bold px-2 py-0.5 rounded border border-sky-200">
@@ -792,13 +923,13 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
                             </span>
                           </div>
                           <p className="text-xs text-slate-500 mt-0.5">
-                            {patient.age} yrs • {patient.gender} • Blood: {patient.bloodType} • Allergies: <span className="text-rose-600 font-medium">{patient.allergies}</span>
+                            Blood: {patient.bloodType} • Allergies: <span className="text-rose-600 font-medium">{patient.allergies}</span>
                           </p>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        {/* IN EXAM ROOM button requested by user */}
+                      <div className="flex items-start gap-3 shrink-0">
+                        {patientReviewActions(patient, docs)}
                         {onStartConsultation && (
                           <button
                             type="button"
@@ -812,10 +943,7 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
                         )}
                         <button
                           type="button"
-                          onClick={() => {
-                            setNewDocPatientId(patient.id);
-                            setShowUploadModal(true);
-                          }}
+                          onClick={() => openAddDocChooser(patient.id)}
                           className="bg-sky-50 hover:bg-sky-100 text-sky-900 border border-sky-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
                         >
                           <Plus className="w-3.5 h-3.5" />
@@ -826,9 +954,12 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
                           onClick={() => {
                             if (onOpenPatientEverything) {
                               onOpenPatientEverything(patient);
+                            } else if (onStartConsultation) {
+                              onStartConsultation(patient, { examTab: "consultation" });
                             }
                           }}
                           className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
+                          title="Open GP Exam Room clinical profile"
                         >
                           <FileText className="w-3.5 h-3.5" />
                           Full File
@@ -842,13 +973,10 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
                         <p className="text-xs text-slate-500 italic">No external documents filed yet for {patient.name}.</p>
                         <button
                           type="button"
-                          onClick={() => {
-                            setNewDocPatientId(patient.id);
-                            setShowUploadModal(true);
-                          }}
+                          onClick={() => openAddDocChooser(patient.id)}
                           className="mt-2 text-xs font-bold text-sky-700 hover:underline inline-flex items-center gap-1 cursor-pointer"
                         >
-                          <Upload className="w-3 h-3" /> Upload Clinical PDF or Scan Paper Document
+                          <Plus className="w-3 h-3" /> Add Doc — scan or drag and drop
                         </button>
                       </div>
                     ) : (
@@ -923,52 +1051,29 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
                                 )}
                               </div>
 
-                              <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
-                                {doc.signatureStatus === "SIGNED_DIGITALLY" ? (
-                                  <span className="text-emerald-700 font-bold text-[10px] flex items-center gap-0.5">
-                                    <CheckCircle2 className="w-3 h-3" /> Signed
-                                  </span>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSignDocument(doc.id);
-                                    }}
-                                    className="text-purple-700 hover:text-purple-900 font-bold text-[10px] flex items-center gap-0.5 hover:underline cursor-pointer"
-                                  >
-                                    <ShieldCheck className="w-3 h-3" /> Sign Digitally
-                                  </button>
-                                )}
-
-                                <div className="flex items-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSyncToSuwasiri(doc)}
-                                    disabled={syncingDocId === doc.id}
-                                    className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 px-2 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer border border-emerald-200"
-                                    title="Sync document to Patient's Suwasiri Mobile App"
-                                  >
-                                    <Smartphone className="w-3 h-3" />
-                                    {syncingDocId === doc.id ? "Syncing..." : isSynced ? "Re-sync" : "Sync App"}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setViewingDocModal(doc)}
-                                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
-                                    title="Open document viewer"
-                                  >
-                                    <Eye className="w-3 h-3" /> View
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDownloadPdf(doc)}
-                                    className="text-slate-500 hover:text-slate-900 p-1 cursor-pointer hover:bg-slate-100 rounded"
-                                    title="Download Document PDF"
-                                  >
-                                    <Download className="w-3.5 h-3.5 text-sky-700" />
-                                  </button>
+                              <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  {doc.signatureStatus === "SIGNED_DIGITALLY" ? (
+                                    <span className="text-emerald-700 font-bold text-[10px] flex items-center gap-0.5">
+                                      <CheckCircle2 className="w-3 h-3" /> Signed
+                                    </span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSignDocument(doc.id);
+                                      }}
+                                      className="text-purple-700 hover:text-purple-900 font-bold text-[10px] flex items-center gap-0.5 hover:underline cursor-pointer"
+                                    >
+                                      <ShieldCheck className="w-3 h-3" /> Sign Digitally
+                                    </button>
+                                  )}
+                                  {isSynced && (
+                                    <p className="text-[9px] text-emerald-700 mt-1">Synced {isSynced}</p>
+                                  )}
                                 </div>
+                                {documentReviewActions(doc)}
                               </div>
                             </div>
                           );
@@ -1024,8 +1129,7 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
                             <button
                               type="button"
                               onClick={() => {
-                                setSelectedDoc(doc);
-                                setViewLayout("ALL_DOCS");
+                                setViewingDocModal(doc);
                               }}
                               className="bg-slate-100 p-1.5 rounded text-slate-700"
                             >
@@ -1041,298 +1145,60 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
             );
           })()}
         </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column: Documents List */}
-          <div className="lg:col-span-5 space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Matching Documents ({filteredDocs.length})
-            </span>
-            <span className="text-[11px] text-slate-400">Click to preview & allocate</span>
-          </div>
 
-          <div className="space-y-2 max-h-[750px] overflow-y-auto pr-1">
-            {filteredDocs.length === 0 ? (
-              <div className="bg-white border rounded-xl p-8 text-center text-slate-400 space-y-2">
-                <FileText className="w-10 h-10 mx-auto text-slate-300" />
-                <p className="text-sm font-semibold">No documents found matching query</p>
-                <p className="text-xs">Try resetting search filters or upload a new clinical PDF.</p>
-              </div>
-            ) : (
-              filteredDocs.map((doc) => {
-                const isSelected = selectedDoc?.id === doc.id;
-                const isUnassigned = doc.patientId === "UNALLOCATED";
-
-                return (
-                  <div
-                    key={doc.id}
-                    onClick={() => setSelectedDoc(doc)}
-                    className={`p-4 rounded-xl border transition cursor-pointer text-left ${
-                      isSelected
-                        ? "bg-[#e7eeff] border-[#00334f] shadow-xs"
-                        : isUnassigned
-                        ? "bg-amber-50/70 border-amber-200 hover:border-amber-400"
-                        : "bg-white border-slate-200 hover:border-slate-300"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-start gap-2.5">
-                        <div
-                          className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
-                            doc.category === "Pathology Reports"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : doc.category === "Imaging Reports"
-                              ? "bg-sky-100 text-sky-800"
-                              : doc.category === "Specialist Letters"
-                              ? "bg-purple-100 text-purple-800"
-                              : "bg-slate-100 text-slate-800"
-                          }`}
-                        >
-                          {doc.fileType === "PDF" ? "PDF" : doc.fileType === "SCANNED_DOC" ? "SCN" : "IMG"}
-                        </div>
-
-                        <div>
-                          <h4 className="text-xs font-bold text-slate-900 line-clamp-1">{doc.title}</h4>
-                          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
-                            <span className={isUnassigned ? "text-amber-800 font-bold" : "font-medium text-slate-700"}>
-                              {doc.patientName}
-                            </span>
-                            <span>•</span>
-                            <span>{doc.uploadedDate}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="shrink-0 text-right">
-                        <span
-                          className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                            doc.status === "REVIEWED_NORMAL"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : doc.status === "ACTION_REQUIRED"
-                              ? "bg-rose-100 text-rose-800"
-                              : "bg-amber-100 text-amber-800"
-                          }`}
-                        >
-                          {doc.status.replace(/_/g, " ")}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-100/80 text-[11px] text-slate-500">
-                      <div className="flex items-center gap-1">
-                        <Tag className="w-3 h-3 text-slate-400" />
-                        <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">
-                          {doc.category}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {doc.signatureStatus === "SIGNED_DIGITALLY" && (
-                          <span className="flex items-center gap-0.5 text-emerald-700 font-bold text-[10px]">
-                            <CheckCircle2 className="w-3 h-3" /> Signed
-                          </span>
-                        )}
-                        <span className="text-[10px] text-slate-400">{doc.fileSizeKb} KB</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Right Column: Active Document Inspector & Preview */}
-        <div className="lg:col-span-7">
-          {selectedDoc ? (
-            <div className="bg-white border rounded-xl p-6 shadow-xs space-y-6">
-              {/* Document Header */}
-              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b pb-4">
+      {/* ADD DOC CHOOSER */}
+      {showAddDocChooser && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-bold text-base text-[#00334f]">Add document</h3>
+              <button
+                type="button"
+                onClick={() => setShowAddDocChooser(false)}
+                className="text-slate-400 hover:text-slate-600 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">
+              File to {patients.find((p) => p.id === newDocPatientId)?.name || "this patient"}’s Documents history.
+            </p>
+            <div className="grid grid-cols-1 gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddDocChooser(false);
+                  setShowScannerModal(true);
+                }}
+                className="flex items-start gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 text-left transition"
+              >
+                <Camera className="w-6 h-6 text-amber-700 shrink-0 mt-0.5" />
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded">
-                      {selectedDoc.category}
-                    </span>
-                    <span className="text-xs text-slate-400">ID: #{selectedDoc.id}</span>
-                  </div>
-                  <h2 className="text-base font-bold text-[#00334f] mt-1.5">{selectedDoc.title}</h2>
-                  <p className="text-xs text-slate-600 mt-0.5">
-                    Allocated Patient: <strong className="text-slate-900">{selectedDoc.patientName}</strong> (ID: {selectedDoc.patientId})
+                  <p className="text-sm font-bold text-amber-950">Scan</p>
+                  <p className="text-[11px] text-amber-800 mt-0.5">
+                    Acquire from a connected scanner, webcam, or phone camera.
                   </p>
                 </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={() => setShowVersionHistoryModal(true)}
-                    className="px-2.5 py-1.5 border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold rounded-lg flex items-center gap-1 transition"
-                  >
-                    <History className="w-3.5 h-3.5 text-slate-500" />
-                    v{selectedDoc.versionHistory.length} History
-                  </button>
-
-                  {selectedDoc.signatureStatus !== "SIGNED_DIGITALLY" ? (
-                    <button
-                      onClick={() => handleSignDocument(selectedDoc.id)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-xs transition"
-                    >
-                      <FileCheck className="w-3.5 h-3.5" />
-                      Sign Digitally
-                    </button>
-                  ) : (
-                    <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                      AHPRA Verified Signature
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Patient Allocation Warning / Selector if Unassigned */}
-              {selectedDoc.patientId === "UNALLOCATED" && (
-                <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl space-y-3">
-                  <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
-                    <AlertCircle className="w-4 h-4 text-amber-600" />
-                    Unallocated Inbound Document — Allocate to Patient EMR Chart
-                  </div>
-                  <div className="flex flex-col sm:flex-row items-center gap-2">
-                    <select
-                      id="reallocate-select"
-                      className="flex-1 text-xs p-2 border rounded-lg bg-white font-semibold text-slate-800 outline-none"
-                      defaultValue={patients[0]?.id}
-                    >
-                      {patients.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({p.age}y, DOB: {p.dateOfBirth || "1988"}) - ID: {p.id}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={() => {
-                        const sel = document.getElementById("reallocate-select") as HTMLSelectElement;
-                        if (sel) handleAllocate(selectedDoc.id, sel.value);
-                      }}
-                      className="bg-amber-700 hover:bg-amber-800 text-white px-4 py-2 rounded-lg text-xs font-bold transition shadow-xs"
-                    >
-                      Allocate & File
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Document Meta Info Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-slate-50 p-4 rounded-xl border border-slate-100">
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddDocChooser(false);
+                  setShowUploadModal(true);
+                }}
+                className="flex items-start gap-3 p-4 rounded-xl border border-sky-200 bg-slate-50 hover:bg-sky-50 text-left transition"
+              >
+                <Upload className="w-6 h-6 text-[#00334f] shrink-0 mt-0.5" />
                 <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Uploaded By</span>
-                  <span className="font-semibold text-slate-700">{selectedDoc.uploadedBy}</span>
+                  <p className="text-sm font-bold text-[#00334f]">Drag and drop / Browse</p>
+                  <p className="text-[11px] text-slate-600 mt-0.5">
+                    Drop a PDF or image here, or browse your computer.
+                  </p>
                 </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Upload Date</span>
-                  <span className="font-semibold text-slate-700">{selectedDoc.uploadedDate}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Doctor In Charge</span>
-                  <span className="font-semibold text-slate-700">{selectedDoc.allocatedDoctor}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">File Specifications</span>
-                  <span className="font-semibold text-slate-700">
-                    {selectedDoc.fileType} • {selectedDoc.fileSizeKb} KB
-                  </span>
-                </div>
-              </div>
-
-              {/* Document Visual Preview & OCR Text Panel */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <div className="bg-slate-100 px-4 py-2 border-b flex items-center justify-between text-xs font-bold text-slate-700">
-                  <div className="flex items-center gap-2">
-                    <Eye className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Clinical Viewer & OCR Extracted Body</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(selectedDoc.ocrExtractedText || selectedDoc.summaryNotes || "");
-                        alert("Extracted document content copied to clipboard!");
-                      }}
-                      className="hover:text-[#00334f] text-slate-500 text-[11px] flex items-center gap-1 font-semibold"
-                    >
-                      <Copy className="w-3 h-3" /> Copy Text
-                    </button>
-                    <button
-                      onClick={() => window.print()}
-                      className="hover:text-[#00334f] text-slate-500 text-[11px] flex items-center gap-1 font-semibold"
-                    >
-                      <Printer className="w-3 h-3" /> Print
-                    </button>
-                  </div>
-                </div>
-
-                <div className="p-6 bg-slate-900 text-slate-100 font-mono text-xs leading-relaxed max-h-[360px] overflow-y-auto whitespace-pre-wrap select-text">
-                  {selectedDoc.ocrExtractedText || (
-                    <div className="text-slate-300">
-                      ========================================================================{"\n"}
-                      DOCUMENT REPOSITORY RECORD: {selectedDoc.title.toUpperCase()}
-                      {"\n"}
-                      PATIENT: {selectedDoc.patientName} | CATEGORY: {selectedDoc.category}
-                      {"\n"}
-                      ========================================================================{"\n\n"}
-                      {selectedDoc.summaryNotes || "Document content verified and archived in electronic chart."}
-                      {"\n\n"}
-                      --- DIGITAL AUDIT STAMP ---{"\n"}
-                      Status: {selectedDoc.status}{"\n"}
-                      Sign-off: {selectedDoc.signedBy || "Awaiting Doctor Verification"}{"\n"}
-                      Timestamp: {selectedDoc.signedDate || selectedDoc.uploadedDate}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Doctor Review Actions & Notes Form */}
-              <div className="space-y-3 pt-2">
-                <label className="text-xs font-bold text-slate-700 block">
-                  Doctor Clinical Review Notes & Action Instructions
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    defaultValue={selectedDoc.summaryNotes || ""}
-                    placeholder="e.g. Reviewed with patient. HbA1c stable, repeat in 6 months."
-                    className="flex-1 text-xs p-2.5 border rounded-lg outline-none focus:border-[#00334f]"
-                    id="doc-review-notes"
-                  />
-                  <button
-                    onClick={() => {
-                      const inp = document.getElementById("doc-review-notes") as HTMLInputElement;
-                      if (inp) {
-                        setDocuments((prev) =>
-                          prev.map((d) =>
-                            d.id === selectedDoc.id
-                              ? { ...d, summaryNotes: inp.value, status: "REVIEWED_NORMAL" }
-                              : d
-                          )
-                        );
-                        setSelectedDoc((prev) =>
-                          prev ? { ...prev, summaryNotes: inp.value, status: "REVIEWED_NORMAL" } : null
-                        );
-                        alert("Review notes saved and document marked as Reviewed!");
-                      }
-                    }}
-                    className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-4 py-2 rounded-lg text-xs font-bold transition shadow-xs"
-                  >
-                    Save Review
-                  </button>
-                </div>
-              </div>
+              </button>
             </div>
-          ) : (
-            <div className="bg-white border rounded-xl p-12 text-center text-slate-400">
-              <FolderOpen className="w-12 h-12 mx-auto text-slate-300 mb-2" />
-              <p className="font-semibold text-sm">Select a clinical document on the left to inspect</p>
-            </div>
-          )}
+          </div>
         </div>
-      </div>
       )}
 
       {/* MODAL 1: UPLOAD DOCUMENT FORM */}
@@ -1342,7 +1208,7 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
             <div className="flex items-center justify-between border-b pb-3">
               <div className="flex items-center gap-2">
                 <Upload className="w-5 h-5 text-[#00334f]" />
-                <h3 className="font-bold text-base text-[#00334f]">Upload Clinical Document / Electronic Ingest</h3>
+                <h3 className="font-bold text-base text-[#00334f]">Drag and drop / Browse</h3>
               </div>
               <button
                 onClick={() => setShowUploadModal(false)}
@@ -1356,20 +1222,37 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
               {/* File Dropzone */}
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-sky-300 hover:border-[#00334f] bg-sky-50/50 hover:bg-sky-50/80 p-6 rounded-xl text-center cursor-pointer transition space-y-2"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDropActive(true);
+                }}
+                onDragLeave={() => setDropActive(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDropActive(false);
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) applyPickedFile(file);
+                }}
+                className={`border-2 border-dashed p-6 rounded-xl text-center cursor-pointer transition space-y-2 ${
+                  dropActive
+                    ? "border-[#00334f] bg-sky-100"
+                    : "border-slate-300 hover:border-[#00334f] bg-slate-50 hover:bg-sky-50/80"
+                }`}
               >
                 <input
                   type="file"
                   ref={fileInputRef}
                   onChange={handleFileUpload}
                   className="hidden"
-                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,image/*,application/pdf"
                 />
-                <FileSpreadsheet className="w-8 h-8 mx-auto text-sky-600" />
+                <Upload className="w-8 h-8 mx-auto text-[#00334f]" />
                 <p className="text-xs font-bold text-slate-800">
-                  {uploadedFileName ? `Selected: ${uploadedFileName} (${uploadedFileSize} KB)` : "Click to select PDF or image file (or drag & drop)"}
+                  {uploadedFileName
+                    ? `Selected: ${uploadedFileName} (${uploadedFileSize} KB)`
+                    : "Drag and drop a file here, or click to browse"}
                 </p>
-                <p className="text-[11px] text-slate-500">Supports PDF, PNG, JPEG, DICOM reports up to 25MB</p>
+                <p className="text-[11px] text-slate-500">PDF, PNG, JPEG up to 25MB</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1494,10 +1377,10 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
             <div className="flex items-center justify-between border-b pb-3">
               <div className="flex items-center gap-2">
                 <Camera className="w-5 h-5 text-amber-600" />
-                <h3 className="font-bold text-base text-[#00334f]">Optical TWAIN Document Scanner</h3>
+                <h3 className="font-bold text-base text-[#00334f]">Scan document</h3>
               </div>
               <button
-                onClick={() => setShowScannerModal(false)}
+                onClick={closeScannerModal}
                 className="text-slate-400 hover:text-slate-600 text-lg font-bold"
               >
                 ✕
@@ -1505,20 +1388,32 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
             </div>
 
             <div className="space-y-4">
-              <div className="bg-slate-900 rounded-xl p-8 text-center text-white space-y-3 relative overflow-hidden">
-                {scannerStatus === "READY" && (
+              <div className="bg-slate-900 rounded-xl p-4 text-center text-white space-y-3 relative overflow-hidden">
+                <input
+                  type="file"
+                  ref={scanFileInputRef}
+                  accept="image/*,application/pdf"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handleScanFilePicked}
+                />
+                {scanPreviewUrl ? (
+                  <img src={scanPreviewUrl} alt="Scan preview" className="max-h-48 mx-auto rounded-lg" />
+                ) : (
+                  <video ref={scanVideoRef} className="w-full max-h-48 rounded-lg bg-black object-contain" muted playsInline />
+                )}
+                {scannerStatus === "READY" && !scanPreviewUrl && (
                   <div>
-                    <Camera className="w-12 h-12 mx-auto text-amber-400 mb-2 opacity-80" />
-                    <p className="text-xs font-bold">Place document on flatbed scanner and click "Scan Now"</p>
-                    <p className="text-[11px] text-slate-400">Scanner: Canon imageFORMULA DR-C225 II (Online)</p>
+                    <p className="text-xs font-bold">Place the page on the scanner or in front of the camera</p>
+                    <p className="text-[11px] text-slate-400">Windows Scanner / WIA devices appear in Acquire from scanner</p>
+                    {scannerCameraError && <p className="text-[11px] text-amber-300 mt-1">{scannerCameraError}</p>}
                   </div>
                 )}
 
                 {scannerStatus === "SCANNING" && (
                   <div className="space-y-2">
                     <div className="w-full h-1.5 bg-amber-500 animate-pulse rounded-full" />
-                    <p className="text-xs font-bold text-amber-400">Scanning optical document at {scanDpi}...</p>
-                    <p className="text-[10px] text-slate-400">Acquiring TWAIN raster stream...</p>
+                    <p className="text-xs font-bold text-amber-400">Scanning at {scanDpi}...</p>
                   </div>
                 )}
 
@@ -1530,12 +1425,25 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
                 )}
 
                 {scannerStatus === "COMPLETED" && (
-                  <div className="space-y-2">
-                    <CheckCircle2 className="w-10 h-10 mx-auto text-emerald-400" />
-                    <p className="text-xs font-bold text-emerald-300">Scan Complete! High-res digital copy generated.</p>
-                    <p className="text-[10px] text-slate-300">Page 1 of 1 • 890 KB • 300 DPI</p>
-                  </div>
+                  <p className="text-xs font-bold text-emerald-300">Scan ready — save to the patient chart.</p>
                 )}
+
+                <div className="flex flex-wrap justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => scanFileInputRef.current?.click()}
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold rounded-lg"
+                  >
+                    Acquire from scanner
+                  </button>
+                  <button
+                    type="button"
+                    onClick={captureScannerFrame}
+                    className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-[11px] font-bold rounded-lg"
+                  >
+                    Capture camera frame
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 text-xs">
@@ -1570,7 +1478,7 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
               <div className="flex items-center justify-end gap-2 pt-3 border-t">
                 <button
                   type="button"
-                  onClick={() => setShowScannerModal(false)}
+                  onClick={closeScannerModal}
                   className="px-4 py-2 border text-xs font-bold rounded-lg text-slate-600 hover:bg-slate-50"
                 >
                   Cancel
@@ -1784,30 +1692,9 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
               </div>
             </div>
 
-            {/* Quick Action Bar: PDF Download, Suwasiri App Sync, Sign */}
-            <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
+            {/* Quick Action Bar: Review / Critical / PDF */}
+            <div className="flex flex-wrap items-start justify-between gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleDownloadPdf(viewingDocModal)}
-                  className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download as PDF</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSyncToSuwasiri(viewingDocModal)}
-                  disabled={syncingDocId === viewingDocModal.id}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
-                >
-                  <Smartphone className="w-3.5 h-3.5" />
-                  <span>{syncingDocId === viewingDocModal.id ? "Syncing..." : "Sync with Suwasiri APP"}</span>
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
                 {viewingDocModal.signatureStatus === "SIGNED_DIGITALLY" ? (
                   <span className="text-emerald-700 font-bold text-xs flex items-center gap-1 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
@@ -1823,7 +1710,17 @@ Verification Hash: SHA256:${Math.random().toString(36).substring(2, 15)}-${Math.
                     Sign Digitally
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => handleSyncToSuwasiri(viewingDocModal)}
+                  disabled={syncingDocId === viewingDocModal.id}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>{syncingDocId === viewingDocModal.id ? "Syncing..." : "Sync with Suwasiri APP"}</span>
+                </button>
               </div>
+              {documentReviewActions(viewingDocModal)}
             </div>
 
             {/* Document Body & Extracted Text Viewer */}

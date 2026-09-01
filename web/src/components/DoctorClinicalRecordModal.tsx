@@ -1,34 +1,27 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   FileText, Stethoscope, Clock, Pill, AlertTriangle, Activity, Syringe, 
   FlaskConical, Image, Send, Heart, Folder, Database, Calendar, DollarSign, 
   X, Plus, Check, Calculator, Copy, ShieldAlert, Sparkles, User, Printer,
-  Phone, Mail, ArrowRight, CheckCircle, Search, Trash2, Edit3, ShieldCheck
+  Phone, Mail, ArrowRight, CheckCircle, Search, Trash2, Edit3, ShieldCheck, GripVertical, ChevronDown,
+  Camera, Upload, Eye
 } from "lucide-react";
 import { 
   Patient, VaccineRecord, LabResult, PrescriptionRecord, LabOrder, 
   ImagingRecord, ReferralRecord, CarePlanRecord, MyHealthRecordDoc, 
-  ObservationRecord, Appointment, Billing, DoctorConsultationActivity 
+  ObservationRecord, Appointment, Billing, DoctorConsultationActivity,
+  ClinicalDocument
 } from "../types";
 import { 
   calculateBmi, calculateAustralianCvdRisk, calculateAusdrisk, 
   calculateEgfrCkdEpi, classifyBloodPressure, calculatePregnancyEdd, 
   calculatePaediatricDose 
 } from "../utils/clinicalCalculators";
+import { PATHOLOGY_INVESTIGATIONS } from "../catalogs/pathologyInvestigations";
 import ClinicalCalculatorsModal from "./ClinicalCalculatorsModal";
+import PatientSexAgeBadge from "./PatientSexAgeBadge";
+import PatientCriticalAlertBadge from "./PatientCriticalAlertBadge";
 import { issuePrescriptionsToSuwasiri } from "../sync/suwasiriPrescriptions";
-
-interface Props {
-  patient: Patient;
-  appointments: Appointment[];
-  billingList: Billing[];
-  currentRole: string;
-  onClose: () => void;
-  onUpdatePatient: (updated: Patient) => void;
-  onUpdateAppointment?: (updated: Appointment) => void;
-  onRenderPrescription?: (rx: PrescriptionRecord) => void;
-  onLaunchTelehealth?: (apt: Appointment) => void;
-}
 
 export type ClinicalTab = 
   | "summary"
@@ -48,6 +41,39 @@ export type ClinicalTab =
   | "appointments"
   | "billing";
 
+interface Props {
+  patient: Patient;
+  appointments: Appointment[];
+  billingList: Billing[];
+  currentRole: string;
+  onClose: () => void;
+  onUpdatePatient: (updated: Patient) => void;
+  onUpdateAppointment?: (updated: Appointment) => void;
+  onRenderPrescription?: (rx: PrescriptionRecord) => void;
+  onLaunchTelehealth?: (apt: Appointment) => void;
+  embedded?: boolean;
+  clinicName?: string;
+  sessionDoctorName?: string;
+  linkedAppointmentId?: string;
+  onBookAppointment?: (payload: {
+    patientId: string;
+    date: string;
+    time: string;
+    reason: string;
+    consultMode?: "clinic" | "video";
+    paymentMethod?: string;
+  }) => Promise<void> | void;
+  onOrderPathology?: (testName: string, remarks: string) => void;
+  initialTab?: ClinicalTab;
+  hideClose?: boolean;
+  /** Hide live booking / fee / modality (reception and super admin file view). */
+  hideActiveConsultDetails?: boolean;
+  /** viewport = exam-room page height; fill = parent height; natural = grow with content (parent scrolls). */
+  heightMode?: "viewport" | "fill" | "natural";
+  /** Live e-Rx / Active Clinical Consultation block under SOAP (doctor exam room only). */
+  consultationFooter?: React.ReactNode;
+}
+
 export default function DoctorClinicalRecordModal({
   patient,
   appointments,
@@ -57,9 +83,23 @@ export default function DoctorClinicalRecordModal({
   onUpdatePatient,
   onUpdateAppointment,
   onRenderPrescription,
-  onLaunchTelehealth
+  onLaunchTelehealth,
+  embedded = false,
+  clinicName,
+  sessionDoctorName,
+  linkedAppointmentId,
+  onBookAppointment,
+  onOrderPathology,
+  initialTab,
+  hideClose = false,
+  hideActiveConsultDetails = false,
+  heightMode = "viewport",
+  consultationFooter,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<ClinicalTab>("summary");
+  const issuedDoctor = sessionDoctorName || "Dr. Priyantha Silva";
+  const issuedClinic = clinicName || patient.medicalCenter || "PrimeCare Medical Centre - Colombo Central";
+
+  const [activeTab, setActiveTab] = useState<ClinicalTab>(initialTab || (embedded ? "consultation" : "summary"));
   const [showCalculatorModal, setShowCalculatorModal] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -71,19 +111,11 @@ export default function DoctorClinicalRecordModal({
   const [consultFeeLkr, setConsultFeeLkr] = useState<number>(2500);
 
   // SOAP Consultation Note States
-  const [soapReason, setSoapReason] = useState("Routine GP Follow-up & Review");
-  const [soapSubjective, setSoapSubjective] = useState(
-    "Patient attends for scheduled follow-up. Reports good general wellness. Mild morning joint stiffness and occasional dry cough. No chest tightness, shortness of breath, or fever."
-  );
-  const [soapObjective, setSoapObjective] = useState(
-    "Alert and orientated. Chest: Clear bilaterally, vesicular breath sounds. CVS: Dual heart sounds, no murmurs. Abdomen: Soft, non-tender. BP: 130/82 mmHg, Pulse: 72 bpm, SpO2: 98% on room air."
-  );
-  const [soapAssessment, setSoapAssessment] = useState(
-    "1. Bronchial Asthma (mild, well-controlled)\n2. Essential Hypertension (stable on monotherapy)\n3. Osteoarthritis (stable, advised gentle range of motion exercises)"
-  );
-  const [soapPlan, setSoapPlan] = useState(
-    "1. Continue regular Ventolin PRN\n2. Repeat FBC and fasting lipid profile in 3 months\n3. Review in clinic in 6 weeks or sooner if symptoms escalate\n4. Reassure regarding lifestyle and hydration"
-  );
+  const [soapReason, setSoapReason] = useState("");
+  const [soapSubjective, setSoapSubjective] = useState(embedded ? "" : "Patient attends for scheduled follow-up. Reports good general wellness. Mild morning joint stiffness and occasional dry cough. No chest tightness, shortness of breath, or fever.");
+  const [soapObjective, setSoapObjective] = useState(embedded ? "" : "Alert and orientated. Chest: Clear bilaterally, vesicular breath sounds. CVS: Dual heart sounds, no murmurs. Abdomen: Soft, non-tender. BP: 130/82 mmHg, Pulse: 72 bpm, SpO2: 98% on room air.");
+  const [soapAssessment, setSoapAssessment] = useState(embedded ? "" : "1. Bronchial Asthma (mild, well-controlled)\n2. Essential Hypertension (stable on monotherapy)\n3. Osteoarthritis (stable, advised gentle range of motion exercises)");
+  const [soapPlan, setSoapPlan] = useState(embedded ? "" : "1. Continue regular Ventolin PRN\n2. Repeat FBC and fasting lipid profile in 3 months\n3. Review in clinic in 6 weeks or sooner if symptoms escalate\n4. Reassure regarding lifestyle and hydration");
 
   // Live Anthropometry & Observations with AUTO BMI calculation
   const [obsHeightCm, setObsHeightCm] = useState<number>(168);
@@ -96,10 +128,79 @@ export default function DoctorClinicalRecordModal({
   const [obsBgl, setObsBgl] = useState<number>(5.6);
   const [autoBmi, setAutoBmi] = useState(() => calculateBmi(168, 70));
 
-  // Auto-calculate BMI on height or weight change
   useEffect(() => {
     setAutoBmi(calculateBmi(obsHeightCm, obsWeightKg));
   }, [obsHeightCm, obsWeightKg]);
+
+  useEffect(() => {
+    setActiveTab(initialTab || (embedded ? "consultation" : "summary"));
+  }, [patient.id, initialTab, embedded]);
+
+  useEffect(() => {
+    const current =
+      patientAppointments.find((a) => a.id === linkedAppointmentId) ||
+      patientAppointments.find((a) => a.status !== "COMPLETED" && a.status !== "CANCELLED") ||
+      patientAppointments[0];
+    if (!current) return;
+    setSelectedAppointmentId(current.id);
+    const video = Boolean(
+      current.isTelehealth ||
+      current.type === "Telehealth Video" ||
+      String(current.consultMode || "").toLowerCase().includes("video")
+    );
+    setConsultModality(video ? "Telehealth Video" : "In-Person OPD");
+    setConsultFeeLkr(typeof current.feeAmount === "number" ? current.feeAmount : 2500);
+    if (current.reason) setSoapReason(current.reason);
+    else setSoapReason("");
+    const soap = current.consultationActivity?.soapNotes;
+    const match = (patient.history || []).find((h) => h.appointmentId === current.id);
+    if (soap) {
+      setSoapSubjective(soap.subjective || "");
+      setSoapObjective(soap.objective || "");
+      setSoapAssessment(soap.assessment || "");
+      setSoapPlan(soap.plan || "");
+    } else if (match?.soapSubjective || match?.soapObjective || match?.soapAssessment || match?.soapPlan) {
+      if (match.reason) setSoapReason(match.reason);
+      setSoapSubjective(match.soapSubjective || "");
+      setSoapObjective(match.soapObjective || "");
+      setSoapAssessment(match.soapAssessment || "");
+      setSoapPlan(match.soapPlan || "");
+    } else {
+      setSoapSubjective("");
+      setSoapObjective("");
+      setSoapAssessment("");
+      setSoapPlan("");
+    }
+  }, [patient.id, linkedAppointmentId]);
+
+  useEffect(() => {
+    const apt = patientAppointments.find((a) => a.id === selectedAppointmentId);
+    if (apt?.reason) setSoapReason(apt.reason);
+    if (apt) {
+      const soap = apt.consultationActivity?.soapNotes;
+      if (soap) {
+        setSoapSubjective(soap.subjective || "");
+        setSoapObjective(soap.objective || "");
+        setSoapAssessment(soap.assessment || "");
+        setSoapPlan(soap.plan || "");
+        return;
+      }
+    }
+    const match = (patient.history || []).find((h) => h.appointmentId === selectedAppointmentId);
+    if (match?.soapSubjective || match?.soapObjective || match?.soapAssessment || match?.soapPlan) {
+      if (match.reason) setSoapReason(match.reason);
+      setSoapSubjective(match.soapSubjective || "");
+      setSoapObjective(match.soapObjective || "");
+      setSoapAssessment(match.soapAssessment || "");
+      setSoapPlan(match.soapPlan || "");
+    }
+  }, [selectedAppointmentId]);
+
+  useEffect(() => {
+    if (embedded && (activeTab === "history" || activeTab === "diagnoses" || activeTab === "observations" || activeTab === "billing")) {
+      setActiveTab("consultation");
+    }
+  }, [embedded, activeTab]);
 
   // Diagnoses list state
   const [newDiagnosisInput, setNewDiagnosisInput] = useState("");
@@ -112,10 +213,53 @@ export default function DoctorClinicalRecordModal({
 
   // Allergy add state
   const [newAllergyInput, setNewAllergyInput] = useState("");
+  const [bookDate, setBookDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [bookTime, setBookTime] = useState("09:00 AM");
+  const [bookReason, setBookReason] = useState("GP Follow-up");
+  const [bookMode, setBookMode] = useState<"clinic" | "video">("clinic");
+  const [bookPayment, setBookPayment] = useState("Pay at clinic");
+  const [bookingSlot, setBookingSlot] = useState(false);
+  const [openSoapBoxes, setOpenSoapBoxes] = useState({
+    subjective: true,
+    objective: true,
+    plan: true,
+  });
+  const [refEmail, setRefEmail] = useState("lalith.fernando@asiri.lk");
+  const [docEmail, setDocEmail] = useState("");
+  const [docPhone, setDocPhone] = useState("");
+  const [examAddDocMode, setExamAddDocMode] = useState<"chooser" | "scan" | "drop" | null>(null);
+  const [examDropActive, setExamDropActive] = useState(false);
+  const examFileInputRef = useRef<HTMLInputElement>(null);
+  const examScanInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (activeTab === "documents") setExamAddDocMode("chooser");
+  }, [activeTab]);
+  const [historyLinkOpen, setHistoryLinkOpen] = useState(false);
+  const [dragNavId, setDragNavId] = useState<string | null>(null);
+
+  const DEFAULT_EXAM_ORDER: ClinicalTab[] = [
+    "consultation", "allergies", "immunisations", "pathology",
+    "imaging", "referrals", "careplans", "documents", "appointments",
+  ];
+  const [examNavOrder, setExamNavOrder] = useState<ClinicalTab[]>(() => {
+    try {
+      const raw = localStorage.getItem("suwasiri-exam-nav-order");
+      if (!raw) return DEFAULT_EXAM_ORDER;
+      const parsed = JSON.parse(raw) as string[];
+      const valid = parsed.filter((id): id is ClinicalTab => DEFAULT_EXAM_ORDER.includes(id as ClinicalTab));
+      return [...valid, ...DEFAULT_EXAM_ORDER.filter((id) => !valid.includes(id))];
+    } catch {
+      return DEFAULT_EXAM_ORDER;
+    }
+  });
 
   // Pathology Request State
-  const [pathTestSelection, setPathTestSelection] = useState("Full Blood Count (FBC)");
+  const [pathTestSelection, setPathTestSelection] = useState(PATHOLOGY_INVESTIGATIONS[0].name);
   const [pathClinicalNotes, setPathClinicalNotes] = useState("Routine monitoring / fatigue screening");
+  const [viewingPathLab, setViewingPathLab] = useState<LabResult | null>(null);
+  const [pathNoteDrafts, setPathNoteDrafts] = useState<Record<string, string>>({});
+  const [savingPathNoteId, setSavingPathNoteId] = useState<string | null>(null);
 
   // Imaging Request State
   const [imagingModality, setImagingModality] = useState<ImagingRecord["modality"]>("X-ray");
@@ -131,6 +275,167 @@ export default function DoctorClinicalRecordModal({
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3000);
   };
+
+  const isVideoApt = (apt: Appointment) =>
+    Boolean(apt.isTelehealth || apt.type === "Telehealth Video" || String(apt.consultMode || "").toLowerCase().includes("video"));
+  const encounterLabel = (apt: Appointment) =>
+    `${apt.date} (${apt.time}) - ${apt.type || "Standard GP Consult"}${isVideoApt(apt) ? " - Video consultation" : ""}`;
+  const currentBooking =
+    patientAppointments.find((a) => a.id === linkedAppointmentId) ||
+    patientAppointments.find((a) => a.status !== "COMPLETED" && a.status !== "CANCELLED") ||
+    patientAppointments[0] ||
+    null;
+  const pastAppointments = [...patientAppointments].sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
+  const viewingApt = patientAppointments.find((a) => a.id === selectedAppointmentId) || currentBooking;
+  const bookingModalityLabel = currentBooking
+    ? (isVideoApt(currentBooking)
+        ? "Telehealth Video"
+        : `In-Person OPD${currentBooking.room ? ` (${currentBooking.room})` : currentBooking.clinicName ? ` (${currentBooking.clinicName})` : ""}`)
+    : consultModality;
+  const bookingFeeLkr = currentBooking && typeof currentBooking.feeAmount === "number" ? currentBooking.feeAmount : consultFeeLkr;
+  const viewingPastEncounter = Boolean(currentBooking && viewingApt && viewingApt.id !== currentBooking.id);
+  const dayKey = (value?: string) => (value || "").slice(0, 10);
+  const visitDate = viewingApt ? dayKey(viewingApt.date) : "";
+  const isVisitDay = (value?: string) => Boolean(visitDate && dayKey(value) === visitDate);
+  const visitHistory = viewingApt
+    ? (patient.history || []).filter((h) => h.appointmentId === viewingApt.id || isVisitDay(h.date))
+    : (patient.history || []);
+  const visitDiagnoses = viewingApt
+    ? (patient.diagnosesList || []).filter((d) => isVisitDay(d.dateDiagnosed))
+    : (patient.diagnosesList || []);
+  const visitPrescriptions = viewingApt
+    ? (patient.prescriptionsList || []).filter((rx) => isVisitDay(rx.date))
+    : (patient.prescriptionsList || []);
+  const visitMedicines = Array.from(new Set([
+    ...visitPrescriptions.flatMap((rx) => rx.items),
+    ...(viewingApt?.consultationActivity?.prescriptionsIssued || []),
+  ].filter(Boolean)));
+
+  const loadEncounter = (apt: Appointment) => {
+    setSelectedAppointmentId(apt.id);
+    setHistoryLinkOpen(false);
+    setSoapReason(apt.reason || "");
+    const soap = apt.consultationActivity?.soapNotes;
+    const hist = (patient.history || []).find((h) => h.appointmentId === apt.id);
+    if (soap) {
+      setSoapSubjective(soap.subjective || "");
+      setSoapObjective(soap.objective || "");
+      setSoapAssessment(soap.assessment || "");
+      setSoapPlan(soap.plan || "");
+    } else if (hist) {
+      setSoapSubjective(hist.soapSubjective || "");
+      setSoapObjective(hist.soapObjective || "");
+      setSoapAssessment(hist.soapAssessment || "");
+      setSoapPlan(hist.soapPlan || "");
+    } else {
+      setSoapSubjective("");
+      setSoapObjective("");
+      setSoapAssessment("");
+      setSoapPlan("");
+    }
+    showToast(`Opened encounter ${apt.date} (${apt.time})`);
+  };
+
+  const fileClinicalDocFromFile = (file: File, scanned: boolean) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const doc: ClinicalDocument = {
+        id: (scanned ? "scan-" : "doc-") + Date.now(),
+        patientId: patient.id,
+        patientName: patient.name,
+        title: file.name.replace(/\.[^/.]+$/, "") || (scanned ? "Scanned document" : "Uploaded document"),
+        category: "Clinical Correspondence",
+        fileType: scanned ? "SCANNED_DOC" : file.type.includes("png") ? "IMAGE_PNG" : file.type.includes("pdf") ? "PDF" : "IMAGE_JPEG",
+        fileSizeKb: Math.round(file.size / 1024) || 1,
+        fileUrl: String(reader.result || ""),
+        uploadedBy: scanned ? "Clinic scanner" : "GP Exam Room",
+        uploadedDate: new Date().toISOString().replace("T", " ").substring(0, 16),
+        allocatedDoctor: issuedDoctor,
+        status: "PENDING_DOCTOR_REVIEW",
+        versionHistory: [
+          {
+            versionNumber: 1,
+            timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
+            author: issuedDoctor,
+            notes: scanned ? "Scanned into chart" : "Drag-and-drop / browse",
+            fileSizeKb: Math.round(file.size / 1024) || 1,
+          },
+        ],
+        tags: [scanned ? "Scanned" : "Uploaded"],
+        signatureStatus: "UNSIGNED",
+      };
+      onUpdatePatient({ ...patient, clinicalDocuments: [doc, ...(patient.clinicalDocuments || [])] });
+      setExamAddDocMode("chooser");
+      showToast(`Filed “${doc.title}” to Documents history.`);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const printDocument = (title: string, body: string) => {
+    const w = window.open("", "_blank", "noopener,noreferrer");
+    if (!w) {
+      showToast("Allow pop-ups to print this document.");
+      return;
+    }
+    w.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
+      <style>
+        body { font-family: Georgia, serif; color: #00334f; padding: 28px; max-width: 720px; margin: 0 auto; }
+        h1 { font-size: 18px; margin-bottom: 4px; }
+        .meta { font-size: 12px; color: #475569; margin-bottom: 16px; }
+        pre { white-space: pre-wrap; font-family: Georgia, serif; font-size: 13px; line-height: 1.5; }
+      </style></head><body>
+      <h1>${title}</h1>
+      <div class="meta">${patient.name} · ${issuedDoctor} · ${issuedClinic}</div>
+      <pre>${body.replace(/</g, "&lt;")}</pre>
+      </body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
+
+  const sendByEmail = (to: string, subject: string, body: string) => {
+    const dest = (to || patient.email || "").trim();
+    if (!dest) {
+      showToast("Enter an email address first.");
+      return;
+    }
+    window.open(`mailto:${encodeURIComponent(dest)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, "_blank");
+    showToast(`Email draft opened for ${dest}`);
+  };
+
+  const sendByPhone = (phone: string, body: string) => {
+    const dest = (phone || patient.phone || "").replace(/\s/g, "");
+    if (!dest) {
+      showToast("Enter a phone number first.");
+      return;
+    }
+    window.open(`sms:${dest}?body=${encodeURIComponent(body.slice(0, 300))}`, "_blank");
+    showToast(`Message draft opened for ${dest}`);
+  };
+
+  const appendClinicalHistory = (row: {
+    reason: string;
+    notes: string;
+    appointmentId?: string;
+    soapSubjective?: string;
+    soapObjective?: string;
+    soapAssessment?: string;
+    soapPlan?: string;
+  }) => ([
+    {
+      date: new Date().toISOString().split("T")[0],
+      reason: row.reason,
+      doctor: issuedDoctor,
+      notes: row.notes,
+      clinicName: issuedClinic,
+      appointmentId: row.appointmentId || selectedAppointmentId || undefined,
+      soapSubjective: row.soapSubjective,
+      soapObjective: row.soapObjective,
+      soapAssessment: row.soapAssessment,
+      soapPlan: row.soapPlan,
+    },
+    ...(patient.history || []),
+  ]);
 
   // Add observation record
   const handleSaveObservation = () => {
@@ -153,6 +458,10 @@ export default function DoctorClinicalRecordModal({
 
     const updated = {
       ...patient,
+      heightCm: obsHeightCm,
+      weightKg: obsWeightKg,
+      lastSystolicBp: obsSystolic,
+      lastDiastolicBp: obsDiastolic,
       observationsHistory: [newObs, ...(patient.observationsHistory || [])]
     };
     onUpdatePatient(updated);
@@ -175,7 +484,11 @@ export default function DoctorClinicalRecordModal({
     const updated = {
       ...patient,
       medicalHistory: [...patient.medicalHistory, `${newDiagnosisInput} (${newIcd10})`],
-      diagnosesList: [...(patient.diagnosesList || []), newDiag]
+      diagnosesList: [...(patient.diagnosesList || []), newDiag],
+      history: appendClinicalHistory({
+        reason: `Diagnosis: ${newDiag.condition}`,
+        notes: `ICD-10 ${newDiag.icd10Code || "—"}. Added to the active problem list.`,
+      }),
     };
     onUpdatePatient(updated);
     setNewDiagnosisInput("");
@@ -235,10 +548,42 @@ export default function DoctorClinicalRecordModal({
 
     const updated = {
       ...patient,
-      labResults: [newLab, ...patient.labResults]
+      labResults: [newLab, ...(patient.labResults || [])]
     };
     onUpdatePatient(updated);
+    onOrderPathology?.(pathTestSelection, pathClinicalNotes);
     showToast(`Pathology eRequest submitted: ${pathTestSelection}`);
+  };
+
+  const pathReportText = (res: LabResult) =>
+    [
+      "LANKALAB CENTRAL DIAGNOSTICS & PATHOLOGY",
+      "Official clinical laboratory report",
+      "",
+      `Patient: ${patient.name}`,
+      `Patient ID: ${patient.id}`,
+      `Age / sex: ${patient.age} yrs, ${patient.gender}`,
+      `Clinic: ${issuedClinic}`,
+      `Doctor: ${issuedDoctor}`,
+      "",
+      `Investigation: ${res.testName}`,
+      `Report ID: ${res.id}`,
+      `Collection date: ${res.date}`,
+      `Result: ${res.result}`,
+      `Status: ${res.status}${res.abnormalFlag ? " [ABNORMAL]" : ""}`,
+      `Laboratory notes: ${res.remarks || "—"}`,
+      `Doctor notes: ${pathNoteDrafts[res.id] ?? res.doctorNotes ?? "—"}`,
+    ].join("\n");
+
+  const savePathologyNote = (labId: string) => {
+    const note = (pathNoteDrafts[labId] ?? "").trim();
+    const nextLabs = (patient.labResults || []).map((lr) =>
+      lr.id === labId ? { ...lr, doctorNotes: note } : lr
+    );
+    onUpdatePatient({ ...patient, labResults: nextLabs });
+    setSavingPathNoteId(labId);
+    showToast("Pathology note saved on this report.");
+    window.setTimeout(() => setSavingPathNoteId(null), 1200);
   };
 
   // Add Imaging Order
@@ -291,29 +636,44 @@ export default function DoctorClinicalRecordModal({
     showToast(`eReferral dispatched to ${refSpecialist}`);
   };
 
-  // 16 Tabs matching Bp Premier specification
+  // Tabs — exam room hides Summary, Medications, My Health Record
   const clinicalTabs = [
-    { id: "summary", label: "Summary", icon: User },
-    { id: "consultation", label: "Consultation (SOAP)", icon: Stethoscope },
-    { id: "history", label: "Medical History", icon: Clock },
-    { id: "diagnoses", label: "Diagnoses", icon: FileText },
-    { id: "medications", label: "Medications (Rx)", icon: Pill },
-    { id: "allergies", label: "Allergies", icon: AlertTriangle },
-    { id: "observations", label: "Observations & BMI", icon: Activity },
-    { id: "immunisations", label: "Immunisations (AIR)", icon: Syringe },
-    { id: "pathology", label: "Pathology", icon: FlaskConical },
-    { id: "imaging", label: "Imaging", icon: Image },
-    { id: "referrals", label: "Referrals", icon: Send },
-    { id: "careplans", label: "Care Plans", icon: Heart },
-    { id: "documents", label: "Documents", icon: Folder },
-    { id: "myhealthrecord", label: "My Health Record", icon: Database },
-    { id: "appointments", label: "Appointments", icon: Calendar },
-    { id: "billing", label: "Billing", icon: DollarSign }
+    { id: "summary", label: "Summary", icon: User, box: "bg-slate-100 border-slate-300 text-slate-800", active: "bg-gradient-to-r from-slate-600 to-slate-800 text-white border-slate-700" },
+    { id: "consultation", label: "Consultation (SOAP)", icon: Stethoscope, box: "bg-sky-100 border-sky-300 text-sky-900", active: "bg-gradient-to-r from-sky-500 to-blue-600 text-white border-sky-600" },
+    { id: "history", label: "Medical History", icon: Clock, box: "bg-amber-100 border-amber-300 text-amber-950", active: "bg-gradient-to-r from-amber-400 to-orange-500 text-white border-amber-500" },
+    { id: "diagnoses", label: "Diagnoses", icon: FileText, box: "bg-indigo-100 border-indigo-300 text-indigo-950", active: "bg-gradient-to-r from-indigo-500 to-violet-600 text-white border-indigo-600" },
+    { id: "medications", label: "Medications (Rx)", icon: Pill, box: "bg-emerald-100 border-emerald-300 text-emerald-950", active: "bg-gradient-to-r from-emerald-500 to-teal-600 text-white border-emerald-600" },
+    { id: "allergies", label: "Allergies", icon: AlertTriangle, box: "bg-rose-100 border-rose-300 text-rose-950", active: "bg-gradient-to-r from-rose-500 to-red-600 text-white border-rose-600" },
+    { id: "observations", label: "Observations & BMI", icon: Activity, box: "bg-teal-100 border-teal-300 text-teal-950", active: "bg-gradient-to-r from-teal-500 to-cyan-600 text-white border-teal-600" },
+    { id: "immunisations", label: "Immunisations (AIR)", icon: Syringe, box: "bg-lime-100 border-lime-300 text-lime-950", active: "bg-gradient-to-r from-lime-500 to-green-600 text-white border-lime-600" },
+    { id: "pathology", label: "Pathology", icon: FlaskConical, box: "bg-purple-100 border-purple-300 text-purple-950", active: "bg-gradient-to-r from-purple-500 to-fuchsia-600 text-white border-purple-600" },
+    { id: "imaging", label: "Imaging", icon: Image, box: "bg-cyan-100 border-cyan-300 text-cyan-950", active: "bg-gradient-to-r from-cyan-500 to-sky-600 text-white border-cyan-600" },
+    { id: "referrals", label: "Referrals", icon: Send, box: "bg-orange-100 border-orange-300 text-orange-950", active: "bg-gradient-to-r from-orange-500 to-amber-600 text-white border-orange-600" },
+    { id: "careplans", label: "Care Plans", icon: Heart, box: "bg-pink-100 border-pink-300 text-pink-950", active: "bg-gradient-to-r from-pink-500 to-rose-500 text-white border-pink-600" },
+    { id: "documents", label: "Documents", icon: Folder, box: "bg-blue-100 border-blue-300 text-blue-950", active: "bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-blue-600" },
+    { id: "myhealthrecord", label: "My Health Record", icon: Database, box: "bg-slate-100 border-slate-300 text-slate-800", active: "bg-gradient-to-r from-slate-500 to-slate-700 text-white border-slate-600" },
+    { id: "appointments", label: "Appointments", icon: Calendar, box: "bg-violet-100 border-violet-300 text-violet-950", active: "bg-gradient-to-r from-violet-500 to-purple-600 text-white border-violet-600" },
+    { id: "billing", label: "Billing", icon: DollarSign, box: "bg-yellow-100 border-yellow-300 text-yellow-950", active: "bg-gradient-to-r from-yellow-400 to-amber-500 text-yellow-950 border-yellow-500" },
   ] as const;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3">
-      <div className="bg-white border border-slate-300 rounded-2xl shadow-2xl w-full max-w-7xl h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+  const hiddenExamTabs = new Set(["summary", "medications", "myhealthrecord", "history", "diagnoses", "observations", "billing"]);
+  const visibleTabs = embedded
+    ? examNavOrder
+        .map((id) => clinicalTabs.find((t) => t.id === id))
+        .filter((t): t is typeof clinicalTabs[number] => Boolean(t))
+        .filter((t) => !hiddenExamTabs.has(t.id))
+    : clinicalTabs;
+
+  const frame = (
+      <div className={`bg-white border border-slate-300 flex flex-col ${
+        heightMode === "natural"
+          ? "w-full rounded-2xl shadow-sm overflow-hidden"
+          : heightMode === "fill"
+          ? "w-full h-full max-h-full rounded-2xl shadow-sm overflow-hidden"
+          : embedded
+          ? "w-full h-[calc(100vh-8.5rem)] max-h-[calc(100vh-8.5rem)] rounded-2xl shadow-sm overflow-hidden"
+          : "rounded-2xl shadow-2xl w-full max-w-7xl h-[92vh] animate-in fade-in zoom-in duration-150 overflow-hidden"
+      }`}>
         
         {/* Toast */}
         {toastMsg && (
@@ -330,8 +690,10 @@ export default function DoctorClinicalRecordModal({
               {patient.name.charAt(0)}
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-extrabold text-base">{patient.name}</h2>
+              <h2 className="font-extrabold text-base">{patient.name}</h2>
+              <PatientSexAgeBadge gender={patient.gender} age={patient.age} />
+              <PatientCriticalAlertBadge patient={patient} />
+              <div className="flex items-center gap-2 mt-1">
                 <span className="text-[10px] bg-sky-200/20 text-sky-200 font-bold px-2 py-0.5 rounded-full border border-sky-300/30">
                   ID: {patient.id}
                 </span>
@@ -339,8 +701,8 @@ export default function DoctorClinicalRecordModal({
                   Medicare: {patient.medicareNumber || "2847 9102 31"}
                 </span>
               </div>
-              <p className="text-xs text-sky-100">
-                {patient.gender}, {patient.age} yrs • DOB: {patient.dateOfBirth || "1974-06-15"} • Blood: {patient.bloodType} • Allergies: <strong className="text-red-300">{patient.allergies || "None"}</strong>
+              <p className="text-xs text-sky-100 mt-1">
+                DOB: {patient.dateOfBirth || "1974-06-15"} • Blood: {patient.bloodType} • Allergies: <strong className="text-red-300">{patient.allergies || "None"}</strong>
               </p>
             </div>
           </div>
@@ -348,30 +710,57 @@ export default function DoctorClinicalRecordModal({
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowCalculatorModal(true)}
-              className="bg-sky-700 hover:bg-sky-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+              className="bg-gradient-to-r from-teal-500 to-sky-600 hover:from-teal-400 hover:to-sky-500 text-white px-3 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 shadow-xs cursor-pointer border border-teal-300/40"
             >
-              <Calculator className="w-3.5 h-3.5 text-sky-300" />
+              <Calculator className="w-3.5 h-3.5" />
               <span>Clinical Calculators</span>
             </button>
 
+            {hideClose ? null : (
             <button
               onClick={onClose}
               className="text-slate-300 hover:text-white p-1 rounded-md hover:bg-white/10 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
+            )}
           </div>
         </div>
 
-        {/* 16 Bp Premier Tabs Bar */}
+        {embedded && (
+          <div className="bg-[#00273c] px-5 py-2.5 flex flex-wrap items-center gap-2 shrink-0 border-t border-white/10">
+            <span className="text-[9px] font-extrabold uppercase tracking-wider text-sky-300/80 mr-1">Under this file</span>
+            <span className="inline-flex items-center gap-1 text-[11px] font-extrabold px-2.5 py-1 rounded-lg bg-rose-500 text-white shadow-xs">
+              <AlertTriangle className="w-3 h-3" />
+              Allergies: {patient.allergies || "None declared"}
+            </span>
+            {(patient.diagnosesList || []).filter((d) => d.status === "ACTIVE").slice(0, 3).map((d) => (
+              <span key={d.id} className="text-[11px] font-extrabold px-2.5 py-1 rounded-lg bg-indigo-500 text-white">
+                {d.condition}
+              </span>
+            ))}
+            {(patient.medicalHistory || []).slice(0, 2).map((h, i) => (
+              <span key={`${h}-${i}`} className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-400 text-amber-950 max-w-[220px] truncate">
+                {h}
+              </span>
+            ))}
+            {(patient.activeMedications || []).slice(0, 2).map((m) => (
+              <span key={m} className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-500 text-white max-w-[200px] truncate">
+                {m}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {!embedded && (
         <div className="bg-slate-100 border-b border-slate-200 px-4 py-1.5 flex overflow-x-auto gap-1 shrink-0 scrollbar-thin">
-          {clinicalTabs.map(t => {
+          {visibleTabs.map(t => {
             const Icon = t.icon;
             const isActive = activeTab === t.id;
             return (
               <button
                 key={t.id}
-                onClick={() => setActiveTab(t.id as any)}
+                onClick={() => setActiveTab(t.id as ClinicalTab)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   isActive
                     ? "bg-[#00334f] text-white shadow-xs"
@@ -384,9 +773,50 @@ export default function DoctorClinicalRecordModal({
             );
           })}
         </div>
+        )}
+
+        <div className={embedded ? `flex ${heightMode === "natural" ? "" : "flex-1 min-h-0"}` : "contents"}>
+        {embedded && (
+          <aside className={`w-56 shrink-0 border-r border-slate-200 bg-slate-50 p-3 space-y-2 ${heightMode === "natural" ? "" : "overflow-y-auto"}`}>
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 px-1 pb-1">Clinical sections</p>
+            {visibleTabs.map((t) => {
+              const Icon = t.icon;
+              const isActive = activeTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  draggable
+                  onDragStart={() => setDragNavId(t.id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (!dragNavId || dragNavId === t.id) return;
+                    const next = [...examNavOrder];
+                    const from = next.indexOf(dragNavId as ClinicalTab);
+                    const to = next.indexOf(t.id as ClinicalTab);
+                    if (from < 0 || to < 0) return;
+                    next.splice(from, 1);
+                    next.splice(to, 0, dragNavId as ClinicalTab);
+                    setExamNavOrder(next);
+                    localStorage.setItem("suwasiri-exam-nav-order", JSON.stringify(next));
+                    setDragNavId(null);
+                  }}
+                  onClick={() => setActiveTab(t.id as ClinicalTab)}
+                  className={`w-full text-left rounded-xl border-2 px-3 py-2.5 text-xs font-extrabold flex items-center gap-2 transition shadow-xs cursor-grab active:cursor-grabbing ${
+                    isActive ? `${t.active} ring-2 ring-offset-1 ring-slate-300` : `${t.box} hover:brightness-95`
+                  }`}
+                >
+                  <GripVertical className="w-3.5 h-3.5 shrink-0 opacity-70" />
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span>{t.label}</span>
+                </button>
+              );
+            })}
+          </aside>
+        )}
 
         {/* Body Content Area */}
-        <div className="p-6 overflow-y-auto flex-1 bg-slate-50/50">
+        <div className={`${heightMode === "natural" ? "" : "overflow-y-auto flex-1 min-h-0"} ${embedded ? "p-5 bg-slate-50/80" : "p-6 bg-slate-50/50"}`}>
           
           {/* TAB 1: SUMMARY */}
           {activeTab === "summary" && (
@@ -466,168 +896,265 @@ export default function DoctorClinicalRecordModal({
 
           {/* TAB 2: CONSULTATION (SOAP) */}
           {activeTab === "consultation" && (
+            <div className="space-y-5">
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-5 text-xs">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-4">
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
-                    <Stethoscope className="w-4 h-4 text-sky-600" />
-                    Doctor Clinical Consultation & Activity Record
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Live SOAP clinical encounter logger with active appointment linkage, SLMC compliance, and MoH record sync
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowCalculatorModal(true)}
-                    className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Calculator className="w-3.5 h-3.5 text-sky-300" />
-                    <span>Insert Calculator Score</span>
-                  </button>
-                </div>
+              <div className="border-b pb-4">
+                <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                  <Stethoscope className="w-4 h-4 text-sky-600" />
+                  Doctor Clinical Consultation & Activity Record
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Live SOAP clinical encounter logger with active appointment linkage, SLMC compliance, and MoH record sync
+                </p>
               </div>
 
-              {/* Consultation Encounter Metadata Bar */}
+              {!hideActiveConsultDetails && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-sky-50/70 border border-sky-200 rounded-xl">
                 <div>
-                  <label className="block font-bold text-sky-950 text-[11px] mb-1">Encounter / Appointment Link:</label>
-                  <select
-                    value={selectedAppointmentId}
-                    onChange={(e) => setSelectedAppointmentId(e.target.value)}
-                    className="w-full p-2 bg-white border border-sky-300 rounded-lg font-bold text-sky-900 text-xs"
-                  >
-                    {patientAppointments.length > 0 ? (
-                      patientAppointments.map(apt => (
-                        <option key={apt.id} value={apt.id}>
-                          {apt.date} ({apt.time}) - {apt.reason} [{apt.status}]
-                        </option>
-                      ))
-                    ) : (
-                      <option value="walkin-apt">Walk-in Unscheduled Consultation (Today)</option>
-                    )}
-                  </select>
+                  <label className="block font-bold text-sky-950 text-[11px] mb-1">Encounter / current booking:</label>
+                  <div className="w-full p-2 bg-white border border-sky-300 rounded-lg font-bold text-sky-900 text-xs min-h-[38px]">
+                    {currentBooking
+                      ? `${currentBooking.date} (${currentBooking.time}) — ${currentBooking.reason || currentBooking.type || "Standard GP Consult"}`
+                      : "Walk-in unscheduled consultation (today)"}
+                  </div>
                 </div>
 
                 <div>
                   <label className="block font-bold text-sky-950 text-[11px] mb-1">Consultation Modality:</label>
-                  <select
-                    value={consultModality}
-                    onChange={(e: any) => setConsultModality(e.target.value)}
-                    className="w-full p-2 bg-white border border-sky-300 rounded-lg font-semibold text-slate-800 text-xs"
-                  >
-                    <option value="In-Person OPD">In-Person OPD (Clinic Exam Room)</option>
-                    <option value="Telehealth Video">Telehealth Video (Suwasiri Cloud)</option>
-                    <option value="Home Visit">Home Visit / Domiciliary</option>
-                    <option value="Emergency Triage">Emergency Triage / Urgent Care</option>
-                  </select>
+                  <div className="w-full p-2 bg-white border border-sky-300 rounded-lg font-semibold text-slate-800 text-xs min-h-[38px]">
+                    {bookingModalityLabel}
+                  </div>
                 </div>
 
                 <div>
                   <label className="block font-bold text-sky-950 text-[11px] mb-1">Consultation Fee (LKR):</label>
                   <div className="relative">
                     <span className="absolute left-2.5 top-2 font-bold text-slate-500 text-xs">Rs.</span>
-                    <input
-                      type="number"
-                      value={consultFeeLkr}
-                      onChange={(e) => setConsultFeeLkr(Number(e.target.value))}
-                      className="w-full pl-9 pr-2 py-1.5 bg-white border border-sky-300 rounded-lg font-bold text-slate-800 text-xs"
-                    />
+                    <div className="w-full pl-9 pr-2 py-1.5 bg-slate-50 border border-sky-300 rounded-lg font-bold text-slate-800 text-xs min-h-[38px]">
+                      {bookingFeeLkr.toLocaleString()}
+                    </div>
                   </div>
                 </div>
               </div>
+              )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Reason for Visit / Chief Complaint:</label>
-                  <input
-                    type="text"
-                    value={soapReason}
-                    onChange={e => setSoapReason(e.target.value)}
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg font-semibold"
-                  />
+              {viewingPastEncounter && viewingApt && (
+                <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-950">
+                  <span>Showing only issued details and medicines from {viewingApt.date} ({viewingApt.time}). Modality and fee stay with today’s booking.</span>
+                  {currentBooking && (
+                    <button
+                      type="button"
+                      onClick={() => loadEncounter(currentBooking)}
+                      className="px-2 py-1 rounded-md bg-white border border-amber-300 text-amber-900"
+                    >
+                      Back to current booking
+                    </button>
+                  )}
                 </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Quick Clinical Template:</label>
-                  <select
-                    onChange={(e) => {
-                      if (e.target.value === "asthma") {
-                        setSoapSubjective("Asthma follow-up: Assessed inhaler technique, night wakening 0x/week, daytime symptoms <2x/week. No oral steroid courses recently.");
-                        setSoapAssessment("Well-controlled bronchial asthma.");
-                      } else if (e.target.value === "diabetes") {
-                        setSoapSubjective("Type 2 DM routine review: Compliant with Metformin. Home BGL fasting 5.5-6.8 mmol/L. No hypoglycaemic episodes.");
-                        setSoapAssessment("Type 2 Diabetes Mellitus - adequate glycaemic control.");
-                      } else if (e.target.value === "htn") {
-                        setSoapSubjective("Hypertension routine check: No dizziness, headache, or visual blurring. Compliant with Losartan 50mg daily.");
-                        setSoapAssessment("Essential Hypertension - stable blood pressure control.");
-                      }
-                    }}
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg font-semibold"
+              )}
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Reason for Visit / Chief Complaint:</label>
+                <input
+                  type="text"
+                  value={soapReason}
+                  onChange={e => setSoapReason(e.target.value)}
+                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg font-semibold"
+                  readOnly={viewingPastEncounter}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                {([
+                  { id: "subjective" as const, title: "Subjective", subtitle: "History of Presenting Complaint", value: soapSubjective, set: setSoapSubjective, box: "border-sky-300 bg-sky-50", active: "ring-sky-400" },
+                ]).map((box) => {
+                  const open = openSoapBoxes[box.id];
+                  return (
+                    <div
+                      key={box.id}
+                      className={`rounded-xl border-2 ${box.box} ${open ? `ring-2 ${box.active}` : ""} overflow-hidden`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setOpenSoapBoxes((prev) => ({ ...prev, [box.id]: !prev[box.id] }))}
+                        className="w-full text-left px-3 py-2 flex items-center justify-between gap-2 shrink-0"
+                      >
+                        <span>
+                          <span className="block font-extrabold text-slate-900 text-[11px]">{box.title}</span>
+                          <span className="block text-[10px] text-slate-600">({box.subtitle})</span>
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-500">{open ? "Hide" : "Open"}</span>
+                      </button>
+                      {open && (
+                        <div className="px-3 pb-3">
+                          <textarea
+                            rows={8}
+                            value={box.value}
+                            onChange={(e) => box.set(e.target.value)}
+                            className="w-full h-48 overflow-y-auto p-2 bg-white border border-slate-200 rounded-lg text-xs resize-none"
+                            placeholder={`Enter ${box.title.toLowerCase()} notes…`}
+                            readOnly={viewingPastEncounter}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <div className={`rounded-xl border-2 border-teal-300 bg-teal-50 ${openSoapBoxes.objective ? "ring-2 ring-teal-400" : ""} overflow-hidden`}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenSoapBoxes((prev) => ({ ...prev, objective: !prev.objective }))}
+                    className="w-full text-left px-3 py-2 flex items-center justify-between gap-2 shrink-0"
                   >
-                    <option value="">Choose a Template...</option>
-                    <option value="asthma">Asthma Follow-up Template</option>
-                    <option value="diabetes">Diabetes Review Template</option>
-                    <option value="htn">Hypertension Review Template</option>
-                  </select>
+                    <span>
+                      <span className="block font-extrabold text-slate-900 text-[11px]">Diagnoses (writes to Medical History)</span>
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-500">{openSoapBoxes.objective ? "Hide" : "Open"}</span>
+                  </button>
+                  {openSoapBoxes.objective && (
+                    <div className="px-3 pb-3 space-y-3 max-h-56 overflow-y-auto">
+                      {!viewingPastEncounter && (
+                      <form onSubmit={handleAddDiagnosis} className="p-3 bg-white rounded-xl border border-teal-100 flex flex-col sm:flex-row gap-3 items-end">
+                        <div className="flex-1">
+                          <label className="block font-bold text-slate-700 mb-1">Condition:</label>
+                          <input
+                            type="text"
+                            value={newDiagnosisInput}
+                            onChange={(e) => setNewDiagnosisInput(e.target.value)}
+                            placeholder="e.g. Essential Hypertension"
+                            className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold"
+                            required
+                          />
+                        </div>
+                        <div className="w-32">
+                          <label className="block font-bold text-slate-700 mb-1">ICD-10:</label>
+                          <input
+                            type="text"
+                            value={newIcd10}
+                            onChange={(e) => setNewIcd10(e.target.value)}
+                            className="w-full p-2 bg-white border border-slate-300 rounded-lg font-mono font-bold"
+                          />
+                        </div>
+                        <button type="submit" className="px-4 py-2 bg-teal-700 text-white font-bold rounded-lg shrink-0">
+                          Add Diagnosis
+                        </button>
+                      </form>
+                      )}
+                      <div className="divide-y divide-teal-100 bg-white rounded-xl border border-teal-100 px-3">
+                        {visitDiagnoses.map((d) => (
+                          <div key={d.id} className="py-2 flex justify-between gap-2">
+                            <span className="font-bold text-slate-900">{d.condition}</span>
+                            <span className="text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded font-bold">{d.icd10Code || d.status}</span>
+                          </div>
+                        ))}
+                        {visitHistory.filter((h) => /^Diagnosis:/i.test(h.reason) && !visitDiagnoses.some((d) => h.reason.includes(d.condition))).map((h, i) => (
+                          <div key={`hist-dx-${i}`} className="py-2 flex justify-between gap-2">
+                            <span className="font-bold text-slate-900">{h.reason.replace(/^Diagnosis:\s*/i, "")}</span>
+                            <span className="text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded font-bold">{h.date}</span>
+                          </div>
+                        ))}
+                        {visitDiagnoses.length === 0 && visitHistory.every((h) => !/^Diagnosis:/i.test(h.reason)) && (
+                          <p className="text-slate-400 italic py-2">
+                            {viewingApt
+                              ? `No diagnoses issued on ${viewingApt.date}.`
+                              : "No diagnoses on file yet. Adding one writes Date, Issued doctor, and Medical clinic to Medical History."}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Subjective (History of Presenting Complaint):</label>
-                  <textarea
-                    rows={4}
-                    value={soapSubjective}
-                    onChange={e => setSoapSubjective(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg"
-                  />
+                <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50 overflow-hidden">
+                  <div className="px-3 py-2 flex items-center gap-2">
+                    <Pill className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                    <span>
+                      <span className="block font-extrabold text-slate-900 text-[11px]">Medicines issued this visit</span>
+                      <span className="block text-[10px] text-slate-600">
+                        {viewingApt ? `${viewingApt.date} (${viewingApt.time})` : "Current file"}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="px-3 pb-3 max-h-40 overflow-y-auto">
+                    <div className="divide-y divide-emerald-100 bg-white rounded-xl border border-emerald-100 px-3">
+                      {visitMedicines.map((med) => (
+                        <div key={med} className="py-2 font-semibold text-slate-900">{med}</div>
+                      ))}
+                      {visitPrescriptions.map((rx) => (
+                        <div key={rx.id} className="py-1.5 text-[10px] text-slate-500">
+                          Rx {rx.rxNumber} · {rx.date}
+                          {rx.dosageInstructions ? ` · ${rx.dosageInstructions}` : ""}
+                        </div>
+                      ))}
+                      {visitMedicines.length === 0 && visitPrescriptions.length === 0 && (
+                        <p className="text-slate-400 italic py-2">
+                          {viewingApt ? `No medicines issued on ${viewingApt.date}.` : "No medicines issued on this visit yet."}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Objective (Physical Examination & Observations):</label>
-                  <textarea
-                    rows={4}
-                    value={soapObjective}
-                    onChange={e => setSoapObjective(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Assessment (Working Diagnoses & ICD-10):</label>
-                  <textarea
-                    rows={3}
-                    value={soapAssessment}
-                    onChange={e => setSoapAssessment(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Plan & Management (Rx, Investigations, Follow-up):</label>
-                  <textarea
-                    rows={3}
-                    value={soapPlan}
-                    onChange={e => setSoapPlan(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg"
-                  />
-                </div>
+                {([
+                  { id: "plan" as const, title: "Plan & Management", subtitle: "Rx, Investigations, Follow-up", value: soapPlan, set: setSoapPlan, box: "border-emerald-300 bg-emerald-50", active: "ring-emerald-400" },
+                ]).map((box) => {
+                  const open = openSoapBoxes[box.id];
+                  return (
+                    <div
+                      key={box.id}
+                      className={`rounded-xl border-2 ${box.box} ${open ? `ring-2 ${box.active}` : ""} overflow-hidden`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setOpenSoapBoxes((prev) => ({ ...prev, [box.id]: !prev[box.id] }))}
+                        className="w-full text-left px-3 py-2 flex items-center justify-between gap-2 shrink-0"
+                      >
+                        <span>
+                          <span className="block font-extrabold text-slate-900 text-[11px]">{box.title}</span>
+                          <span className="block text-[10px] text-slate-600">({box.subtitle})</span>
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-500">{open ? "Hide" : "Open"}</span>
+                      </button>
+                      {open && (
+                        <div className="px-3 pb-3">
+                          <textarea
+                            rows={8}
+                            value={box.value}
+                            onChange={(e) => box.set(e.target.value)}
+                            className="w-full h-48 overflow-y-auto p-2 bg-white border border-slate-200 rounded-lg text-xs resize-none"
+                            placeholder={`Enter ${box.title.toLowerCase()} notes…`}
+                            readOnly={viewingPastEncounter}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="flex justify-between items-center pt-3 border-t">
                 <div className="flex items-center gap-2 text-slate-500 text-[11px]">
                   <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  <span>SLMC Registration: <strong>12908 (Dr. Priyantha Silva)</strong></span>
+                  <span>SLMC • <strong>{issuedDoctor}</strong> • {issuedClinic}</span>
                 </div>
+                {!viewingPastEncounter && (
                 <button
                   onClick={() => {
+                    const diagnosisLine = (patient.diagnosesList || [])
+                      .map((d) => `${d.condition}${d.icd10Code ? ` (${d.icd10Code})` : ""}`)
+                      .join("; ");
                     const newHistItem = {
                       date: new Date().toISOString().split("T")[0],
-                      reason: soapReason,
-                      doctor: "Dr. Priyantha Silva",
-                      notes: `S: ${soapSubjective}\nO: ${soapObjective}\nA: ${soapAssessment}\nP: ${soapPlan}`
+                      reason: soapReason || "Clinical consultation",
+                      doctor: issuedDoctor,
+                      notes: `S: ${soapSubjective}\nDiagnoses: ${diagnosisLine || "—"}\nP: ${soapPlan}`,
+                      clinicName: issuedClinic,
+                      appointmentId: selectedAppointmentId || undefined,
+                      soapSubjective,
+                      soapObjective: diagnosisLine,
+                      soapAssessment: diagnosisLine,
+                      soapPlan,
                     };
 
                     const targetAptId = selectedAppointmentId || patientAppointments[0]?.id || `apt-${Date.now()}`;
@@ -636,7 +1163,7 @@ export default function DoctorClinicalRecordModal({
                       appointmentId: targetAptId,
                       patientId: patient.id,
                       patientName: patient.name,
-                      doctorName: "Dr. Priyantha Silva",
+                      doctorName: issuedDoctor,
                       doctorSlmcNo: "12908",
                       consultationDate: new Date().toISOString().split("T")[0],
                       startTime: new Date(Date.now() - 15 * 60000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -656,47 +1183,178 @@ export default function DoctorClinicalRecordModal({
                       chiefComplaints: soapReason,
                       soapNotes: {
                         subjective: soapSubjective,
-                        objective: soapObjective,
-                        assessment: soapAssessment,
+                        objective: diagnosisLine,
+                        assessment: diagnosisLine,
                         plan: soapPlan
                       },
-                      primaryDiagnosis: soapAssessment.split("\n")[0] || "Routine Medical Review",
-                      icd10Code: newIcd10 || "Z00.0",
-                      prescriptionsIssued: patient.prescriptionsList?.map(p => p.items.join(", ")) || [],
+                      primaryDiagnosis: (patient.diagnosesList || [])[0]?.condition || "Routine Medical Review",
+                      icd10Code: (patient.diagnosesList || [])[0]?.icd10Code || newIcd10 || "Z00.0",
+                      prescriptionsIssued: (patient.prescriptionsList || [])
+                        .filter((rx) => dayKey(rx.date) === (viewingApt?.date || new Date().toISOString().split("T")[0]))
+                        .flatMap((rx) => rx.items),
                       labInvestigationsOrdered: patient.labResults?.map(l => l.testName) || [],
-                      billingAmountLkr: consultFeeLkr,
+                      billingAmountLkr: bookingFeeLkr,
                       paymentStatus: "PAID",
                       doctorClinicalRemarks: "Consultation finalized and clinical notes verified by Attending Medical Officer.",
                       lastUpdated: new Date().toISOString()
                     };
 
+                    const alreadyTodayObs = (patient.observationsHistory || []).some(
+                      (o) => o.date === newHistItem.date
+                    );
+                    const completeObs = {
+                      id: `obs-${Date.now()}`,
+                      date: newHistItem.date,
+                      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                      heightCm: obsHeightCm,
+                      weightKg: obsWeightKg,
+                      bmi: autoBmi?.bmi,
+                      bmiCategory: autoBmi?.category,
+                      systolicBp: obsSystolic,
+                      diastolicBp: obsDiastolic,
+                      pulse: obsPulse,
+                      temperature: obsTemp,
+                      spO2: obsSpO2,
+                      bloodGlucoseMmol: obsBgl,
+                      recordedBy: issuedDoctor,
+                    };
+
                     const updatedPatient = {
                       ...patient,
-                      history: [newHistItem, ...patient.history]
+                      notes: soapPlan,
+                      heightCm: obsHeightCm,
+                      weightKg: obsWeightKg,
+                      lastSystolicBp: obsSystolic,
+                      lastDiastolicBp: obsDiastolic,
+                      history: [newHistItem, ...(patient.history || [])],
+                      medicalHistory: [
+                        `[${newHistItem.date}] ${issuedDoctor} · ${issuedClinic} · ${soapReason || "Consultation"} | S: ${soapSubjective || "—"} | Dx: ${diagnosisLine || "—"} | P: ${soapPlan || "—"}`,
+                        ...(patient.medicalHistory || []),
+                      ],
+                      observationsHistory: alreadyTodayObs
+                        ? patient.observationsHistory
+                        : [completeObs, ...(patient.observationsHistory || [])],
                     };
                     onUpdatePatient(updatedPatient);
 
                     // Update corresponding appointment
                     if (onUpdateAppointment) {
-                      const existingApt = appointments.find(a => a.id === targetAptId);
+                      const existingApt =
+                        appointments.find((a) => a.id === targetAptId) ||
+                        appointments.find((a) => a.patientId === patient.id && a.status !== "COMPLETED");
                       if (existingApt) {
                         onUpdateAppointment({
                           ...existingApt,
                           status: "COMPLETED",
-                          feeAmount: consultFeeLkr,
+                          feeAmount: bookingFeeLkr,
                           consultationActivity: newActivity
                         });
                       }
                     }
 
-                    showToast("⚡ Doctor Consultation Activity signed & updated for appointment!");
+                    showToast("Consultation completed. Notes are on this patient’s profile and in Completed Consultations.");
                   }}
-                  className="px-6 py-2.5 bg-[#00334f] hover:bg-[#0c4a6e] text-white font-bold rounded-lg shadow-md cursor-pointer flex items-center gap-2"
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-md cursor-pointer flex items-center gap-2"
                 >
-                  <CheckCircle className="w-4 h-4 text-emerald-400" />
-                  <span>Sign & Save Doctor Consultation Activities</span>
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Completed</span>
                 </button>
+                )}
               </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-xl border border-amber-200 shadow-xs space-y-3 text-xs">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">Medical History</h3>
+                <p className="text-slate-500 text-[11px]">Pick a date and time. Consultation then shows only that day’s issued diagnoses, notes, and medicines.</p>
+              </div>
+              <div className="relative">
+                <label className="block font-bold text-sky-950 text-[11px] mb-1">Appointment link</label>
+                <button
+                  type="button"
+                  onClick={() => setHistoryLinkOpen((open) => !open)}
+                  className="w-full p-2.5 bg-white border-2 border-sky-300 rounded-lg font-bold text-sky-900 text-xs flex items-center justify-between gap-2 text-left"
+                >
+                  <span className="truncate">
+                    {viewingApt ? encounterLabel(viewingApt) : "Select a previous appointment"}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 shrink-0 text-sky-700 ${historyLinkOpen ? "rotate-180" : ""}`} />
+                </button>
+                {historyLinkOpen && (
+                  <div className="absolute z-30 mt-1 w-full max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg">
+                    {pastAppointments.length === 0 ? (
+                      <p className="p-3 text-slate-400 italic">No previous appointments on this file.</p>
+                    ) : pastAppointments.map((apt) => {
+                      const selected = apt.id === selectedAppointmentId;
+                      return (
+                        <button
+                          key={apt.id}
+                          type="button"
+                          onClick={() => loadEncounter(apt)}
+                          className={`w-full text-left px-3 py-2 text-xs font-bold border-b border-slate-100 last:border-0 ${
+                            selected ? "bg-sky-700 text-white" : "text-slate-800 hover:bg-sky-50"
+                          }`}
+                        >
+                          {encounterLabel(apt)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              <div className="overflow-auto border border-amber-100 rounded-xl max-h-56">
+                <table className="w-full text-left">
+                  <thead className="bg-amber-50 text-[10px] uppercase tracking-wide text-amber-950 sticky top-0">
+                    <tr>
+                      <th className="p-2.5">Date</th>
+                      <th className="p-2.5">Issued doctor</th>
+                      <th className="p-2.5">Medical clinic</th>
+                      <th className="p-2.5">Reason</th>
+                      <th className="p-2.5">Appointment link</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-amber-50">
+                    {visitHistory.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-4 text-slate-400 italic">
+                          {viewingApt
+                            ? `No issued details for ${viewingApt.date}. Save the consultation, add a diagnosis, or issue medicines on that visit.`
+                            : "No history yet. Save the consultation, add a diagnosis, or update clinical calculators."}
+                        </td>
+                      </tr>
+                    ) : visitHistory.map((h, i) => {
+                      const linkedApt = appointments.find((a) => a.id === h.appointmentId) ||
+                        patientAppointments.find((a) => a.date === h.date);
+                      return (
+                        <tr key={`${h.date}-${i}`} className="align-top">
+                          <td className="p-2.5 font-mono font-bold text-slate-800 whitespace-nowrap">{h.date}</td>
+                          <td className="p-2.5 font-semibold text-slate-800">{h.doctor}</td>
+                          <td className="p-2.5 text-slate-700">{h.clinicName || issuedClinic}</td>
+                          <td className="p-2.5">
+                            <p className="font-bold text-slate-900">{h.reason}</p>
+                            <p className="text-slate-500 whitespace-pre-line mt-0.5 max-w-md">{h.notes}</p>
+                          </td>
+                          <td className="p-2.5">
+                            {linkedApt ? (
+                              <button
+                                type="button"
+                                onClick={() => loadEncounter(linkedApt)}
+                                className="text-sky-800 font-extrabold hover:underline text-left"
+                              >
+                                {encounterLabel(linkedApt)}
+                              </button>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {consultationFooter}
             </div>
           )}
 
@@ -1043,32 +1701,28 @@ export default function DoctorClinicalRecordModal({
           {/* TAB 9: PATHOLOGY */}
           {activeTab === "pathology" && (
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-5 text-xs">
-              <div className="flex justify-between items-center">
-                <h3 className="font-bold text-sm text-slate-900">Electronic Pathology Ordering & Incoming Results</h3>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">Pathology</h3>
+                <p className="text-slate-500 text-[11px]">Previous reports stay under Pathology history. Request a new test for Sample Dispatch Hub.</p>
               </div>
 
-              <form onSubmit={handleOrderPathology} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+              <form onSubmit={handleOrderPathology} className="p-4 bg-purple-50 rounded-xl border border-purple-200 space-y-3">
+                <h4 className="font-extrabold text-purple-950 text-xs uppercase tracking-wide">Request a pathology test</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Select Pathology Test (Favourites):</label>
+                    <label className="block font-bold text-slate-700 mb-1">Investigation:</label>
                     <select
                       value={pathTestSelection}
                       onChange={e => setPathTestSelection(e.target.value)}
                       className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold"
                     >
-                      <option value="Full Blood Count (FBC)">Full Blood Count (FBC)</option>
-                      <option value="Glycated Hemoglobin (HbA1c)">Glycated Hemoglobin (HbA1c)</option>
-                      <option value="Lipid Profile (Chol, HDL, LDL, Trig)">Lipid Profile</option>
-                      <option value="Urea, Electrolytes & Creatinine (EUC/eGFR)">EUC & eGFR Kidney Function</option>
-                      <option value="Liver Function Tests (LFTs)">Liver Function Tests (LFTs)</option>
-                      <option value="Thyroid Function (TSH, FT4)">Thyroid Stimulating Hormone (TSH)</option>
-                      <option value="Iron Studies & Ferritin">Iron Studies & Ferritin</option>
-                      <option value="Urinalysis & Micro/Culture">Urine Micro & Culture (MSU)</option>
+                      {PATHOLOGY_INVESTIGATIONS.map((t) => (
+                        <option key={t.name} value={t.name}>{t.category} — {t.name}</option>
+                      ))}
                     </select>
                   </div>
-
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Clinical Indication:</label>
+                    <label className="block font-bold text-slate-700 mb-1">Clinical indication:</label>
                     <input
                       type="text"
                       value={pathClinicalNotes}
@@ -1077,46 +1731,133 @@ export default function DoctorClinicalRecordModal({
                     />
                   </div>
                 </div>
-
                 <div className="flex justify-end">
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-[#00334f] text-white font-bold rounded-lg cursor-pointer"
-                  >
-                    Send Electronic Pathology Request
+                  <button type="submit" className="px-4 py-2 bg-[#00334f] text-white font-bold rounded-lg">
+                    Request pathology test
                   </button>
                 </div>
               </form>
 
-              <div className="divide-y divide-slate-100">
-                {patient.labResults.map(res => (
-                  <div key={res.id} className="py-3 space-y-1">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-900">{res.testName}</span>
-                      <span className="text-slate-400 font-mono text-[11px]">{res.date}</span>
-                    </div>
-                    <p className="font-semibold text-slate-800">{res.result}</p>
-                    <p className="text-slate-500 italic text-[11px]">{res.remarks}</p>
-                  </div>
-                ))}
+              <div>
+                <h4 className="font-extrabold text-slate-800 text-xs uppercase tracking-wide mb-2">Pathology history</h4>
+                <p className="text-[11px] text-slate-500 mb-2">Reports marked Completed on Pathology leave the unread inbox and are filed here. Open a report to view it and add a doctor note.</p>
+                <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl max-h-[28rem] overflow-y-auto">
+                  {(patient.labResults || []).length === 0 ? (
+                    <p className="text-slate-400 italic p-4">No previous pathology reports on this file yet.</p>
+                  ) : (patient.labResults || []).map((res) => {
+                    const body = pathReportText(res);
+                    const critical = Boolean(res.criticalAlert);
+                    const reviewed = Boolean(res.doctorReviewed);
+                    const draft = pathNoteDrafts[res.id] ?? res.doctorNotes ?? "";
+                    return (
+                      <div key={res.id} className={`p-3 space-y-2 ${critical ? "bg-red-50" : "bg-white"}`}>
+                        <div className="flex justify-between items-start gap-2">
+                          <div>
+                            <span className="font-bold text-slate-900">{res.testName}</span>
+                            {critical && (
+                              <span className="ml-1.5 text-[9px] font-black uppercase bg-red-600 text-white px-1.5 py-0.5 rounded">Red alert</span>
+                            )}
+                            {reviewed && !critical && (
+                              <span className="ml-1.5 text-[9px] font-bold uppercase bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">Completed</span>
+                            )}
+                            <p className="font-semibold text-slate-800 mt-0.5">{res.result}</p>
+                            <p className="text-slate-500 italic text-[11px]">{res.remarks}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="text-slate-400 font-mono text-[11px] block">{res.date}</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${critical ? "text-red-800 bg-red-100" : "text-purple-800 bg-purple-50"}`}>{res.status}</span>
+                          </div>
+                        </div>
+                        <label className="block">
+                          <span className="text-[10px] font-bold uppercase text-slate-500">Doctor note</span>
+                          <textarea
+                            rows={2}
+                            value={draft}
+                            onChange={(e) => setPathNoteDrafts((prev) => ({ ...prev, [res.id]: e.target.value }))}
+                            placeholder="Add a clinical note on this report…"
+                            className="mt-1 w-full p-2 border border-purple-200 rounded-lg bg-purple-50/50 text-[11px] outline-none focus:border-purple-400"
+                          />
+                        </label>
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          <button type="button" onClick={() => setViewingPathLab(res)} className="inline-flex items-center gap-1 px-2 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded font-bold text-[10px]"><Eye className="w-3 h-3" /> View</button>
+                          <button
+                            type="button"
+                            onClick={() => savePathologyNote(res.id)}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[10px]"
+                          >
+                            {savingPathNoteId === res.id ? "Saved" : "Save note"}
+                          </button>
+                          <button type="button" onClick={() => printDocument(res.testName, body)} className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded font-bold text-[10px]"><Printer className="w-3 h-3" /> Print</button>
+                          <button type="button" onClick={() => sendByEmail(patient.email, `Pathology: ${res.testName}`, body)} className="inline-flex items-center gap-1 px-2 py-1 bg-sky-50 hover:bg-sky-100 text-sky-900 rounded font-bold text-[10px]"><Mail className="w-3 h-3" /> Email</button>
+                          <button type="button" onClick={() => sendByPhone(patient.phone, `${res.testName} ${res.date}: ${res.result}`)} className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 rounded font-bold text-[10px]"><Phone className="w-3 h-3" /> Phone</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
+
+              {viewingPathLab && (
+                <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+                  <div className="bg-white rounded-xl max-w-2xl w-full border shadow-xl max-h-[90vh] flex flex-col">
+                    <div className="flex justify-between items-start gap-3 border-b px-5 py-4">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-sky-800">Pathology report</p>
+                        <h3 className="font-serif font-bold text-base text-[#00334f]">{viewingPathLab.testName}</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">{patient.name} · {viewingPathLab.date}</p>
+                      </div>
+                      <button type="button" onClick={() => setViewingPathLab(null)} className="text-slate-400 hover:text-slate-700 p-1" title="Close">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <pre className="flex-1 overflow-y-auto p-5 text-[11px] leading-relaxed font-mono text-slate-800 whitespace-pre-wrap bg-slate-50">
+                      {pathReportText(viewingPathLab)}
+                    </pre>
+                    <div className="border-t px-5 py-3 space-y-2">
+                      <label className="block">
+                        <span className="text-[10px] font-bold uppercase text-slate-500">Doctor note</span>
+                        <textarea
+                          rows={2}
+                          value={pathNoteDrafts[viewingPathLab.id] ?? viewingPathLab.doctorNotes ?? ""}
+                          onChange={(e) => setPathNoteDrafts((prev) => ({ ...prev, [viewingPathLab.id]: e.target.value }))}
+                          className="mt-1 w-full p-2 border border-purple-200 rounded-lg text-[11px] outline-none focus:border-purple-400"
+                        />
+                      </label>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            savePathologyNote(viewingPathLab.id);
+                            setViewingPathLab(null);
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-[11px] font-bold"
+                        >
+                          Save note
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* TAB 10: IMAGING */}
           {activeTab === "imaging" && (
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-5 text-xs">
-              <div className="flex justify-between items-center">
-                <h3 className="font-bold text-sm text-slate-900">Diagnostic Imaging Requests (X-ray, CT, MRI, Ultrasound)</h3>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">Imaging</h3>
+                <p className="text-slate-500 text-[11px]">Previous reports stay under Imaging history. Request a new study from here.</p>
               </div>
 
-              <form onSubmit={handleOrderImaging} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+              <form onSubmit={handleOrderImaging} className="p-4 bg-cyan-50 rounded-xl border border-cyan-200 space-y-3">
+                <h4 className="font-extrabold text-cyan-950 text-xs uppercase tracking-wide">Request an imaging study</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
                     <label className="block font-bold text-slate-700 mb-1">Modality:</label>
                     <select
                       value={imagingModality}
-                      onChange={e => setImagingModality(e.target.value as any)}
+                      onChange={e => setImagingModality(e.target.value as ImagingRecord["modality"])}
                       className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold"
                     >
                       <option value="X-ray">X-ray</option>
@@ -1127,50 +1868,46 @@ export default function DoctorClinicalRecordModal({
                       <option value="Bone Densitometry">Bone Densitometry (DEXA)</option>
                     </select>
                   </div>
-
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Region / Body Part:</label>
-                    <input
-                      type="text"
-                      value={imagingBodyPart}
-                      onChange={e => setImagingBodyPart(e.target.value)}
-                      className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold"
-                    />
+                    <label className="block font-bold text-slate-700 mb-1">Region / body part:</label>
+                    <input type="text" value={imagingBodyPart} onChange={e => setImagingBodyPart(e.target.value)} className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold" />
                   </div>
-
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Clinical Indication:</label>
-                    <input
-                      type="text"
-                      value={imagingIndication}
-                      onChange={e => setImagingIndication(e.target.value)}
-                      className="w-full p-2 bg-white border border-slate-300 rounded-lg font-medium"
-                    />
+                    <label className="block font-bold text-slate-700 mb-1">Clinical indication:</label>
+                    <input type="text" value={imagingIndication} onChange={e => setImagingIndication(e.target.value)} className="w-full p-2 bg-white border border-slate-300 rounded-lg font-medium" />
                   </div>
                 </div>
-
                 <div className="flex justify-end">
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-[#00334f] text-white font-bold rounded-lg cursor-pointer"
-                  >
-                    Generate Imaging eRequest
-                  </button>
+                  <button type="submit" className="px-4 py-2 bg-[#00334f] text-white font-bold rounded-lg">Request imaging</button>
                 </div>
               </form>
 
-              <div className="divide-y divide-slate-100">
-                {(patient.imagingRecords || []).map(img => (
-                  <div key={img.id} className="py-3 flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-slate-900">{img.modality} — {img.bodyPart}</p>
-                      <p className="text-slate-500 text-[11px]">Indication: {img.clinicalIndication} • Ordered: {img.dateOrdered}</p>
-                    </div>
-                    <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded">
-                      {img.status}
-                    </span>
-                  </div>
-                ))}
+              <div>
+                <h4 className="font-extrabold text-slate-800 text-xs uppercase tracking-wide mb-2">Imaging history</h4>
+                <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl max-h-56 overflow-y-auto">
+                  {(patient.imagingRecords || []).length === 0 ? (
+                    <p className="text-slate-400 italic p-4">No previous imaging reports on this file yet.</p>
+                  ) : (patient.imagingRecords || []).map((img) => {
+                    const body = `IMAGING REPORT\nPatient: ${patient.name}\nStudy: ${img.modality} — ${img.bodyPart}\nOrdered: ${img.dateOrdered}\nStatus: ${img.status}\nIndication: ${img.clinicalIndication}\nReport: ${img.radiologistReport || img.findings || "Pending"}\nClinic: ${issuedClinic}\nDoctor: ${issuedDoctor}`;
+                    return (
+                      <div key={img.id} className="p-3 bg-white space-y-1">
+                        <div className="flex justify-between gap-2">
+                          <div>
+                            <p className="font-bold text-slate-900">{img.modality} — {img.bodyPart}</p>
+                            <p className="text-slate-500 text-[11px]">Indication: {img.clinicalIndication} • Ordered: {img.dateOrdered}</p>
+                            {img.radiologistReport && <p className="text-slate-700 mt-1">{img.radiologistReport}</p>}
+                          </div>
+                          <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded h-fit">{img.status}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          <button type="button" onClick={() => printDocument(`${img.modality} ${img.bodyPart}`, body)} className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded font-bold text-[10px]"><Printer className="w-3 h-3" /> Print</button>
+                          <button type="button" onClick={() => sendByEmail(patient.email, `Imaging: ${img.modality} ${img.bodyPart}`, body)} className="inline-flex items-center gap-1 px-2 py-1 bg-sky-50 hover:bg-sky-100 text-sky-900 rounded font-bold text-[10px]"><Mail className="w-3 h-3" /> Email</button>
+                          <button type="button" onClick={() => sendByPhone(patient.phone, `${img.modality} ${img.bodyPart} (${img.dateOrdered}): ${img.status}`)} className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 rounded font-bold text-[10px]"><Phone className="w-3 h-3" /> Phone</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -1178,63 +1915,110 @@ export default function DoctorClinicalRecordModal({
           {/* TAB 11: REFERRALS */}
           {activeTab === "referrals" && (
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-5 text-xs">
-              <div className="flex justify-between items-center">
-                <h3 className="font-bold text-sm text-slate-900">Specialist Directory & eReferrals Network</h3>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">Specialist eReferrals</h3>
+                <p className="text-slate-500 text-[11px]">Use a sample template, then print or email the letter to the related specialist.</p>
               </div>
 
-              <form onSubmit={handleCreateReferral} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { label: "Cardiology review", specialist: "Dr. Lalith Fernando (Cardiologist)", specialty: "Cardiology", email: "lalith.fernando@asiri.lk", summary: "Thank you for reviewing this patient regarding cardiovascular risk stratification and echocardiogram evaluation." },
+                  { label: "Endocrinology / diabetes", specialist: "Dr. Chandima De Silva (Endocrinologist)", specialty: "Endocrinology", email: "chandima.desilva@lankahospitals.com", summary: "Thank you for reviewing glycaemic control, complications screening, and further endocrine work-up." },
+                  { label: "Orthopaedics", specialist: "Dr. Nalin Wickramasinghe (Orthopaedic Surgeon)", specialty: "Orthopaedics", email: "nalin.w@nhsl.lk", summary: "Thank you for assessing this musculoskeletal presentation and advising on imaging or operative options." },
+                  { label: "Dermatology", specialist: "Dr. Anoja Senanayake (Dermatologist)", specialty: "Dermatology", email: "anoja.s@primecare.lk", summary: "Thank you for reviewing this skin lesion / chronic dermatosis and advising on biopsy or therapy." },
+                  { label: "Mental health", specialist: "Dr. Ruwan Perera (Psychiatrist)", specialty: "Psychiatry", email: "ruwan.perera@ncmh.lk", summary: "Thank you for psychiatric assessment and shared-care advice for this patient." },
+                ].map((tpl) => (
+                  <button
+                    key={tpl.label}
+                    type="button"
+                    onClick={() => {
+                      setRefSpecialist(tpl.specialist);
+                      setRefSpecialty(tpl.specialty);
+                      setRefClinicalSummary(tpl.summary);
+                      setRefEmail(tpl.email);
+                    }}
+                    className="text-[10px] bg-orange-100 hover:bg-orange-200 text-orange-950 font-bold px-2 py-1 rounded-lg border border-orange-200"
+                  >
+                    + {tpl.label}
+                  </button>
+                ))}
+              </div>
+
+              <form onSubmit={handleCreateReferral} className="p-4 bg-orange-50 rounded-xl border border-orange-200 space-y-3">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Specialist & Specialty:</label>
+                    <label className="block font-bold text-slate-700 mb-1">Specialist & specialty:</label>
                     <select
                       value={refSpecialist}
                       onChange={e => {
                         setRefSpecialist(e.target.value);
-                        if (e.target.value.includes("Cardiologist")) setRefSpecialty("Cardiology");
-                        else if (e.target.value.includes("Endocrinologist")) setRefSpecialty("Endocrinology");
-                        else setRefSpecialty("Orthopaedics");
+                        if (e.target.value.includes("Cardiologist")) { setRefSpecialty("Cardiology"); setRefEmail("lalith.fernando@asiri.lk"); }
+                        else if (e.target.value.includes("Endocrinologist")) { setRefSpecialty("Endocrinology"); setRefEmail("chandima.desilva@lankahospitals.com"); }
+                        else if (e.target.value.includes("Dermatologist")) { setRefSpecialty("Dermatology"); setRefEmail("anoja.s@primecare.lk"); }
+                        else if (e.target.value.includes("Psychiatrist")) { setRefSpecialty("Psychiatry"); setRefEmail("ruwan.perera@ncmh.lk"); }
+                        else { setRefSpecialty("Orthopaedics"); setRefEmail("nalin.w@nhsl.lk"); }
                       }}
                       className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold"
                     >
                       <option value="Dr. Lalith Fernando (Cardiologist)">Dr. Lalith Fernando (Cardiologist) — Asiri Surgical</option>
                       <option value="Dr. Chandima De Silva (Endocrinologist)">Dr. Chandima De Silva (Endocrinologist) — Lanka Hospital</option>
                       <option value="Dr. Nalin Wickramasinghe (Orthopaedic Surgeon)">Dr. Nalin Wickramasinghe (Orthopaedic Surgeon) — National Hospital</option>
+                      <option value="Dr. Anoja Senanayake (Dermatologist)">Dr. Anoja Senanayake (Dermatologist) — PrimeCare</option>
+                      <option value="Dr. Ruwan Perera (Psychiatrist)">Dr. Ruwan Perera (Psychiatrist) — NCMH</option>
                     </select>
                   </div>
-
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">Clinical Reason & Objectives:</label>
-                    <input
-                      type="text"
-                      value={refClinicalSummary}
-                      onChange={e => setRefClinicalSummary(e.target.value)}
-                      className="w-full p-2 bg-white border border-slate-300 rounded-lg font-medium"
-                    />
+                    <label className="block font-bold text-slate-700 mb-1">Specialist email:</label>
+                    <input type="email" value={refEmail} onChange={(e) => setRefEmail(e.target.value)} className="w-full p-2 bg-white border border-slate-300 rounded-lg font-medium" />
                   </div>
                 </div>
-
-                <div className="flex justify-end">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Clinical reason & objectives:</label>
+                  <textarea rows={3} value={refClinicalSummary} onChange={e => setRefClinicalSummary(e.target.value)} className="w-full p-2 bg-white border border-slate-300 rounded-lg font-medium" />
+                </div>
+                <div className="flex flex-wrap justify-end gap-2">
                   <button
-                    type="submit"
-                    className="px-4 py-2 bg-[#00334f] text-white font-bold rounded-lg cursor-pointer"
+                    type="button"
+                    onClick={() => {
+                      const body = `REFERRAL LETTER\n\nTo: ${refSpecialist} (${refSpecialty})\nEmail: ${refEmail}\nFrom: ${issuedDoctor}\nClinic: ${issuedClinic}\nPatient: ${patient.name}, ${patient.age} yrs, ${patient.gender}\nAllergies: ${patient.allergies || "NKDA"}\n\nDear Colleague,\n\n${refClinicalSummary}\n\nYours sincerely,\n${issuedDoctor}`;
+                      printDocument(`Referral — ${refSpecialist}`, body);
+                    }}
+                    className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-lg inline-flex items-center gap-1"
                   >
-                    Send Electronic eReferral
+                    <Printer className="w-3.5 h-3.5" /> Print letter
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const body = `Dear ${refSpecialist},\n\nPlease find this GP referral for ${patient.name} (${patient.age} yrs).\n\n${refClinicalSummary}\n\n${issuedDoctor}\n${issuedClinic}`;
+                      sendByEmail(refEmail, `eReferral: ${patient.name} — ${refSpecialty}`, body);
+                    }}
+                    className="px-3 py-2 bg-sky-100 hover:bg-sky-200 text-sky-950 font-bold rounded-lg inline-flex items-center gap-1"
+                  >
+                    <Mail className="w-3.5 h-3.5" /> Email specialist
+                  </button>
+                  <button type="submit" className="px-4 py-2 bg-[#00334f] text-white font-bold rounded-lg">
+                    Save eReferral
                   </button>
                 </div>
               </form>
 
-              <div className="divide-y divide-slate-100">
-                {(patient.referralsList || []).map(ref => (
-                  <div key={ref.id} className="py-3 flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-slate-900">{ref.specialistName} ({ref.specialty})</p>
-                      <p className="text-slate-500 text-[11px]">{ref.clinicalSummary} • {ref.dateCreated}</p>
+              <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+                {(patient.referralsList || []).map((ref) => {
+                  const body = `REFERRAL LETTER\nTo: ${ref.specialistName} (${ref.specialty})\nPatient: ${patient.name}\nDate: ${ref.dateCreated}\n\n${ref.clinicalSummary}\n\n${ref.referringDoctor || issuedDoctor}\n${issuedClinic}`;
+                  return (
+                    <div key={ref.id} className="p-3 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <p className="font-bold text-slate-900">{ref.specialistName} ({ref.specialty})</p>
+                        <p className="text-slate-500 text-[11px]">{ref.clinicalSummary} • {ref.dateCreated}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button type="button" onClick={() => printDocument(`Referral ${ref.specialistName}`, body)} className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 rounded font-bold text-[10px]"><Printer className="w-3 h-3" /> Print</button>
+                        <button type="button" onClick={() => sendByEmail(refEmail, `eReferral: ${patient.name}`, body)} className="inline-flex items-center gap-1 px-2 py-1 bg-sky-50 text-sky-900 rounded font-bold text-[10px]"><Mail className="w-3 h-3" /> Email</button>
+                      </div>
                     </div>
-                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
-                      eReferral Dispatched
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -1270,18 +2054,164 @@ export default function DoctorClinicalRecordModal({
           {/* TAB 13: DOCUMENTS */}
           {activeTab === "documents" && (
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-4 text-xs">
-              <h3 className="font-bold text-sm text-slate-900">Clinical Documents & Correspondence</h3>
-              <div className="divide-y divide-slate-100">
-                <div className="py-2.5 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-red-600" />
-                    <div>
-                      <p className="font-bold text-slate-900">Hospital Discharge Summary - Colombo South Teaching Hospital</p>
-                      <p className="text-slate-400 text-[10px]">2025-11-20 • PDF Document • 2.4 MB</p>
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900">Documents history</h3>
+                  <p className="text-slate-500 text-[11px]">Scan or drop files onto this patient’s chart from here.</p>
+                </div>
+                {examAddDocMode !== "chooser" && (
+                <button
+                  type="button"
+                  onClick={() => setExamAddDocMode("chooser")}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#00334f] text-white rounded-lg font-bold text-[11px]"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add document
+                </button>
+                )}
+              </div>
+
+              {examAddDocMode && (
+                <div className="bg-white rounded-xl border border-slate-200 shadow-md overflow-hidden">
+                  <div className="px-5 pt-4 pb-3 flex items-start justify-between gap-3">
+                    <h4 className="font-bold text-base text-[#00334f]">Add document.</h4>
+                    <button
+                      type="button"
+                      onClick={() => setExamAddDocMode(null)}
+                      className="text-slate-400 hover:text-slate-700 p-0.5"
+                      title="Close"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="border-t border-slate-200 px-5 py-4 space-y-3">
+                    <p className="text-[11px] text-slate-500">
+                      File to {patient.name}’s Documents history.
+                    </p>
+                    <input
+                      ref={examScanInputRef}
+                      type="file"
+                      accept="image/*,application/pdf"
+                      capture="environment"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) fileClinicalDocFromFile(file, true);
+                        e.target.value = "";
+                      }}
+                    />
+                    <input
+                      ref={examFileInputRef}
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,image/*,application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) fileClinicalDocFromFile(file, false);
+                        e.target.value = "";
+                      }}
+                    />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => examScanInputRef.current?.click()}
+                        className="flex items-start gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50 text-left"
+                      >
+                        <Camera className="w-6 h-6 text-amber-800 shrink-0 mt-0.5" />
+                        <span>
+                          <span className="block font-bold text-amber-950 text-sm">Scan</span>
+                          <span className="text-[11px] text-amber-800/90">
+                            Acquire from a connected scanner, webcam, or phone camera.
+                          </span>
+                        </span>
+                      </button>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => examFileInputRef.current?.click()}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") examFileInputRef.current?.click();
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setExamDropActive(true);
+                        }}
+                        onDragLeave={() => setExamDropActive(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setExamDropActive(false);
+                          const file = e.dataTransfer.files?.[0];
+                          if (file) fileClinicalDocFromFile(file, false);
+                        }}
+                        className={`flex items-start gap-3 p-4 rounded-xl border text-left cursor-pointer ${
+                          examDropActive
+                            ? "border-[#00334f] bg-sky-100"
+                            : "border-sky-200 bg-sky-50"
+                        }`}
+                      >
+                        <Upload className="w-6 h-6 text-[#00334f] shrink-0 mt-0.5" />
+                        <span>
+                          <span className="block font-bold text-[#00334f] text-sm">Drag and drop / Browse</span>
+                          <span className="text-[11px] text-slate-500">
+                            Drop a PDF or image here, or browse your computer.
+                          </span>
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <button className="text-xs font-bold text-[#00334f] hover:underline">View PDF</button>
                 </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border">
+                <div>
+                  <label className="block font-bold text-slate-600 mb-1">Send-to email</label>
+                  <input type="email" defaultValue={patient.email} onChange={(e) => setDocEmail(e.target.value)} placeholder={patient.email || "patient@email.com"} className="w-full p-2 border rounded-lg bg-white" />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-600 mb-1">Send-to phone</label>
+                  <input type="tel" defaultValue={patient.phone} onChange={(e) => setDocPhone(e.target.value)} placeholder={patient.phone || "+94 …"} className="w-full p-2 border rounded-lg bg-white" />
+                </div>
+              </div>
+              <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+                {[
+                  ...(patient.clinicalDocuments || []).map((d) => ({
+                    id: d.id,
+                    title: d.title,
+                    meta: `${d.category} • ${d.uploadedDate} • ${d.fileType.replace(/_/g, " ")}`,
+                    body: `${d.title}\nCategory: ${d.category}\nUploaded: ${d.uploadedDate}\nBy: ${d.uploadedBy}\nPatient: ${patient.name}\n${d.summaryNotes || d.ocrExtractedText || ""}`,
+                  })),
+                  ...(patient.myHealthRecordDocs || []).map((d) => ({
+                    id: d.id,
+                    title: d.title,
+                    meta: `${d.docType} • ${d.facility || issuedClinic}`,
+                    body: `${d.title}\nType: ${d.docType}\nAuthor: ${d.author}\nFacility: ${d.facility}\nPatient: ${patient.name}`,
+                  })),
+                  ...(patient.medicalCertificatesList || []).map((c) => ({
+                    id: c.id,
+                    title: `Medical certificate — ${c.diagnosis}`,
+                    meta: `${c.date} • ${c.status} • ${c.numDays} day(s)`,
+                    body: `MEDICAL CERTIFICATE\nPatient: ${patient.name}\nDiagnosis: ${c.diagnosis}\nLeave: ${c.startDate} to ${c.endDate} (${c.numDays} days)\nStatus: ${c.status}\nDoctor: ${c.doctorName} (${c.doctorRegNo})\n${c.additionalRemarks || ""}`,
+                  })),
+                ].map((doc) => (
+                  <div key={doc.id} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="w-4 h-4 text-red-600 shrink-0" />
+                      <div>
+                        <p className="font-bold text-slate-900">{doc.title}</p>
+                        <p className="text-slate-400 text-[10px]">{doc.meta}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 shrink-0">
+                      <button type="button" onClick={() => printDocument(doc.title, doc.body)} className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 rounded font-bold text-[10px]"><Printer className="w-3 h-3" /> Print</button>
+                      <button type="button" onClick={() => sendByEmail(docEmail || patient.email, doc.title, doc.body)} className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-sky-50 text-sky-900 rounded font-bold text-[10px]"><Mail className="w-3 h-3" /> Email</button>
+                      <button type="button" onClick={() => sendByPhone(docPhone || patient.phone, `${doc.title} is ready at ${issuedClinic}`)} className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 text-emerald-900 rounded font-bold text-[10px]"><Phone className="w-3 h-3" /> Phone</button>
+                    </div>
+                  </div>
+                ))}
+                {(patient.clinicalDocuments || []).length === 0 &&
+                  (patient.myHealthRecordDocs || []).length === 0 &&
+                  (patient.medicalCertificatesList || []).length === 0 && (
+                    <div className="p-5 text-center text-slate-500 italic">No documents on this file yet. Use Add Doc to scan or browse.</div>
+                  )}
               </div>
             </div>
           )}
@@ -1319,13 +2249,78 @@ export default function DoctorClinicalRecordModal({
                 <div>
                   <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-sky-600" />
-                    Appointment History & Doctor Consultation Activities
+                    Appointments &amp; clinic calendar
                   </h3>
                   <p className="text-slate-500 text-[11px]">
-                    Detailed log of all OPD encounters, completed SOAP clinical assessments, doctor vitals, and billing settlements
+                    Book a follow-up here. It appears on the doctor dashboard and receptionist calendar for that date.
                   </p>
                 </div>
               </div>
+
+              {onBookAppointment && (
+                <form
+                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 p-4 rounded-xl border-2 border-violet-200 bg-gradient-to-br from-violet-50 to-sky-50"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!bookReason.trim()) return;
+                    setBookingSlot(true);
+                    try {
+                      await onBookAppointment({
+                        patientId: patient.id,
+                        date: bookDate,
+                        time: bookTime,
+                        reason: bookReason.trim(),
+                        consultMode: bookMode,
+                        paymentMethod: bookPayment,
+                      });
+                      showToast(`Appointment booked for ${bookDate} at ${bookTime} (${bookPayment}) — calendar updated.`);
+                    } catch (err: any) {
+                      showToast(err?.message || "Could not book this slot.");
+                    } finally {
+                      setBookingSlot(false);
+                    }
+                  }}
+                >
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Date</label>
+                    <input type="date" value={bookDate} onChange={(e) => setBookDate(e.target.value)} className="w-full p-2 border rounded-lg text-xs bg-white" required />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Time</label>
+                    <select value={bookTime} onChange={(e) => setBookTime(e.target.value)} className="w-full p-2 border rounded-lg text-xs bg-white">
+                      {["08:00 AM","08:30 AM","09:00 AM","09:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","01:00 PM","01:30 PM","02:00 PM","02:30 PM","03:00 PM","03:30 PM","04:00 PM","04:30 PM","05:00 PM"].map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1 sm:col-span-2 lg:col-span-1">
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Reason</label>
+                    <input value={bookReason} onChange={(e) => setBookReason(e.target.value)} className="w-full p-2 border rounded-lg text-xs bg-white" placeholder="Follow-up / review" required />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Mode</label>
+                    <select value={bookMode} onChange={(e) => setBookMode(e.target.value as "clinic" | "video")} className="w-full p-2 border rounded-lg text-xs bg-white">
+                      <option value="clinic">In-clinic</option>
+                      <option value="video">Video / telehealth</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Payment</label>
+                    <select value={bookPayment} onChange={(e) => setBookPayment(e.target.value)} className="w-full p-2 border rounded-lg text-xs bg-white">
+                      <option value="Pay at clinic">Pay at clinic</option>
+                      <option value="Cash">Cash</option>
+                      <option value="Card">Card / EFTPOS</option>
+                      <option value="Suwasiri Pay">Suwasiri Pay</option>
+                      <option value="Bank transfer">Bank transfer</option>
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <button type="submit" disabled={bookingSlot} className="w-full bg-violet-600 hover:bg-violet-700 text-white font-extrabold px-3 py-2 rounded-lg text-xs disabled:opacity-50">
+                      {bookingSlot ? "Booking…" : "Book on calendar"}
+                    </button>
+                  </div>
+                </form>
+              )}
 
               <div className="space-y-4">
                 {appointments.filter(a => a.patientId === patient.id).length === 0 ? (
@@ -1348,6 +2343,7 @@ export default function DoctorClinicalRecordModal({
                           </div>
                           <p className="text-slate-500 text-[11px] mt-0.5">
                             📅 {a.date} at {a.time} • Doctor: {a.doctorName || "Dr. Priyantha Silva"}
+                            {a.paymentMethod ? ` • Payment: ${a.paymentMethod}` : ""}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1465,6 +2461,7 @@ export default function DoctorClinicalRecordModal({
           )}
 
         </div>
+        </div>
 
         {/* Modal Footer */}
         <div className="bg-slate-50 border-t border-slate-200 px-6 py-3 flex justify-between items-center shrink-0">
@@ -1475,24 +2472,40 @@ export default function DoctorClinicalRecordModal({
             onClick={onClose}
             className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg transition-colors cursor-pointer"
           >
-            Close Record
+            {embedded ? "Return to Exam Dashboard" : "Close Record"}
           </button>
         </div>
-
       </div>
+  );
 
-      {/* Clinical Calculators Modal */}
+  return (
+    <>
+      {embedded ? frame : (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3">
+          {frame}
+        </div>
+      )}
       {showCalculatorModal && (
         <ClinicalCalculatorsModal
           patient={patient}
+          calculatedBy={issuedDoctor}
           onClose={() => setShowCalculatorModal(false)}
           onSaveToConsultation={(text) => {
-            setSoapObjective(prev => `${prev}\n${text}`);
-            showToast("Calculated score inserted into SOAP Objective notes.");
+            setSoapPlan(prev => `${prev}\n${text}`.trim());
+            showToast("Calculated score inserted into Plan notes.");
+          }}
+          onPersistPatient={(updated) => {
+            onUpdatePatient({
+              ...updated,
+              medicalCenter: updated.medicalCenter || issuedClinic,
+              history: (updated.history || []).map((h, i) =>
+                i === 0 ? { ...h, clinicName: h.clinicName || issuedClinic, doctor: h.doctor || issuedDoctor } : h
+              ),
+            });
+            showToast("Calculator details saved to medical history.");
           }}
         />
       )}
-
-    </div>
+    </>
   );
 }

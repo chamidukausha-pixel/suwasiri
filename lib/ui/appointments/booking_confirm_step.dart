@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../data/catalogs/doctor_schedule_slots.dart';
 import '../../data/models/appointment.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/liquid_button.dart';
 
 /// Booking confirm UI matching the product mockup (dates, times, reason, CTA).
 class BookingConfirmStep extends StatelessWidget {
@@ -259,6 +260,7 @@ class BookingConfirmStep extends StatelessWidget {
                             final free = DoctorScheduleSlots.freeCountOnDate(
                               d,
                               bookedSlots,
+                              doctor: doctor,
                             );
                             return MinTap(
                               enforceMinSize: false,
@@ -525,27 +527,12 @@ class BookingConfirmStep extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
+                LiquidButton(
+                  onPressed: onProceed,
+                  label: 'Confirm booking',
+                  icon: Icons.check_rounded,
+                  color: coral,
                   height: 54,
-                  child: FilledButton.icon(
-                    onPressed: onProceed,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: coral,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    icon: const Icon(Icons.check_rounded, size: 22),
-                    label: const Text(
-                      'Confirm booking',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
                 ),
               ],
             ),

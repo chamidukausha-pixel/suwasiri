@@ -7,7 +7,7 @@ This repo holds **two apps** developed in parallel:
 | **Mobile (Suwasiri)** | repo root (`lib/`, `android/`, `ios/`) | Flutter + Cubit/BLoC |
 | **Web (Sri Lankan GP Care)** | [`web/`](../web/) | React 19 + Vite + Express + Tailwind — **do not change this stack** |
 
-The web app currently uses a local JSON store + Gemini for most EMR charts. **Appointments, e-prescriptions, vaccinations, and telehealth signaling** now use the same Firebase project (`suwasiri-91824`). GP Care → app: e-Rx. App → GP Care: vaccine history only. See [WEB.md](WEB.md).
+Appointments, e-prescriptions, vaccinations, telehealth signaling, **clinic doctors / centres**, and booking receipts now use the same Firebase project (`suwasiri-91824`).
 
 Do not change Flutter/mobile code unless explicitly asked.
 
@@ -99,6 +99,8 @@ web/
     tenancy.ts              # hospitals, branches, role templates, memberships
     types.ts                # includes Hospital, Branch, RoleDefinition, StaffMembership
     components/             # hubs, Security & RBAC, Practice Manager, Platform console
+    components/DocumentManagementHub.tsx  # mergeClinicalDocuments helper (standalone Document Management page removed)
+    components/DoctorClinicalRecordModal.tsx  # GP Exam Room; Documents tab Add document (scan / drag-drop)
     sync/                   # Firestore: appointments, e-Rx, patient chart, telehealth WebRTC
     utils/
   server.ts                 # Express + Vite + Gemini; patient_store.json + /api/tenancy/*

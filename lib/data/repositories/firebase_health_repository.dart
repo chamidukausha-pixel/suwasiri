@@ -421,14 +421,81 @@ class FirebaseHealthRepository implements HealthRepository {
     } catch (_) {
       // Catalog-only fallback if clinic_doctors is unavailable.
     }
+    try {
+      final centers = await _db.collection('clinic_centers').get();
+      final hospitals = merged.map((d) => d.hospital.toLowerCase()).toSet();
+      for (final doc in centers.docs) {
+        final data = doc.data();
+        if (data['active'] == false) continue;
+        final name = (data['name'] as String? ?? '').trim();
+        if (name.isEmpty) continue;
+        if (hospitals.contains(name.toLowerCase())) continue;
+        hospitals.add(name.toLowerCase());
+        merged.add(
+          Doctor(
+            id: 'center-${doc.id}',
+            name: name,
+            specialty: 'Medical Centre',
+            hospital: name,
+            rating: 0,
+            region: data['region'] as String? ?? 'Colombo',
+            address: data['address'] as String? ?? '',
+            hospitalId: data['hospitalId'] as String? ?? '',
+            bio:
+                'GP Care medical centre. Doctors appear here after they are added in Platform Console.',
+            feeLkr: 0,
+          ),
+        );
+      }
+    } catch (_) {}
+    final deduped = _mergeDoctors(merged);
     final q = query.trim().toLowerCase();
-    if (q.isEmpty) return merged;
-    return merged
+    if (q.isEmpty) return deduped;
+    return deduped
         .where((d) =>
             d.name.toLowerCase().contains(q) ||
             d.specialty.toLowerCase().contains(q) ||
-            d.hospital.toLowerCase().contains(q))
+            d.hospital.toLowerCase().contains(q) ||
+            d.region.toLowerCase().contains(q) ||
+            d.address.toLowerCase().contains(q))
         .toList();
+  }
+
+  static String _normDoctorName(String name) => name
+      .toLowerCase()
+      .replaceFirst(RegExp(r'^dr\.?\s*'), '')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  /// Prefer catalog ids (shared slot locks) and overlay GP Care roster / tenancy.
+  static List<Doctor> _mergeDoctors(List<Doctor> list) {
+    final byKey = <String, Doctor>{};
+    for (final d in list) {
+      final key = '${_normDoctorName(d.name)}|${d.hospital.toLowerCase().trim()}';
+      final existing = byKey[key];
+      if (existing == null) {
+        byKey[key] = d;
+        continue;
+      }
+      final keepCatalogId = existing.id.startsWith('d-') ? existing.id : d.id;
+      byKey[key] = existing.copyWith(
+        id: keepCatalogId,
+        specialty:
+            d.specialty.isNotEmpty ? d.specialty : existing.specialty,
+        region: d.region.isNotEmpty ? d.region : existing.region,
+        hospitalId:
+            d.hospitalId.isNotEmpty ? d.hospitalId : existing.hospitalId,
+        branchId: d.branchId.isNotEmpty ? d.branchId : existing.branchId,
+        rosterHours:
+            d.rosterHours.isNotEmpty ? d.rosterHours : existing.rosterHours,
+        nextAvailable: d.nextAvailable.isNotEmpty
+            ? d.nextAvailable
+            : existing.nextAvailable,
+        feeLkr: d.feeLkr > 0 ? d.feeLkr : existing.feeLkr,
+        address: d.address.isNotEmpty ? d.address : existing.address,
+      );
+    }
+    return byKey.values.toList();
   }
 
   @override
@@ -498,10 +565,17 @@ class FirebaseHealthRepository implements HealthRepository {
     String patientEmail = '',
     String? patientPhone,
     String? paymentMethod,
+    String paymentStatus = 'PAID',
+    bool paidBySuwasiri = false,
+    String? suwasiriReceiptUrl,
   }) async {
     final gp = GpCareClinicMap.resolve(doctor.hospital);
     final apptId = _uuid.v4();
     final lockId = DoctorScheduleSlots.slotLockId(doctor.id, slot);
+    final hospitalId =
+        doctor.hospitalId.isNotEmpty ? doctor.hospitalId : gp.hospitalId;
+    final branchId =
+        doctor.branchId.isNotEmpty ? doctor.branchId : gp.branchId;
     final appt = Appointment(
       id: apptId,
       patientId: patientId,
@@ -517,10 +591,13 @@ class FirebaseHealthRepository implements HealthRepository {
       patientName: patientName,
       patientEmail: patientEmail,
       patientPhone: patientPhone ?? '',
-      hospitalId: gp.hospitalId,
-      branchId: gp.branchId,
+      hospitalId: hospitalId,
+      branchId: branchId,
       paymentMethod: paymentMethod,
       feeLkr: doctor.feeLkr,
+      paymentStatus: paymentStatus,
+      paidBySuwasiri: paidBySuwasiri,
+      suwasiriReceiptUrl: suwasiriReceiptUrl,
     );
 
     final lockRef = _appointmentSlots.doc(lockId);

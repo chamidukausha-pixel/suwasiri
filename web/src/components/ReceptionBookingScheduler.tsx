@@ -77,6 +77,7 @@ interface Props {
   includeToday?: boolean;
   walkInMode?: boolean;
   walkInOverflowUsed?: number;
+  initialConsultMode?: "clinic" | "video";
   onClose: () => void;
   onConfirm: (payload: ReceptionBookPayload) => Promise<void> | void;
 }
@@ -88,6 +89,7 @@ export default function ReceptionBookingScheduler({
   initialPatientId,
   initialDate,
   initialReason,
+  initialConsultMode = "clinic",
   includeToday = false,
   walkInMode = false,
   walkInOverflowUsed = 0,
@@ -115,7 +117,7 @@ export default function ReceptionBookingScheduler({
     const match = REASONS.find((r) => (initialReason || "").toLowerCase().includes(r.toLowerCase()));
     return match || "Follow up";
   });
-  const [consultMode, setConsultMode] = useState<"clinic" | "video">("clinic");
+  const [consultMode, setConsultMode] = useState<"clinic" | "video">(initialConsultMode);
   const [patientId, setPatientId] = useState<string>(initialPatientId || patients[0]?.id || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

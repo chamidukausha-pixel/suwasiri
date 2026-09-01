@@ -32,6 +32,7 @@ abstract final class AppColors {
   static const Color warningSoft = Color(0xFFFEF3C7);
   static const Color heartPink = Color(0xFFE11D48);
   static const Color onlineGreen = Color(0xFF22C55E);
+  static const Color limePrice = Color(0xFF00E676);
 
   /// Pure black page background in dark mode.
   static const Color darkCanvas = Color(0xFF000000);

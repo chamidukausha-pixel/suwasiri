@@ -1,14 +1,25 @@
 import React from "react";
-import { Printer, X, Shield, Activity } from "lucide-react";
+import { Printer, X, Shield } from "lucide-react";
 import { Patient, PrescriptionRecord } from "../types";
+import DoctorDigitalSeal from "./DoctorDigitalSeal";
 
 interface Props {
   patient: Patient;
   prescription: PrescriptionRecord;
   onClose: () => void;
+  doctorName?: string;
+  clinicName?: string;
+  slmcNo?: string;
 }
 
-export default function PrintablePrescription({ patient, prescription, onClose }: Props) {
+export default function PrintablePrescription({
+  patient,
+  prescription,
+  onClose,
+  doctorName = "Dr. Priyantha Silva",
+  clinicName = "Sri Lankan GP Care",
+  slmcNo = "12908",
+}: Props) {
   const handlePrint = () => {
     window.print();
   };
@@ -96,9 +107,9 @@ export default function PrintablePrescription({ patient, prescription, onClose }
               <p className="text-[11px] text-slate-500">Tel: +94 11 234 5678 | info@gpcare.lk</p>
             </div>
             <div className="text-right">
-              <h3 className="font-serif font-bold text-base text-slate-800">Dr. Priyantha Silva</h3>
+              <h3 className="font-serif font-bold text-base text-slate-800">{doctorName}</h3>
               <p className="text-[11px] text-slate-500">M.B.B.S (Colombo), M.D (Family Medicine)</p>
-              <p className="text-[10px] font-bold text-emerald-700 mt-0.5">SLMC Active Registration No: 12908</p>
+              <p className="text-[10px] font-bold text-emerald-700 mt-0.5">SLMC Active Registration No: {slmcNo}</p>
               <p className="text-[10px] text-slate-400 mt-1">Rx Secure Token: {prescription.rxNumber}</p>
             </div>
           </div>
@@ -108,8 +119,11 @@ export default function PrintablePrescription({ patient, prescription, onClose }
             <div>
               <p className="text-slate-500">Patient Full Name:</p>
               <p className="font-bold text-sm text-slate-800">{patient.name}</p>
-              <p className="text-slate-500 mt-1.5">Age / Sex:</p>
-              <p className="font-semibold text-slate-800">{patient.age} years / {patient.gender}</p>
+              <p className="mt-1">
+                <span className="inline-flex items-center text-[11px] font-black px-2 py-0.5 rounded-md bg-amber-300 text-amber-950 border-2 border-amber-500">
+                  {patient.gender} · {patient.age} yrs
+                </span>
+              </p>
             </div>
             <div>
               <p className="text-slate-500">Allergies Declared:</p>
@@ -173,36 +187,14 @@ export default function PrintablePrescription({ patient, prescription, onClose }
             </div>
           </div>
 
-          {/* Bottom Footer Section */}
-          <div className="mt-10 pt-6 border-t border-slate-300 grid grid-cols-2 gap-4 items-end text-xs">
-            <div>
-              {/* Virtual Verification QR barcode */}
-              <div className="flex items-center gap-3 bg-white border p-2 rounded inline-flex">
-                <div className="w-12 h-12 bg-slate-100 flex flex-col justify-between p-1 border">
-                  <div className="flex justify-between">
-                    <span className="w-2.5 h-2.5 bg-black rounded-sm"></span>
-                    <span className="w-2.5 h-2.5 bg-black rounded-sm"></span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="w-2.5 h-2.5 bg-black rounded-sm"></span>
-                    <span className="w-2 gap-0.5 bg-slate-900 h-1"></span>
-                  </div>
-                </div>
-                <div className="text-[9px] text-slate-500">
-                  <p className="font-bold text-slate-700">Digital eRx Seal</p>
-                  <p>SLMC Authority verified</p>
-                  <p className="text-emerald-700 font-semibold">Status: Standard Active</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="text-right">
-              <div className="inline-block border-b border-dashed border-slate-500 w-44 pb-2 mb-1">
-                <p className="font-serif italic font-bold text-[#143048]">{prescription.signatureUrl}</p>
-              </div>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Certifying Practitioner Authorization</p>
-              <p className="text-[9px] text-slate-400">Sri Lankan General Practice Care</p>
-            </div>
+          <div className="mt-10">
+            <DoctorDigitalSeal
+              doctorName={doctorName}
+              clinicName={clinicName}
+              slmcNo={slmcNo}
+              date={prescription.date}
+              token={prescription.ePrescriptionToken || prescription.rxNumber}
+            />
           </div>
         </div>
       </div>

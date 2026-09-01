@@ -18,6 +18,7 @@ import {
   cloneHospitalRoles,
   roleIdFor,
 } from "./src/tenancy";
+import { DEFAULT_FEE_SCHEDULE } from "./src/catalogs/feeSchedule";
 
 dotenv.config();
 
@@ -28,6 +29,192 @@ app.use(express.json());
 
 // Initialize store file path
 const DATA_FILE = path.join(process.cwd(), "patient_store.json");
+
+/** Unread inbox samples for Pathology & Diagnoses. Migrated onto existing patient_store.json by id. */
+const SAMPLE_UNREAD_PATHOLOGY: Record<string, Array<Record<string, unknown>>> = {
+  "9942-LK": [
+    {
+      id: "lab-unread-fatima-tsh",
+      testName: "Thyroid Function (TSH)",
+      date: "2026-08-28",
+      status: "ABNORMAL",
+      result: "TSH 6.8 mIU/L (High, Ref: 0.4 – 4.0)",
+      remarks: "Subclinical hypothyroidism. Correlate with fatigue and weight change.",
+      abnormalFlag: true,
+      doctorReviewed: false,
+      labName: "LankaLab - Colombo 03",
+      category: "Endocrine",
+    },
+    {
+      id: "lab-unread-fatima-fbc",
+      testName: "Full Blood Count (FBC)",
+      date: "2026-08-28",
+      status: "COMPLETED",
+      result: "Hb 12.4 g/dL · WBC 6.1 ×10⁹/L · Plt 268 ×10⁹/L",
+      remarks: "Within reference intervals. No anaemia.",
+      doctorReviewed: false,
+      labName: "LankaLab - Colombo 03",
+      category: "Haematology",
+    },
+  ],
+  "8821-LK": [
+    {
+      id: "lab-unread-arjuna-acr",
+      testName: "Urine Albumin/Creatinine Ratio",
+      date: "2026-08-27",
+      status: "COMPLETED",
+      result: "ACR 1.8 mg/mmol (Normal, Ref: < 3.0)",
+      remarks: "No microalbuminuria. Occupational health screen.",
+      doctorReviewed: false,
+      labName: "LankaLab - Colombo 03",
+      category: "Renal",
+    },
+  ],
+  "3210-LK": [
+    {
+      id: "lab-unread-anura-crp",
+      testName: "C-Reactive Protein (CRP)",
+      date: "2026-08-29",
+      status: "ABNORMAL",
+      result: "CRP 28 mg/L (Elevated, Ref: < 5)",
+      remarks: "Supports ongoing inflammation with persistent cough. Consider dengue/viral panel if fever returns.",
+      abnormalFlag: true,
+      doctorReviewed: false,
+      labName: "LankaLab - Colombo 03",
+      category: "Inflammation",
+    },
+    {
+      id: "lab-unread-anura-dengue",
+      testName: "Dengue NS1 Antigen",
+      date: "2026-08-29",
+      status: "COMPLETED",
+      result: "NS1 Not Detected",
+      remarks: "Negative at this collection. Repeat if fever persists beyond day 3.",
+      doctorReviewed: false,
+      labName: "LankaLab - Colombo 03",
+      category: "Infectious disease",
+    },
+  ],
+  "1092-LK": [
+    {
+      id: "lab-unread-rohan-hba1c",
+      testName: "Glycated Hemoglobin (HbA1c)",
+      date: "2026-08-27",
+      status: "ABNORMAL",
+      result: "HbA1c 8.9% (High, target < 7.0%)",
+      remarks: "Worsening glycaemic control. Review metformin, diet, and neuropathy symptoms.",
+      abnormalFlag: true,
+      doctorReviewed: false,
+      labName: "LankaLab - Colombo 03",
+      category: "Diabetes",
+    },
+  ],
+  "4412-LK": [
+    {
+      id: "lab-unread-sunethra-lft",
+      testName: "Liver Function Tests (LFT)",
+      date: "2026-08-26",
+      status: "COMPLETED",
+      result: "ALT 32 U/L · AST 28 U/L · ALP 88 U/L · Bilirubin 0.8 mg/dL",
+      remarks: "Post-cholecystectomy LFTs within normal limits.",
+      doctorReviewed: false,
+      labName: "LankaLab - Colombo 03",
+      category: "Hepatology",
+    },
+  ],
+  "2198-LK": [
+    {
+      id: "lab-unread-mahesh-trop",
+      testName: "High-sensitivity Troponin I",
+      date: "2026-08-29",
+      status: "CRITICAL",
+      result: "hs-TnI 412 ng/L (Critical, Ref: < 34)",
+      remarks: "Possible acute coronary syndrome. Urgent clinical review and recall if not already in clinic.",
+      abnormalFlag: true,
+      doctorReviewed: false,
+      labName: "LankaLab - Colombo 03",
+      category: "Cardiac",
+    },
+    {
+      id: "lab-unread-mahesh-ue",
+      testName: "Urea & Electrolytes",
+      date: "2026-08-29",
+      status: "COMPLETED",
+      result: "Na 138 · K 4.1 · Urea 5.2 · Creatinine 98 µmol/L",
+      remarks: "Renal function stable on amlodipine.",
+      doctorReviewed: false,
+      labName: "LankaLab - Colombo 03",
+      category: "Renal",
+    },
+  ],
+  "6322-LK": [
+    {
+      id: "lab-unread-ruwan-lipid",
+      testName: "Fasting Lipid Profile",
+      date: "2026-08-28",
+      status: "ABNORMAL",
+      result: "LDL 168 mg/dL (High) · HDL 38 mg/dL · Triglycerides 210 mg/dL",
+      remarks: "On lisinopril. Cardiovascular risk — consider statin discussion.",
+      abnormalFlag: true,
+      doctorReviewed: false,
+      labName: "LankaLab - Colombo 03",
+      category: "Cardiometabolic",
+    },
+  ],
+  "1827-LK": [
+    {
+      id: "lab-unread-suresh-fbc",
+      testName: "Full Blood Count (FBC)",
+      date: "2026-08-27",
+      status: "COMPLETED",
+      result: "Hb 13.1 g/dL · WBC 5.8 ×10⁹/L · Plt 241 ×10⁹/L",
+      remarks: "Routine screen. No cytopenia.",
+      doctorReviewed: false,
+      labName: "LankaLab - Colombo 03",
+      category: "Haematology",
+    },
+  ],
+  "3693-LK": [
+    {
+      id: "lab-unread-chamidu-fbs",
+      testName: "Fasting Blood Sugar (FBS)",
+      date: "2026-08-29",
+      status: "ABNORMAL",
+      result: "FBS 118 mg/dL (Impaired, Ref: 70 – 100)",
+      remarks: "Impaired fasting glucose. Lifestyle advice and repeat in 3 months.",
+      abnormalFlag: true,
+      doctorReviewed: false,
+      labName: "LankaLab - Colombo 03",
+      category: "Diabetes",
+    },
+  ],
+  "7701-LK": [
+    {
+      id: "lab-unread-ishara-tsh",
+      testName: "Thyroid Function (Free T4 + TSH)",
+      date: "2026-08-26",
+      status: "COMPLETED",
+      result: "TSH 1.9 mIU/L · FT4 1.2 ng/dL (Euthyroid)",
+      remarks: "Thyroid axis normal.",
+      doctorReviewed: false,
+      labName: "LankaLab - Colombo 03",
+      category: "Endocrine",
+    },
+  ],
+};
+
+function mergeUnreadPathologySamples(labResults: any[] | undefined, patientId: string): { labs: any[]; changed: boolean } {
+  const samples = SAMPLE_UNREAD_PATHOLOGY[patientId] || [];
+  const labs = Array.isArray(labResults) ? [...labResults] : [];
+  let changed = false;
+  for (const sample of samples) {
+    if (!labs.some((lr) => lr && lr.id === sample.id)) {
+      labs.unshift(sample);
+      changed = true;
+    }
+  }
+  return { labs, changed };
+}
 
 // Default initial state matching the mockup and specifications with expanded features
 const INITIAL_STATE = {
@@ -61,9 +248,10 @@ const INITIAL_STATE = {
         { vaccineName: "Influenza (Seasonal Quadrivalent)", date: "2025-11-20", dose: "Annual Booster", batchNumber: "FLU-25-A", status: "Completed" }
       ],
       labResults: [
-        { id: "lab-res-1", testName: "HbA1c Glycated Hemoglobin", date: "2026-04-10", status: "COMPLETED", result: "5.9% (Pre-diabetic, Ref: < 5.7%)", remarks: "Consistent with dietary habits. Advised reduction in simple carbohydrates." },
-        { id: "lab-res-2", testName: "Serum Potassium", date: "2026-03-12", status: "COMPLETED", result: "4.2 mmol/L (Normal, Ref: 3.5 - 5.1)", remarks: "In normal range. Heart rhythm safe." },
-        { id: "lab-res-3", testName: "Cholesterol Profile", date: "2025-12-05", status: "COMPLETED", result: "Chol: 215 mg/dL (Borderline), HDL: 48 mg/dL, LDL: 132 mg/dL", remarks: "Advised standard dietary changes, coconut oil intake limitations." }
+        ...SAMPLE_UNREAD_PATHOLOGY["9942-LK"],
+        { id: "lab-res-1", testName: "HbA1c Glycated Hemoglobin", date: "2026-04-10", status: "COMPLETED", result: "5.9% (Pre-diabetic, Ref: < 5.7%)", remarks: "Consistent with dietary habits. Advised reduction in simple carbohydrates.", doctorReviewed: true },
+        { id: "lab-res-2", testName: "Serum Potassium", date: "2026-03-12", status: "COMPLETED", result: "4.2 mmol/L (Normal, Ref: 3.5 - 5.1)", remarks: "In normal range. Heart rhythm safe.", doctorReviewed: true },
+        { id: "lab-res-3", testName: "Cholesterol Profile", date: "2025-12-05", status: "COMPLETED", result: "Chol: 215 mg/dL (Borderline), HDL: 48 mg/dL, LDL: 132 mg/dL", remarks: "Advised standard dietary changes, coconut oil intake limitations.", doctorReviewed: true }
       ],
       prescriptionsList: [
         { id: "rx-991", date: "2026-04-10", items: ["Ventolin Inhaler 100mcg - 2 puffs as required"], dosageInstructions: "For asthma relief on demand. Max 8 puffs daily.", rxNumber: "RX-2026-00412", signatureUrl: "Dr. P. Silva" },
@@ -94,7 +282,8 @@ const INITIAL_STATE = {
         { vaccineName: "COVID-19 AstraZeneca", date: "2021-06-11", dose: "1st & 2nd Dose", batchNumber: "COV-AZ-112", status: "Completed" }
       ],
       labResults: [
-        { id: "lab-res-4", testName: "Lipid Profile & Glucose FBG", date: "2026-05-18", status: "COMPLETED", result: "FBG: 92 mg/dL (Normal), Total Chol: 184 mg/dL (Normal)", remarks: "Excellent cardiovascular biomarkers." }
+        ...SAMPLE_UNREAD_PATHOLOGY["8821-LK"],
+        { id: "lab-res-4", testName: "Lipid Profile & Glucose FBG", date: "2026-05-18", status: "COMPLETED", result: "FBG: 92 mg/dL (Normal), Total Chol: 184 mg/dL (Normal)", remarks: "Excellent cardiovascular biomarkers.", doctorReviewed: true }
       ],
       prescriptionsList: []
     },
@@ -122,7 +311,8 @@ const INITIAL_STATE = {
         { vaccineName: "COVID-19 Pfizer", date: "2021-12-02", dose: "Booster", batchNumber: "COV-PZ-998", status: "Completed" }
       ],
       labResults: [
-        { id: "lab-res-5", testName: "Full Blood Count (FBC)", date: "2025-11-05", status: "COMPLETED", result: "WBC: 7.8 x10^3/uL (Normal), Platelets: 245 x10^3/uL", remarks: "Pharyngitis, non-bacterial baseline indicators." }
+        ...SAMPLE_UNREAD_PATHOLOGY["3210-LK"],
+        { id: "lab-res-5", testName: "Full Blood Count (FBC)", date: "2025-11-05", status: "COMPLETED", result: "WBC: 7.8 x10^3/uL (Normal), Platelets: 245 x10^3/uL", remarks: "Pharyngitis, non-bacterial baseline indicators.", doctorReviewed: true }
       ],
       prescriptionsList: []
     },
@@ -151,8 +341,9 @@ const INITIAL_STATE = {
         { vaccineName: "COVID-19 Sinopharm", date: "2021-09-01", dose: "Completed", batchNumber: "COV-SP-445", status: "Completed" }
       ],
       labResults: [
-        { id: "lab-res-6", testName: "Glycated Hemoglobin (HbA1c)", date: "2026-01-14", status: "COMPLETED", result: "7.4% (Elevated, Ref: < 5.7%)", remarks: "Suboptimal glycemic control. Metformin dose titrated up." },
-        { id: "lab-res-7", testName: "Serum Lipid profile", date: "2026-01-14", status: "COMPLETED", result: "Total Chol: 248 mg/dL (High), LDL-C: 154 mg/dL", remarks: "Atorvastatin cover initiated at 10mg nightly to prevent risk." }
+        ...SAMPLE_UNREAD_PATHOLOGY["1092-LK"],
+        { id: "lab-res-6", testName: "Glycated Hemoglobin (HbA1c)", date: "2026-01-14", status: "COMPLETED", result: "7.4% (Elevated, Ref: < 5.7%)", remarks: "Suboptimal glycemic control. Metformin dose titrated up.", doctorReviewed: true },
+        { id: "lab-res-7", testName: "Serum Lipid profile", date: "2026-01-14", status: "COMPLETED", result: "Total Chol: 248 mg/dL (High), LDL-C: 154 mg/dL", remarks: "Atorvastatin cover initiated at 10mg nightly to prevent risk.", doctorReviewed: true }
       ],
       prescriptionsList: [
         { id: "rx-109", date: "2026-01-14", items: ["Metformin 1000mg - 1 BD", "Atorvastatin 10mg - 1 Nocte"], dosageInstructions: "Metformin with meals; Atorvastatin at bedtime.", rxNumber: "RX-2026-08119", signatureUrl: "Dr. P. Silva" }
@@ -181,7 +372,8 @@ const INITIAL_STATE = {
         { vaccineName: "COVID-19 Pfizer", date: "2021-12-15", dose: "2 Doses + 1 Booster", batchNumber: "COV-PF-40", status: "Completed" }
       ],
       labResults: [
-        { id: "lab-res-8", testName: "Pre-Op Complete Blood Count", date: "2026-05-20", status: "COMPLETED", result: "WBC: 6.4, Hemoglobin: 12.8 g/dL, Platelets: 290", remarks: "Excellent hematology limits. Cleared for elective theater." }
+        ...SAMPLE_UNREAD_PATHOLOGY["4412-LK"],
+        { id: "lab-res-8", testName: "Pre-Op Complete Blood Count", date: "2026-05-20", status: "COMPLETED", result: "WBC: 6.4, Hemoglobin: 12.8 g/dL, Platelets: 290", remarks: "Excellent hematology limits. Cleared for elective theater.", doctorReviewed: true }
       ],
       prescriptionsList: []
     },
@@ -208,7 +400,8 @@ const INITIAL_STATE = {
         { vaccineName: "COVID-19 AstraZeneca", date: "2021-07-28", dose: "Completed", batchNumber: "COV-AZ-88", status: "Completed" }
       ],
       labResults: [
-        { id: "lab-res-9", testName: "Serum Uric Acid & Creatinine", date: "2026-02-02", status: "COMPLETED", result: "Uric Acid: 7.2 mg/dL (Slightly elevated, Ref: 3.5 - 7.0), Creatinine: 1.0 mg/dL", remarks: "Keep hydration high. Monitor joint pains." }
+        ...SAMPLE_UNREAD_PATHOLOGY["2198-LK"],
+        { id: "lab-res-9", testName: "Serum Uric Acid & Creatinine", date: "2026-02-02", status: "COMPLETED", result: "Uric Acid: 7.2 mg/dL (Slightly elevated, Ref: 3.5 - 7.0), Creatinine: 1.0 mg/dL", remarks: "Keep hydration high. Monitor joint pains.", doctorReviewed: true }
       ],
       prescriptionsList: [
         { id: "rx-219", date: "2026-02-02", items: ["Amlodipine 5mg - 1 OD"], dosageInstructions: "Take in the morning with a full glass of water.", rxNumber: "RX-2026-0129", signatureUrl: "Dr. P. Silva" }
@@ -504,6 +697,7 @@ const INITIAL_STATE = {
   staffUsers: DEFAULT_STAFF_USERS,
   memberships: DEFAULT_MEMBERSHIPS,
   staffDirectory: DEFAULT_STAFF_DIRECTORY,
+  feeSchedule: DEFAULT_FEE_SCHEDULE,
   patientAccessRequests: [],
   recalls: [
     {
@@ -648,6 +842,10 @@ function getStore() {
       data.staffDirectory = DEFAULT_STAFF_DIRECTORY;
       mutated = true;
     }
+    if (!Array.isArray(data.feeSchedule) || data.feeSchedule.length === 0) {
+      data.feeSchedule = DEFAULT_FEE_SCHEDULE;
+      mutated = true;
+    }
     if (!Array.isArray(data.recalls)) {
       data.recalls = INITIAL_STATE.recalls;
       mutated = true;
@@ -735,6 +933,11 @@ function getStore() {
       }
       if (!p.labResults) {
         p.labResults = initialPat.labResults || [];
+        patientChanged = true;
+      }
+      const unreadMerge = mergeUnreadPathologySamples(p.labResults, p.id);
+      if (unreadMerge.changed) {
+        p.labResults = unreadMerge.labs;
         patientChanged = true;
       }
       if (!p.prescriptionsList) {
@@ -1035,6 +1238,38 @@ app.post("/api/tenancy/staff", (req, res) => {
   res.json({ success: true, staffUser: store.staffUsers.find((u: any) => u.id === userId), membership, staff });
 });
 
+app.delete("/api/tenancy/staff/:id", (req, res) => {
+  const store = getStore();
+  const staffId = req.params.id;
+  const staff = (store.staffDirectory || []).find((s: any) => s.id === staffId);
+  if (!staff) return res.status(404).json({ error: "Staff not found" });
+  store.staffDirectory = (store.staffDirectory || []).map((s: any) =>
+    s.id === staffId ? { ...s, active: false } : s
+  );
+  store.memberships = (store.memberships || []).map((m: any) =>
+    m.userId === staff.userId && m.hospitalId === staff.hospitalId
+      ? { ...m, active: false }
+      : m
+  );
+  persistTenancy(store);
+  res.json({ success: true, staffDirectory: store.staffDirectory, memberships: store.memberships });
+});
+
+app.put("/api/fee-schedule", (req, res) => {
+  const store = getStore();
+  const { feeSchedule } = req.body || {};
+  if (!Array.isArray(feeSchedule)) {
+    return res.status(400).json({ error: "feeSchedule[] required" });
+  }
+  store.feeSchedule = feeSchedule.map((item: any) => ({
+    ...item,
+    bulkBillable: false,
+    gapFee: Number(item.privateFee || 0) - Number(item.mbsBenefit || 0),
+  }));
+  saveStore(store);
+  res.json({ success: true, feeSchedule: store.feeSchedule });
+});
+
 app.put("/api/recalls", (req, res) => {
   const store = getStore();
   const { recalls } = req.body || {};
@@ -1080,14 +1315,29 @@ app.patch("/api/tenancy/hospitals/:id", (req, res) => {
 
 app.post("/api/tenancy/hospitals", (req, res) => {
   const store = getStore();
-  const { name } = req.body || {};
+  const { name, district } = req.body || {};
   if (!name) return res.status(400).json({ error: "name required" });
   const id = `hosp-${Date.now()}`;
-  const hospital = { id, name, status: "ACTIVE" };
+  const region = String(district || "Colombo").trim() || "Colombo";
+  const hospital = { id, name, status: "ACTIVE", district: region };
+  const branch = {
+    id: `branch-${Date.now()}`,
+    hospitalId: id,
+    name,
+    address: `${region}, Sri Lanka`,
+    phone: "",
+    rooms: ["Consultation Room 1", "Front Desk Reception"],
+  };
   store.hospitals = [...(store.hospitals || []), hospital];
+  store.branches = [...(store.branches || []), branch];
   store.roles = [...(store.roles || []), ...cloneHospitalRoles(id)];
   persistTenancy(store);
-  res.json({ success: true, hospital, roles: store.roles.filter((r: any) => r.hospitalId === id) });
+  res.json({
+    success: true,
+    hospital,
+    branch,
+    roles: store.roles.filter((r: any) => r.hospitalId === id),
+  });
 });
 
 // Create Appointment
@@ -1111,7 +1361,8 @@ app.post("/api/appointments", (req, res) => {
     isTelehealth: !!req.body.isTelehealth,
     consultMode: req.body.consultMode || (req.body.isTelehealth ? "video" : "clinic"),
     patientName: req.body.patientName,
-    source: req.body.source || "gp_care"
+    source: req.body.source || "gp_care",
+    paymentMethod: req.body.paymentMethod || "Pay at clinic"
   };
 
   store.appointments.push(newApt);
@@ -1124,8 +1375,9 @@ app.post("/api/appointments", (req, res) => {
     patientName: patName,
     amount: 1500,
     service: `GP Clinical Consult - ${reason}`,
-    status: "PENDING",
-    date: newApt.date
+    status: req.body.paymentMethod && req.body.paymentMethod !== "Pay at clinic" ? "PAID" : "PENDING",
+    date: newApt.date,
+    paymentMethod: req.body.paymentMethod || "Pay at clinic",
   });
 
   saveStore(store);
@@ -1158,6 +1410,26 @@ app.put("/api/appointments/reorder", (req, res) => {
   }
 
   store.appointments = appointments;
+  saveStore(store);
+  res.json({ success: true, appointments: store.appointments, state: store });
+});
+
+// Persist lobby queue places without replacing the full appointment list
+app.put("/api/appointments/queue-places", (req, res) => {
+  const store = getStore();
+  const { places } = req.body;
+  if (!Array.isArray(places)) {
+    return res.status(400).json({ error: "places array is required" });
+  }
+  const placeById = new Map(
+    places
+      .filter((p) => p && typeof p.id === "string" && typeof p.queuePlace === "number")
+      .map((p) => [p.id, p.queuePlace])
+  );
+  store.appointments = store.appointments.map((a) => {
+    const queuePlace = placeById.get(a.id);
+    return queuePlace != null ? { ...a, queuePlace } : a;
+  });
   saveStore(store);
   res.json({ success: true, appointments: store.appointments, state: store });
 });
@@ -1597,13 +1869,23 @@ app.patch("/api/patients/:id", (req, res) => {
     newPrescriptionRecord,
     reviewLabResultId,
     reviewedBy,
+    markLabCritical,
     heightCm,
     weightKg,
     lastSystolicBp,
     lastDiastolicBp,
     waistCm,
     clinicalCalculations,
-    observationsHistory
+    observationsHistory,
+    diagnosesList,
+    imagingRecords,
+    referralsList,
+    labResults,
+    vaccineRecords,
+    carePlansList,
+    prescriptionsList,
+    history,
+    clinicalDocuments
   } = req.body;
 
   const patIndex = store.patients.findIndex(p => p.id === id);
@@ -1641,6 +1923,15 @@ app.patch("/api/patients/:id", (req, res) => {
   if (waistCm !== undefined) pat.waistCm = Number(waistCm);
   if (Array.isArray(clinicalCalculations)) pat.clinicalCalculations = clinicalCalculations;
   if (Array.isArray(observationsHistory)) pat.observationsHistory = observationsHistory;
+  if (Array.isArray(diagnosesList)) pat.diagnosesList = diagnosesList;
+  if (Array.isArray(imagingRecords)) pat.imagingRecords = imagingRecords;
+  if (Array.isArray(referralsList)) pat.referralsList = referralsList;
+  if (Array.isArray(labResults)) pat.labResults = labResults;
+  if (Array.isArray(vaccineRecords)) pat.vaccineRecords = vaccineRecords;
+  if (Array.isArray(carePlansList)) pat.carePlansList = carePlansList;
+  if (Array.isArray(prescriptionsList)) pat.prescriptionsList = prescriptionsList;
+  if (Array.isArray(history)) pat.history = history;
+  if (Array.isArray(clinicalDocuments)) pat.clinicalDocuments = clinicalDocuments;
 
   if (newVaccineRecord) {
     pat.vaccineRecords.push(newVaccineRecord);
@@ -1660,6 +1951,11 @@ app.patch("/api/patients/:id", (req, res) => {
       lab.doctorReviewed = true;
       lab.reviewedBy = reviewedBy || "GP";
       lab.reviewedDate = new Date().toISOString().split("T")[0];
+      if (markLabCritical) {
+        lab.status = "CRITICAL";
+        lab.abnormalFlag = true;
+        lab.criticalAlert = true;
+      }
     }
   }
 
@@ -1672,12 +1968,16 @@ app.patch("/api/patients/:id", (req, res) => {
     pat.medicalHistory.push(medHistoryString);
 
     if (!Array.isArray(pat.history)) pat.history = [];
-    pat.history.unshift({
-      date: sumDate,
-      reason: historyEntry.reason || "Clinical consultation",
-      doctor: historyEntry.doctor || "Dr. Priyantha Silva",
-      notes: historyEntry.notes || ""
-    });
+    if (!Array.isArray(history)) {
+      pat.history.unshift({
+        date: sumDate,
+        reason: historyEntry.reason || "Clinical consultation",
+        doctor: historyEntry.doctor || "Dr. Priyantha Silva",
+        notes: historyEntry.notes || "",
+        clinicName: historyEntry.clinicName || pat.medicalCenter || "",
+        appointmentId: historyEntry.appointmentId,
+      });
+    }
   }
 
   saveStore(store);
@@ -2357,6 +2657,21 @@ app.post("/api/sample-collections/:id/collect", (req, res) => {
   const localTimeStr = new Date().toISOString().replace("T", " ").substring(0, 16);
   sample.status = "COLLECTED";
   sample.collectedTime = localTimeStr;
+
+  if (!store.notifications) store.notifications = [];
+  store.notifications.forEach((n) => {
+    const forThisSample = n.sampleId && n.sampleId === sample.id;
+    const legacyMatch =
+      n.templateType === "PATHOLOGY_ORDER" &&
+      !n.sampleId &&
+      n.patientName === sample.patientName &&
+      n.status !== "READ" &&
+      !n.read;
+    if (forThisSample || legacyMatch) {
+      n.read = true;
+      n.status = "READ";
+    }
+  });
 
   // Sync patient's personal registry
   const patIndex = store.patients.findIndex(p => p.id === sample.patientId);

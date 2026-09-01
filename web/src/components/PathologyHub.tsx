@@ -2,53 +2,39 @@ import React, { useState } from "react";
 import {
   FlaskConical,
   Search,
-  Filter,
   AlertTriangle,
   CheckCircle2,
-  Clock,
-  User,
-  FileText,
   Stethoscope,
   Plus,
-  ArrowRight,
-  TrendingUp,
-  ShieldAlert,
   Download,
-  Calendar,
-  Layers,
-  ChevronRight,
-  ExternalLink,
-  Smartphone,
-  Check,
   Send,
-  Printer,
-  Edit3
+  Edit3,
+  Eye,
+  X
 } from "lucide-react";
 import { Patient, LabResult, LabOrder } from "../types";
 import { PATHOLOGY_INVESTIGATIONS } from "../catalogs/pathologyInvestigations";
+import PatientSexAgeBadge from "./PatientSexAgeBadge";
+import PatientCriticalAlertBadge from "./PatientCriticalAlertBadge";
 
 interface Props {
   patients: Patient[];
   labOrders?: LabOrder[];
   currentRole: string;
-  onOpenPatientEverything: (patient: Patient) => void;
   onStartConsultation: (patient: Patient) => void;
   onOrderLabTest?: (patientId: string, testName: string, remarks: string) => void;
-  onMarkLabReviewed?: (patientId: string, labResultId: string) => void;
+  onReviewLab?: (patient: Patient, lab: LabResult, opts?: { critical?: boolean; comment?: string }) => void;
 }
 
 export default function PathologyHub({
   patients,
   labOrders = [],
   currentRole,
-  onOpenPatientEverything,
   onStartConsultation,
   onOrderLabTest,
-  onMarkLabReviewed
+  onReviewLab
 }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "ABNORMAL" | "NORMAL" | "PENDING">("PENDING");
-  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [orderPatientId, setOrderPatientId] = useState(patients[0]?.id || "");
   const [orderTestName, setOrderTestName] = useState(PATHOLOGY_INVESTIGATIONS[0].name);
@@ -56,20 +42,21 @@ export default function PathologyHub({
 
   // Doctor comments & Suwasiri app sync state
   const [doctorComments, setDoctorComments] = useState<Record<string, string>>({});
-  const [suwasiriSyncedReports, setSuwasiriSyncedReports] = useState<Record<string, string>>({});
-  const [syncingReportId, setSyncingReportId] = useState<string | null>(null);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [viewingReport, setViewingReport] = useState<{ patient: Patient; test: LabResult } | null>(null);
 
   const getReportKey = (patientId: string, test: LabResult, idx: number) => {
     return test.id || `${patientId}_${test.testName}_${idx}`;
   };
 
-  const handleDownloadTestPdf = (patient: Patient, test: LabResult) => {
+  const reportComment = (patient: Patient, test: LabResult) => {
     const reportKey = test.id || `${patient.id}_${test.testName}`;
-    const comment = doctorComments[reportKey] || test.remarks || "Within biological clinical limits.";
-    const isSynced = suwasiriSyncedReports[reportKey];
+    return doctorComments[reportKey] || test.remarks || "Within biological clinical limits.";
+  };
 
-    const content = `
+  const buildReportText = (patient: Patient, test: LabResult) => {
+    const comment = reportComment(patient, test);
+    return `
 ================================================================================
                     LANKALAB CENTRAL DIAGNOSTICS & PATHOLOGY
                      OFFICIAL CLINICAL LABORATORY REPORT / PDF
@@ -103,10 +90,20 @@ DOCTOR'S CLINICAL REVIEW & INTERPRETATION COMMENTS:
 
 Doctor Sign-off  : Dr. Priyantha Silva (FRACGP, MBBS)
 Signed Date      : ${new Date().toISOString().split("T")[0]}
-Suwasiri App Sync: ${isSynced ? `ACTIVE (${isSynced})` : "Verified for Mobile Release"}
-Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2, 12)}
+Suwasiri App Sync: ACTIVE (Vault Lab reports)
 ================================================================================
-    `;
+    `.trim();
+  };
+
+  const markReportCompleted = (patient: Patient, test: LabResult) => {
+    onReviewLab?.(patient, test, { comment: reportComment(patient, test) });
+    setViewingReport((prev) =>
+      prev && prev.patient.id === patient.id && prev.test.id === test.id ? null : prev
+    );
+  };
+
+  const handleDownloadTestPdf = (patient: Patient, test: LabResult) => {
+    const content = buildReportText(patient, test);
 
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -119,81 +116,33 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
     URL.revokeObjectURL(url);
   };
 
-  const handleSaveCommentAndSync = (patient: Patient, test: LabResult, idx: number, comment: string) => {
-    const reportKey = getReportKey(patient.id, test, idx);
-    setSyncingReportId(reportKey);
-    setDoctorComments((prev) => ({ ...prev, [reportKey]: comment }));
+  const unreadPatients = patients.filter((p) =>
+    p.labResults?.some((lr) => !lr.doctorReviewed)
+  );
+  const unreadPathologyPatientCount = unreadPatients.length;
 
-    setTimeout(() => {
-      const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      setSuwasiriSyncedReports((prev) => ({ ...prev, [reportKey]: timestamp }));
-      setSyncingReportId(null);
-      setEditingCommentId(null);
-      alert(`Success! Doctor's comment saved and pathology report for "${test.testName}" synced to ${patient.name}'s Suwasiri mobile app!`);
-    }, 600);
-  };
-
-  // CRITICAL REQUIREMENT: Filter to show ONLY patients who have pathology records
-  // (i.e. labResults, sampleCollections, or labOrders)
-  const pathologyPatients = patients.filter((p) => {
-    const hasLabResults = Boolean(p.labResults && p.labResults.length > 0);
-    const hasSampleCollections = Boolean(p.sampleCollections && p.sampleCollections.length > 0);
-    const hasLabOrders = labOrders.some((o) => o.patientId === p.id);
-    return hasLabResults || hasSampleCollections || hasLabOrders;
-  });
-
-  // Filter based on search and status
-  const filteredPathologyPatients = pathologyPatients.filter((p) => {
+  const filteredPathologyPatients = unreadPatients.filter((p) => {
     const q = searchQuery.toLowerCase().trim();
-    const matchesSearch =
-      !q ||
+    if (!q) return true;
+    return (
       p.name.toLowerCase().includes(q) ||
       p.id.toLowerCase().includes(q) ||
       (p.medicareNumber && p.medicareNumber.toLowerCase().includes(q)) ||
       (p.suwasiriBarcode && p.suwasiriBarcode.toLowerCase().includes(q)) ||
       p.labResults?.some(
         (lr) =>
-          lr.testName.toLowerCase().includes(q) ||
-          lr.result.toLowerCase().includes(q) ||
-          (lr.remarks && lr.remarks.toLowerCase().includes(q))
+          !lr.doctorReviewed &&
+          (lr.testName.toLowerCase().includes(q) ||
+            lr.result.toLowerCase().includes(q) ||
+            (lr.remarks && lr.remarks.toLowerCase().includes(q)))
       ) ||
       labOrders.some(
         (o) =>
           o.patientId === p.id &&
           (o.testName.toLowerCase().includes(q) || o.id.toLowerCase().includes(q))
-      );
-
-    if (!matchesSearch) return false;
-
-    if (statusFilter === "ALL") return true;
-    if (statusFilter === "ABNORMAL") {
-      return p.labResults?.some((lr) => lr.status === "ABNORMAL" || lr.status === "CRITICAL" || lr.abnormalFlag);
-    }
-    if (statusFilter === "NORMAL") {
-      return p.labResults?.some((lr) => lr.status === "COMPLETED" && !lr.abnormalFlag);
-    }
-    if (statusFilter === "PENDING") {
-      return p.labResults?.some((lr) => !lr.doctorReviewed) || false;
-    }
-    return true;
+      )
+    );
   });
-
-  // Aggregate stats across pathology patients only
-  const totalPathologyPatients = pathologyPatients.length;
-  const totalLabResultsCount = pathologyPatients.reduce((sum, p) => sum + (p.labResults?.length || 0), 0);
-  const abnormalResultsCount = pathologyPatients.reduce(
-    (sum, p) =>
-      sum +
-      (p.labResults?.filter((lr) => lr.status === "ABNORMAL" || lr.status === "CRITICAL" || lr.abnormalFlag).length || 0),
-    0
-  );
-  const unreviewedCount = pathologyPatients.reduce(
-    (sum, p) => sum + (p.labResults?.filter((lr) => !lr.doctorReviewed).length || 0),
-    0
-  );
-  const unreadPathologyPatientCount = pathologyPatients.filter((p) =>
-    p.labResults?.some((lr) => !lr.doctorReviewed)
-  ).length;
 
   const handleCreateOrder = (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,7 +173,7 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Unread pathology reports only. After you view and mark a report as read, that patient drops off this unread count.
+                  Unread reports only. After you review a result it leaves this list, is stored under Pathology history on the patient file, and syncs to Suwasiri Vault → Lab reports.
                 </p>
               </div>
             </div>
@@ -241,89 +190,28 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
           </div>
         </div>
 
-        {/* Pathology Summary KPI Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-4 border-t border-slate-100">
-          <div className="bg-emerald-50/70 border border-emerald-200/60 p-3 rounded-lg">
-            <span className="text-[10px] uppercase font-bold text-emerald-800 tracking-wider">Unread Pathology Patients</span>
-            <div className="text-2xl font-black text-emerald-950 mt-0.5">{unreadPathologyPatientCount}</div>
-            <p className="text-[10px] text-emerald-700">With unread reports</p>
-          </div>
-
-          <div className="bg-rose-50/70 border border-rose-200/60 p-3 rounded-lg">
-            <span className="text-[10px] uppercase font-bold text-rose-800 tracking-wider">Abnormal / Critical</span>
-            <div className="text-2xl font-black text-rose-950 mt-0.5">{abnormalResultsCount}</div>
-            <p className="text-[10px] text-rose-700">Requires doctor action</p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setStatusFilter("PENDING")}
-            className={`text-left bg-amber-50/70 border p-3 rounded-lg transition ${
-              statusFilter === "PENDING" ? "border-amber-400 ring-1 ring-amber-300" : "border-amber-200/60 hover:border-amber-400"
-            }`}
-            title="Show unreviewed tests grouped under each patient name"
-          >
-            <span className="text-[10px] uppercase font-bold text-amber-800 tracking-wider">Unreviewed Tests</span>
-            <div className="text-2xl font-black text-amber-950 mt-0.5">{unreviewedCount}</div>
-            <p className="text-[10px] text-amber-700">Click to list tests by patient</p>
-          </button>
-
-          <div className="bg-sky-50/70 border border-sky-200/60 p-3 rounded-lg">
-            <span className="text-[10px] uppercase font-bold text-sky-800 tracking-wider">Total Test Reports</span>
-            <div className="text-2xl font-black text-sky-950 mt-0.5">{totalLabResultsCount}</div>
-            <p className="text-[10px] text-sky-700">In diagnostic registry</p>
+        {/* Unread Pathology colourful dashboard */}
+        <div className="mt-5 pt-4 border-t border-slate-100">
+          <div className="bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 p-5 rounded-xl shadow-md text-white">
+            <span className="text-[11px] uppercase font-extrabold tracking-wider text-amber-50">Unread Pathology</span>
+            <div className="text-4xl font-black mt-1">{unreadPathologyPatientCount}</div>
+            <p className="text-[12px] text-amber-50 mt-1 font-semibold">
+              Patients with unread reports. Review (or mark Critical / Alert) to lower this count.
+            </p>
           </div>
         </div>
 
-        {/* Filter Toolbar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mt-4 pt-4 border-t border-slate-100">
+        <div className="mt-4 pt-4 border-t border-slate-100">
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
             <input
               type="text"
-              placeholder="Search pathology patient by name, ID, test (HbA1c, Lipids, FBC)..."
+              placeholder="Search unread pathology by name, ID, or test..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:border-[#00334f] bg-slate-50 focus:bg-white"
             />
           </div>
-
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg border">
-            {[
-              { id: "ALL", label: `All Pathology Patients (${totalPathologyPatients})` },
-              { id: "ABNORMAL", label: `Abnormal / High (${abnormalResultsCount})` },
-              { id: "PENDING", label: `Unreviewed / Pending (${unreviewedCount})` },
-              { id: "NORMAL", label: "Normal Values" }
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setStatusFilter(tab.id as any)}
-                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                  statusFilter === tab.id
-                    ? "bg-white text-[#00334f] shadow-xs border border-slate-200"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white p-4 border rounded-xl shadow-xs">
-        <h3 className="text-[10px] font-bold uppercase text-slate-500 mb-2">Test / Investigation Profile</h3>
-        <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
-          {PATHOLOGY_INVESTIGATIONS.map((inv) => (
-            <span
-              key={inv.name}
-              className="text-[10px] font-bold bg-slate-50 text-slate-700 border border-slate-200 px-2 py-1 rounded-full"
-              title={`${inv.category} • ${inv.sample}`}
-            >
-              {inv.name}
-            </span>
-          ))}
         </div>
       </div>
 
@@ -338,7 +226,7 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                   patient.id.toLowerCase().includes(q))
             );
             const visibleLabs = (patient.labResults || []).filter((lr) => {
-              if (statusFilter === "PENDING" && lr.doctorReviewed) return false;
+              if (lr.doctorReviewed) return false;
               if (!q || nameHit) return true;
               return (
                 lr.testName.toLowerCase().includes(q) ||
@@ -350,7 +238,6 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
               visibleLabs.filter(
                 (lr) => lr.status === "ABNORMAL" || lr.status === "CRITICAL" || lr.abnormalFlag
               ) || [];
-            const isSelected = selectedPatientId === patient.id || Boolean(q);
 
             return (
               <div
@@ -368,24 +255,10 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                     </div>
 
                     <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {/* CRITICAL: Clicking patient name shows EVERYTHING */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (q) {
-                              setSelectedPatientId(isSelected && selectedPatientId === patient.id ? null : patient.id);
-                              return;
-                            }
-                            onOpenPatientEverything(patient);
-                          }}
-                          className="font-serif font-bold text-base text-[#00334f] hover:text-emerald-700 hover:underline transition-colors flex items-center gap-1.5 text-left group"
-                          title={q ? "Showing pathology details for this patient" : "Click to open complete 16-Tab Clinical Patient Record"}
-                        >
-                          <span>{patient.name}</span>
-                          <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 transition-colors" />
-                        </button>
-
+                      <h2 className="font-serif font-bold text-base text-[#00334f]">{patient.name}</h2>
+                      <PatientSexAgeBadge gender={patient.gender} age={patient.age} />
+                      <PatientCriticalAlertBadge patient={patient} />
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
                         <span className="text-xs text-slate-400 font-mono">[{patient.id}]</span>
 
                         {patient.medicareNumber && (
@@ -395,7 +268,7 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                         )}
 
                         {abnormalTests.length > 0 && (
-                          <span className="bg-rose-100 text-rose-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-rose-200 flex items-center gap-1 animate-pulse">
+                          <span className="bg-rose-100 text-rose-800 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-rose-200 flex items-center gap-1">
                             <AlertTriangle className="w-3 h-3 text-rose-600" />
                             {abnormalTests.length} Abnormal Result{abnormalTests.length > 1 ? "s" : ""}
                           </span>
@@ -403,15 +276,13 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                       </div>
 
                       <p className="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-2">
-                        <span>{patient.age} yrs • {patient.gender}</span>
-                        <span>•</span>
                         <span>Blood: <strong className="text-slate-700">{patient.bloodType}</strong></span>
                         <span>•</span>
                         <span>Allergies: <strong className="text-rose-600">{patient.allergies}</strong></span>
                         <span>•</span>
                         <span>Clinic: <strong className="text-slate-700">{patient.medicalCenter || "Colombo Central Clinic"}</strong></span>
                       </p>
-                      {statusFilter === "PENDING" && visibleLabs.length > 0 && (
+                      {visibleLabs.length > 0 && (
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
                           <span className="text-[10px] font-bold uppercase text-amber-800">Unreviewed tests:</span>
                           {visibleLabs.map((lr) => (
@@ -428,29 +299,17 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                   </div>
 
                   {/* Right Actions */}
-                  {!q && (
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
                     <button
                       type="button"
                       onClick={() => onStartConsultation(patient)}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
-                      title="Open GP Exam Room for this patient"
+                      title="Open GP Exam Room — completed reports live under Pathology history"
                     >
                       <Stethoscope className="w-3.5 h-3.5" />
                       Open GP Exam Room
                     </button>
-
-                    <button
-                      type="button"
-                      onClick={() => onOpenPatientEverything(patient)}
-                      className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3.5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
-                      title="View all 16 clinical tabs, history, and records"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      Inspect Full Record (Everything)
-                    </button>
                   </div>
-                  )}
                 </div>
 
                 {/* Pathology Test Results Table */}
@@ -458,7 +317,7 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                       <FlaskConical className="w-4 h-4 text-emerald-600" />
-                      Recorded Pathology Test Results ({visibleLabs.length})
+                      Recorded unread results ({visibleLabs.length})
                     </h3>
                     <span className="text-[11px] text-slate-400">
                       Laboratory Provider: LankaLab Central & Australian Clinical Labs
@@ -476,8 +335,7 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                               <th className="p-2.5 font-bold">Result Value</th>
                               <th className="p-2.5 font-bold">Status & Flags</th>
                               <th className="p-2.5 font-bold">Clinical Remarks & Doctor Comments</th>
-                              <th className="p-2.5 font-bold text-center">Suwasiri App</th>
-                              <th className="p-2.5 font-bold text-right">Actions</th>
+                              <th className="p-2.5 font-bold text-right">View</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
@@ -486,8 +344,6 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                                 test.status === "ABNORMAL" || test.status === "CRITICAL" || test.abnormalFlag;
                               const reportKey = getReportKey(patient.id, test, tIdx);
                               const currentComment = doctorComments[reportKey] ?? (test.remarks || "");
-                              const isSynced = suwasiriSyncedReports[reportKey];
-                              const isSyncing = syncingReportId === reportKey;
                               const isEditing = editingCommentId === reportKey;
 
                               return (
@@ -548,11 +404,12 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                                             onClick={() => {
                                               const el = document.getElementById(`input-comment-${reportKey}`) as HTMLTextAreaElement;
                                               const val = el ? el.value : currentComment;
-                                              handleSaveCommentAndSync(patient, test, tIdx, val);
+                                              setDoctorComments((prev) => ({ ...prev, [reportKey]: val }));
+                                              setEditingCommentId(null);
                                             }}
                                             className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1 cursor-pointer"
                                           >
-                                            <Send className="w-3 h-3" /> Save & Sync
+                                            <Send className="w-3 h-3" /> Save comment
                                           </button>
                                           <button
                                             type="button"
@@ -580,52 +437,38 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
                                     )}
                                   </td>
 
-                                  <td className="p-2.5 text-center whitespace-nowrap">
-                                    {isSynced ? (
-                                      <span className="text-emerald-700 text-[10px] font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 inline-flex items-center gap-1">
-                                        <Check className="w-3 h-3 text-emerald-600" />
-                                        Synced ({isSynced})
-                                      </span>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSaveCommentAndSync(patient, test, tIdx, currentComment)}
-                                        disabled={isSyncing}
-                                        className="text-slate-600 hover:text-emerald-700 text-[10px] font-bold bg-slate-50 hover:bg-emerald-50 px-2 py-0.5 rounded border border-slate-200 inline-flex items-center gap-1 cursor-pointer"
-                                        title="Sync this test and doctor's comments to Patient's Suwasiri Mobile App"
-                                      >
-                                        <Smartphone className="w-3 h-3 text-emerald-600" />
-                                        {isSyncing ? "Syncing..." : "Sync App"}
-                                      </button>
-                                    )}
-                                  </td>
-
                                   <td className="p-2.5 text-right whitespace-nowrap">
-                                    <div className="flex items-center justify-end gap-1.5">
-                                      {!test.doctorReviewed && onMarkLabReviewed && (
-                                        <button
-                                          type="button"
-                                          onClick={() => onMarkLabReviewed(patient.id, test.id)}
-                                          className="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
-                                          title="Mark this report as read / reviewed"
-                                        >
-                                          <CheckCircle2 className="w-3 h-3" />
-                                          Mark read
-                                        </button>
-                                      )}
-                                      {test.doctorReviewed && (
-                                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
-                                          Read
-                                        </span>
-                                      )}
+                                    <div className="flex flex-col items-end gap-1.5">
                                       <button
                                         type="button"
-                                        onClick={() => {
-                                          handleDownloadTestPdf(patient, test);
-                                          if (!test.doctorReviewed && onMarkLabReviewed) {
-                                            onMarkLabReviewed(patient.id, test.id);
-                                          }
-                                        }}
+                                        onClick={() => setViewingReport({ patient, test })}
+                                        className="bg-sky-600 hover:bg-sky-700 text-white px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                        title="View this pathology report"
+                                      >
+                                        <Eye className="w-3 h-3" />
+                                        View
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => markReportCompleted(patient, test)}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                        title="Completed: leave unread list and file under Pathology history"
+                                      >
+                                        <CheckCircle2 className="w-3 h-3" />
+                                        Completed
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => onReviewLab?.(patient, test, { critical: true, comment: currentComment })}
+                                        className="bg-red-600 hover:bg-red-700 text-white px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                        title="Mark critical / alert: red-alert this patient, notify Recalls & Reminders so reception can call and rebook"
+                                      >
+                                        <AlertTriangle className="w-3 h-3" />
+                                        Critical / Alert
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDownloadTestPdf(patient, test)}
                                         className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
                                         title="Download this individual test report as PDF"
                                       >
@@ -671,22 +514,66 @@ Security Stamp   : DIGITAL HASH SHA256-${Math.random().toString(36).substring(2,
         ) : (
           <div className="bg-white border rounded-xl p-12 text-center space-y-3">
             <FlaskConical className="w-12 h-12 text-slate-300 mx-auto" />
-            <h3 className="font-serif font-bold text-base text-[#00334f]">No matching pathology patients found</h3>
+            <h3 className="font-serif font-bold text-base text-[#00334f]">No unread pathology reports</h3>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
-              No patients with active pathology files matched your current search filters. Order a new pathology investigation or clear filters to view all diagnostic records.
+              Completed results leave this inbox and are filed under the patient’s GP Exam Room → Pathology history (and Suwasiri Vault → Lab reports).
             </p>
             <button
-              onClick={() => {
-                setSearchQuery("");
-                setStatusFilter("ALL");
-              }}
+              onClick={() => setSearchQuery("")}
               className="bg-[#00334f] text-white px-4 py-2 rounded-lg text-xs font-bold"
             >
-              Reset Filters
+              Clear search
             </button>
           </div>
         )}
       </div>
+
+      {viewingReport && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full border shadow-xl max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-start gap-3 border-b px-5 py-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-sky-800">Pathology report</p>
+                <h3 className="font-serif font-bold text-base text-[#00334f]">
+                  {viewingReport.test.testName}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {viewingReport.patient.name} · {viewingReport.patient.id} · {viewingReport.test.date || "—"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingReport(null)}
+                className="text-slate-400 hover:text-slate-700 p-1"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <pre className="flex-1 overflow-y-auto p-5 text-[11px] leading-relaxed font-mono text-slate-800 whitespace-pre-wrap bg-slate-50">
+              {buildReportText(viewingReport.patient, viewingReport.test)}
+            </pre>
+            <div className="flex flex-wrap justify-end gap-2 border-t px-5 py-3">
+              <button
+                type="button"
+                onClick={() => handleDownloadTestPdf(viewingReport.patient, viewingReport.test)}
+                className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3 py-1.5 rounded text-[11px] font-bold inline-flex items-center gap-1"
+              >
+                <Download className="w-3.5 h-3.5" />
+                PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => markReportCompleted(viewingReport.patient, viewingReport.test)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-[11px] font-bold inline-flex items-center gap-1"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Completed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Order Investigation Modal */}
       {showOrderModal && (

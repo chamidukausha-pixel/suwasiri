@@ -1,11 +1,13 @@
-import React, { useState, FormEvent, useEffect } from "react";
+import React, { useState, FormEvent, useEffect, useRef } from "react";
 import { 
   FileText, Syringe, FlaskConical, Plus, Clipboard, Loader2, Play, Check, Trash2, Printer, AlertCircle, Sparkles,
-  Mail, Calendar, ShieldCheck, CheckCircle, Activity, Heart
+  Mail, Calendar, ShieldCheck, CheckCircle, Activity, Heart, FolderOpen, Camera, Upload, X
 } from "lucide-react";
-import { Patient, VaccineRecord, LabResult, PrescriptionRecord, LabOrder, SampleCollection, MedicalCertificateRecord } from "../types";
+import { Patient, VaccineRecord, LabResult, PrescriptionRecord, LabOrder, SampleCollection, MedicalCertificateRecord, ClinicalDocument } from "../types";
 import { issueMedicalCertificateToSuwasiri } from "../sync/suwasiriCertificates";
 import { SAMPLE_COLLECTION_CATEGORIES } from "../catalogs/pathologyInvestigations";
+import PatientSexAgeBadge from "./PatientSexAgeBadge";
+import PatientCriticalAlertBadge from "./PatientCriticalAlertBadge";
 
 interface Props {
   patient: Patient;
@@ -21,7 +23,12 @@ interface Props {
   onStateUpdate?: (updatedState: any) => void;
   onWalkInCheckIn?: (patient: Patient) => void;
   onIssueMedicalCertificate?: (patientId: string, cert: MedicalCertificateRecord) => void;
-  initialSubTab?: "history" | "vaccines" | "labs" | "prescriptions" | "mc" | "samples";
+  initialSubTab?: "history" | "vaccines" | "labs" | "prescriptions" | "mc" | "samples" | "documents";
+  dispatchProfileOnly?: boolean;
+  focusSampleId?: string | null;
+  onUpdatePatient?: (patient: Patient) => void;
+  onOpenClinicalProfile?: (patient: Patient) => void;
+  onSampleDelivered?: () => void;
 }
 
 export default function PatientDetailsHub({
@@ -39,14 +46,23 @@ export default function PatientDetailsHub({
   onWalkInCheckIn,
   onIssueMedicalCertificate,
   initialSubTab,
+  dispatchProfileOnly = false,
+  focusSampleId = null,
+  onUpdatePatient,
+  onOpenClinicalProfile,
+  onSampleDelivered,
 }: Props) {
-  const [activeSubTab, setActiveSubTab] = useState<"history" | "vaccines" | "labs" | "prescriptions" | "mc" | "samples">(initialSubTab || "history");
+  const [activeSubTab, setActiveSubTab] = useState<"history" | "vaccines" | "labs" | "prescriptions" | "mc" | "samples" | "documents">(initialSubTab || "history");
 
   useEffect(() => {
+    if (dispatchProfileOnly) {
+      setActiveSubTab(initialSubTab === "documents" ? "documents" : "samples");
+      return;
+    }
     if (initialSubTab) {
       setActiveSubTab(initialSubTab);
     }
-  }, [initialSubTab, patient.id]);
+  }, [initialSubTab, patient.id, dispatchProfileOnly]);
 
   // Medical history states
   const [newHistInput, setNewHistInput] = useState("");
@@ -90,6 +106,54 @@ export default function PatientDetailsHub({
   const [dispatchLab, setDispatchLab] = useState("LankaLab - Colombo General");
   const [deliveringSampleId, setDeliveringSampleId] = useState<string | null>(null);
   const [doingActionId, setDoingActionId] = useState<string | null>(null);
+  const [showAddDocChooser, setShowAddDocChooser] = useState(false);
+  const [hubDropActive, setHubDropActive] = useState(false);
+  const hubScanInputRef = useRef<HTMLInputElement>(null);
+  const hubFileInputRef = useRef<HTMLInputElement>(null);
+
+  const fileClinicalDocFromFile = (file: File, scanned: boolean) => {
+    if (!onUpdatePatient) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const doc: ClinicalDocument = {
+        id: (scanned ? "scan-" : "doc-") + Date.now(),
+        patientId: patient.id,
+        patientName: patient.name,
+        title: file.name.replace(/\.[^/.]+$/, "") || (scanned ? "Scanned document" : "Uploaded document"),
+        category: "Clinical Correspondence",
+        fileType: scanned ? "SCANNED_DOC" : file.type.includes("png") ? "IMAGE_PNG" : file.type.includes("pdf") ? "PDF" : "IMAGE_JPEG",
+        fileSizeKb: Math.round(file.size / 1024) || 1,
+        fileUrl: String(reader.result || ""),
+        uploadedBy: scanned ? "Clinic scanner" : "Sample Dispatch",
+        uploadedDate: new Date().toISOString().replace("T", " ").substring(0, 16),
+        allocatedDoctor: currentRole,
+        status: "PENDING_DOCTOR_REVIEW",
+        versionHistory: [
+          {
+            versionNumber: 1,
+            timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
+            author: currentRole,
+            notes: scanned ? "Scanned into chart" : "Drag-and-drop / browse",
+            fileSizeKb: Math.round(file.size / 1024) || 1,
+          },
+        ],
+        tags: [scanned ? "Scanned" : "Uploaded"],
+        signatureStatus: "UNSIGNED",
+      };
+      onUpdatePatient({ ...patient, clinicalDocuments: [doc, ...(patient.clinicalDocuments || [])] });
+      setShowAddDocChooser(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  useEffect(() => {
+    if (!focusSampleId) return;
+    const row = (patient.sampleCollections || []).find((s) => s.id === focusSampleId);
+    if (row?.status === "COLLECTED") {
+      setDeliveringSampleId(focusSampleId);
+      setDispatchLab("LankaLab - Colombo General");
+    }
+  }, [focusSampleId, patient.id, patient.sampleCollections]);
 
   useEffect(() => {
     if (mcStartDate && mcEndDate) {
@@ -331,7 +395,11 @@ export default function PatientDetailsHub({
       setDispatchName("");
       setDispatchPhone("");
       setDispatchId("");
-      alert(`Success! Handed over to dispatcher ${dispatchName} & securely synced with LankaLab diagnostics framework.`);
+      if (dispatchProfileOnly) {
+        onSampleDelivered?.();
+      } else {
+        alert(`Success! Handed over to dispatcher ${dispatchName} & securely synced with LankaLab diagnostics framework.`);
+      }
     } catch (err: any) {
       alert("Error: " + err.message);
     } finally {
@@ -423,8 +491,10 @@ export default function PatientDetailsHub({
                     ⚕ Center: {patient.medicalCenter || "Colombo Central Clinic"}
                   </span>
                 </div>
+                <PatientSexAgeBadge gender={patient.gender} age={patient.age} />
+                <PatientCriticalAlertBadge patient={patient} />
                 <p className="text-xs text-sky-200">
-                  Patient File: #{patient.id} • {patient.gender}, {patient.age} yrs • Blood Group: {patient.bloodType} • Phone: {patient.phone} • Email: {patient.email}
+                  Patient File: #{patient.id} • Blood Group: {patient.bloodType} • Phone: {patient.phone} • Email: {patient.email}
                 </p>
                 <p className="text-[10px] text-sky-300 italic">
                   Allergies: <span className="text-rose-300 font-bold">{patient.allergies || "None declared"}</span>
@@ -544,7 +614,7 @@ export default function PatientDetailsHub({
           </div>
           
           <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
-            {onWalkInCheckIn && !isEditingDemographics && (
+            {onWalkInCheckIn && !isEditingDemographics && !dispatchProfileOnly && (
               <button
                 type="button"
                 onClick={() => onWalkInCheckIn(patient)}
@@ -557,7 +627,7 @@ export default function PatientDetailsHub({
                 Check-In Walk-In (Book)
               </button>
             )}
-            {!isEditingDemographics && (
+            {!isEditingDemographics && !dispatchProfileOnly && (
               <button
                 onClick={() => setIsEditingDemographics(true)}
                 className="text-xs font-bold text-white bg-sky-700 hover:bg-sky-600 border border-sky-500/50 px-3 py-1.5 rounded transition-all"
@@ -576,6 +646,29 @@ export default function PatientDetailsHub({
 
         {/* Hub Tab Navs */}
         <div className="bg-slate-100 border-b flex px-4">
+          {dispatchProfileOnly ? (
+            <>
+          <button
+            onClick={() => { setActiveSubTab("samples"); setSimulatingOrderId(null); }}
+            className={`px-4 py-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+              activeSubTab === "samples" ? "border-[#00334f] text-[#00334f]" : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <FlaskConical className="w-4 h-4 text-rose-500" />
+            Sample Collections ({patient.sampleCollections ? patient.sampleCollections.length : 0})
+          </button>
+          <button
+            onClick={() => { setActiveSubTab("documents"); setSimulatingOrderId(null); }}
+            className={`px-4 py-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+              activeSubTab === "documents" ? "border-[#00334f] text-[#00334f]" : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <FolderOpen className="w-4 h-4" />
+            Documents ({patient.clinicalDocuments ? patient.clinicalDocuments.length : 0})
+          </button>
+            </>
+          ) : (
+            <>
           <button
             onClick={() => { setActiveSubTab("history"); setSimulatingOrderId(null); }}
             className={`px-4 py-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
@@ -584,6 +677,15 @@ export default function PatientDetailsHub({
           >
             <Clipboard className="w-4 h-4" />
             Medical History
+          </button>
+          <button
+            onClick={() => { setActiveSubTab("documents"); setSimulatingOrderId(null); }}
+            className={`px-4 py-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+              activeSubTab === "documents" ? "border-[#00334f] text-[#00334f]" : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <FolderOpen className="w-4 h-4" />
+            Documents ({patient.clinicalDocuments ? patient.clinicalDocuments.length : 0})
           </button>
           <button
             onClick={() => { setActiveSubTab("vaccines"); setSimulatingOrderId(null); }}
@@ -630,10 +732,162 @@ export default function PatientDetailsHub({
             <FlaskConical className="w-4 h-4 text-rose-500" />
             Sample Collections ({patient.sampleCollections ? patient.sampleCollections.length : 0})
           </button>
+            </>
+          )}
         </div>
 
         {/* Tab content panel */}
         <div className="p-6 overflow-y-auto flex-1 max-h-[60vh]">
+          {activeSubTab === "documents" && (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-bold text-xs uppercase text-slate-500 tracking-wider mb-1">Documents</h3>
+                  <p className="text-[11px] text-slate-500">
+                    Files are stored on {patient.name}’s clinical profile (GP Exam Room → Documents).
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {onOpenClinicalProfile && !dispatchProfileOnly && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenClinicalProfile(patient)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[#00334f] text-[#00334f] rounded-lg font-bold text-[11px] hover:bg-[#f0f3ff]"
+                    >
+                      Open clinical profile
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowAddDocChooser(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#00334f] text-white rounded-lg font-bold text-[11px]"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add document
+                  </button>
+                </div>
+              </div>
+
+              {(patient.clinicalDocuments || []).length === 0 ? (
+                <p className="text-xs text-slate-400 italic">No documents filed on this profile yet. Use Add document to scan or browse.</p>
+              ) : (
+                <div className="space-y-2">
+                  {(patient.clinicalDocuments || []).map((doc) => (
+                    <div key={doc.id} className="border rounded-lg p-3 bg-slate-50 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-[#00334f]">{doc.title}</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          {doc.category} • {doc.uploadedDate} • {doc.fileSizeKb} KB
+                        </p>
+                      </div>
+                      <span
+                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0 ${
+                          doc.status === "REVIEWED_NORMAL"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : doc.status === "ACTION_REQUIRED"
+                            ? "bg-rose-100 text-rose-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        {String(doc.status || "").replace(/_/g, " ")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {showAddDocChooser && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-[80]">
+                  <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border space-y-4">
+                    <div className="flex items-center justify-between border-b pb-3">
+                      <h3 className="font-bold text-base text-[#00334f]">Add document</h3>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddDocChooser(false)}
+                        className="text-slate-400 hover:text-slate-700 p-0.5"
+                        title="Close"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      File to {patient.name}’s Documents history.
+                    </p>
+                    <input
+                      ref={hubScanInputRef}
+                      type="file"
+                      accept="image/*,application/pdf"
+                      capture="environment"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) fileClinicalDocFromFile(file, true);
+                        e.target.value = "";
+                      }}
+                    />
+                    <input
+                      ref={hubFileInputRef}
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg,image/*,application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) fileClinicalDocFromFile(file, false);
+                        e.target.value = "";
+                      }}
+                    />
+                    <div className="grid grid-cols-1 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => hubScanInputRef.current?.click()}
+                        className="flex items-start gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 text-left transition"
+                      >
+                        <Camera className="w-6 h-6 text-amber-800 shrink-0 mt-0.5" />
+                        <span>
+                          <span className="block font-bold text-amber-950 text-sm">Scan</span>
+                          <span className="text-[11px] text-amber-800/90">
+                            Acquire from a connected scanner, webcam, or phone camera.
+                          </span>
+                        </span>
+                      </button>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => hubFileInputRef.current?.click()}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") hubFileInputRef.current?.click();
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setHubDropActive(true);
+                        }}
+                        onDragLeave={() => setHubDropActive(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setHubDropActive(false);
+                          const file = e.dataTransfer.files?.[0];
+                          if (file) fileClinicalDocFromFile(file, false);
+                        }}
+                        className={`flex items-start gap-3 p-4 rounded-xl border text-left cursor-pointer ${
+                          hubDropActive
+                            ? "border-[#00334f] bg-sky-100"
+                            : "border-sky-200 bg-sky-50 hover:bg-sky-100"
+                        }`}
+                      >
+                        <Upload className="w-6 h-6 text-[#00334f] shrink-0 mt-0.5" />
+                        <span>
+                          <span className="block font-bold text-[#00334f] text-sm">Drag and drop / Browse</span>
+                          <span className="text-[11px] text-slate-600">
+                            Drop a PDF or image here, or browse your computer.
+                          </span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* TAB: MEDICAL HISTORY */}
           {activeSubTab === "history" && (
             <div className="space-y-6">
@@ -1468,6 +1722,7 @@ export default function PatientDetailsHub({
               </div>
 
               {/* LOG NEW COLLECTION FORM */}
+              {!dispatchProfileOnly && (
               <div className="bg-white border rounded-lg p-5 space-y-4 shadow-sm">
                 <h4 className="text-xs font-bold uppercase text-slate-700 flex items-center gap-1 border-b pb-2">
                   <span>➕</span> Register New Patient Sample Log
@@ -1505,6 +1760,7 @@ export default function PatientDetailsHub({
                   </div>
                 </form>
               </div>
+              )}
 
               {/* COLLECTIONS INDEX */}
               <div className="space-y-3">
@@ -1691,7 +1947,7 @@ export default function PatientDetailsHub({
 
                   {(!patient.sampleCollections || patient.sampleCollections.length === 0) && (
                     <div className="text-center py-12 border border-dashed rounded-lg text-xs text-slate-400 italic bg-white">
-                      💡 No specimen collections registered on this patient's medical registry page yet. Use the form above to log one!
+                      💡 No specimen collections registered on this patient's medical registry page yet.
                     </div>
                   )}
                 </div>

@@ -1698,6 +1698,11 @@ class AppLocalizations {
       'si': 'පිළිගැනීමේ desk හි ගෙවන්න',
       'ta': 'ரிசப்ஷனில் செலுத்துங்கள்',
     },
+    'payAtCounter': {
+      'en': 'Pay at counter',
+      'si': 'කවුන්ටරයේ ගෙවන්න',
+      'ta': 'கவுண்டரில் செலுத்துங்கள்',
+    },
     'payAtReceptionHint': {
       'en':
           'No online payment is required now. Settle the consultation fee at the clinic reception when you arrive.',
@@ -1706,10 +1711,23 @@ class AppLocalizations {
       'ta':
           'இப்போது ஆன்லைன் கட்டணம் தேவையில்லை. கிளினிக்கில் வந்ததும் reception-ல் செலுத்துங்கள்.',
     },
+    'payAtCounterHint': {
+      'en':
+          'Book now and settle the consultation fee at the clinic counter when you arrive.',
+      'si':
+          'දැන් වෙන්කරවා ගෙන, සායනයට පැමිණි විට කවුන්ටරයේ ගාස්තුව ගෙවන්න.',
+      'ta':
+          'இப்போது முன்பதிவு செய்து, கிளினிக்கில் வந்ததும் கவுண்டரில் கட்டணம் செலுத்துங்கள்.',
+    },
     'confirmBookingPayAtReception': {
       'en': 'Confirm booking · Pay at reception',
       'si': 'වෙන්කරවා ගන්න · reception හි ගෙවන්න',
       'ta': 'முன்பதிவு உறுதி · reception-ல் செலுத்து',
+    },
+    'confirmBookingPayAtCounter': {
+      'en': 'Confirm booking · Pay at counter',
+      'si': 'වෙන්කරවා ගන්න · කවුන්ටරයේ ගෙවන්න',
+      'ta': 'முன்பதிவு உறுதி · கவுண்டரில் செலுத்து',
     },
     'onlineDebitCard': {
       'en': 'Online Debit/Card',

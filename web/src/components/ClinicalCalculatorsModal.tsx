@@ -323,6 +323,7 @@ export default function ClinicalCalculatorsModal({
           reason: "Clinical Decision Calculators Suite",
           doctor: calculatedBy,
           notes: historyNote,
+          clinicName: activePatient.medicalCenter || "",
         },
         ...(activePatient.history || []),
       ],

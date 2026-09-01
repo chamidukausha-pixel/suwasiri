@@ -42,9 +42,9 @@ Aligned with `firestore.rules` and `FirebaseHealthRepository` / `FirebaseAuthRep
 | Collection | Key fields | Owner rule |
 |------------|------------|------------|
 | `users` | profile map (`name`, `email`, `NIC`, `bloodGroup`, `barcodeNumber`, `healthIntake`, …) | **read: any signed-in** (GP Care Unique Health ID lookup); write: owner uid **or household** (`{uid}_wife` / `{uid}_child`) |
-| `vault` | `patientId`, `title`, `issuedBy`, `date`, `metrics` | household: `uid` or `uid_*` |
+| `vault` | `patientId`, `title`, `issuedBy`, `date`, `metrics`, `kind` (`lab`), `source` (`gp_care` when a GP reviews pathology) | household read; **create: any signed-in** (GP Care staff write reviewed lab reports so they appear on Suwasiri **Vault → Lab reports**) |
 | `vaccinations` | `patientId`, facility, `slot`, `status`, `vaccineName`, `bookedAt`, `recordType` (`booking` / `history`), `source` (`suwasiri_app`) | write if household patient; **read: any signed-in** (GP Care sees **vaccine history only** from the app) |
-| `appointments` | `patientId`, doctor fields, `timeSlot`, `date`, `time`, `token`, `consultMode` (`clinic` / `video`), `hospital`, `hospitalId`, `branchId`, `patientName`, `source` (`suwasiri_app` / `gp_care`), `bookedAt` | create: household or GP Care; **read: any signed-in**; update: household or staff |
+| `appointments` | `patientId`, doctor fields, `timeSlot`, `date`, `time`, `token`, `consultMode` (`clinic` / `video`), `hospital`, `hospitalId`, `branchId`, `patientName`, `source` (`suwasiri_app` / `gp_care`), `bookedAt`, `queuePlace` (reception lobby order) | create: household or GP Care; **read: any signed-in**; update: household or staff |
 | `appointment_slots` | Deterministic id `{doctorId}_{yyyy-MM-dd}_{HH-mm}` — locks one doctor+datetime so app and GP Care cannot double-book | read: signed-in; create if missing |
 | `clinical_calculations` | One doc per `patientId`: latest vitals + `clinicalCalculations[]` + `observationsHistory[]` from GP Care Clinical Decision Calculators Suite | read/write: any signed-in (doctor save + reopen history) |
 | `prescriptions` | `patientId`, `medicine`, `schedule`, `doseBadge`, `sessionId`, `sentToPharmacare` (MediLanka portal flag), `clinicName`, `doctor`, `code`, `source` (`gp_care` when issued from GP Care) | read/create: signed-in (staff issue + patient read); update: household or staff |
@@ -53,7 +53,8 @@ Aligned with `firestore.rules` and `FirebaseHealthRepository` / `FirebaseAuthRep
 | `notifications` | `title`, `body`, `timestamp`, `type`, `read` | any signed-in (tighten later) |
 | `telehealth_sessions` | WebRTC offer/answer + `ice_doctor` / `ice_patient` ICE candidates; subcollection `messages` (in-call chat) | any signed-in (patient app + GP Care doctor) |
 | `consultation_notes` | `patientId`, `patientName`, `doctor`, `clinicName`, `title`, `body`, `date`, `appointmentId`, `source` (`gp_care`) | read/create: signed-in; update/delete: household or same patientId. Suwasiri Call + Vault treatment notes + GP Care history |
-| `clinic_doctors` | `name`, `specialty` (matches DoctorCatalog categories, e.g. Cardiologist), `hospital`, `address`, `region`, `active`, `staffId`, `source` (`gp_care`) | signed-in read/write. GP Care Platform Console publishes doctors so the Suwasiri Doctors tab can list them under that clinic + specialty |
+| `clinic_doctors` | `name`, `specialty` (matches DoctorCatalog categories, e.g. Cardiologist), `hospital`, `address`, `region` (Sri Lankan district), `rosterHours`, `hospitalId`, `branchId`, `active`, `staffId`, `source` (`gp_care`) | signed-in read/write. GP Care Platform Console / Practice Manager publish doctors so the Suwasiri Doctors tab can search by name, clinic, and district |
+| `clinic_centers` | `name`, `region`, `address`, `hospitalId`, `active`, `source` (`gp_care`) | signed-in read/write. New medical centres created in Platform Console appear in Suwasiri until doctors are added |
 
 ## Planned tenancy collections (web RBAC — not deployed yet)
 

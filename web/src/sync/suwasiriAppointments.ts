@@ -10,6 +10,7 @@ import {
 import { getFirebaseDb, isFirebaseConfigured } from "../firebase";
 import { HOSPITAL_PRIMECARE, BRANCH_COLOMBO } from "../tenancy";
 import type { Appointment, Patient } from "../types";
+import { suwasiriDoctorDocId } from "./suwasiriClinicDoctors";
 
 /** Sri Lanka has no DST; clinic wall-clock is always UTC+05:30. */
 function colomboWallTime(dateKey: string, hours: number, minutes: number): Date {
@@ -32,6 +33,34 @@ export function compareAppointmentTime(a: Appointment, b: Appointment): number {
   const da = parseSlot(a)?.getTime() ?? 0;
   const db = parseSlot(b)?.getTime() ?? 0;
   return da - db;
+}
+
+/** Lobby / doctor queue order: reception place first, then booked time. */
+export function compareLobbyPlace(a: Appointment, b: Appointment): number {
+  const aHas = typeof a.queuePlace === "number";
+  const bHas = typeof b.queuePlace === "number";
+  if (aHas && bHas && a.queuePlace !== b.queuePlace) {
+    return (a.queuePlace as number) - (b.queuePlace as number);
+  }
+  if (aHas && !bHas) return -1;
+  if (!aHas && bHas) return 1;
+  return compareAppointmentTime(a, b);
+}
+
+export async function persistLobbyQueuePlaces(
+  places: Array<{ id: string; queuePlace: number }>,
+  firestoreIds: Iterable<string>
+): Promise<void> {
+  if (!isFirebaseConfigured() || places.length === 0) return;
+  const allowed = new Set(firestoreIds);
+  const db = getFirebaseDb();
+  await Promise.all(
+    places
+      .filter((p) => allowed.has(p.id))
+      .map(({ id, queuePlace }) =>
+        updateDoc(doc(db, "appointments", id), { queuePlace }).catch(() => undefined)
+      )
+  );
 }
 
 function mapStatus(raw: unknown): Appointment["status"] {
@@ -108,6 +137,10 @@ export function mapFirestoreAppointment(
     clinicName: String(data.clinicName || data.hospital || ""),
     timeSlot: timeSlotRaw || undefined,
     paymentMethod: data.paymentMethod ? String(data.paymentMethod) : undefined,
+    paymentStatus: data.paymentStatus ? String(data.paymentStatus) : undefined,
+    paidBySuwasiri: data.paidBySuwasiri === true,
+    suwasiriReceiptUrl: data.suwasiriReceiptUrl ? String(data.suwasiriReceiptUrl) : undefined,
+    queuePlace: typeof data.queuePlace === "number" ? data.queuePlace : undefined,
   };
 }
 
@@ -126,6 +159,18 @@ export function appointmentPatientName(apt: Appointment, patient?: Patient | nul
       .join(" ");
   }
   return "Patient";
+}
+
+/** Keep the Suwasiri booking name on the clinic file (e.g. Chamidu Kaushal Rathnayake). */
+export function overlayBookingIdentity(apt: Appointment, patient: Patient): Patient {
+  const displayName = appointmentPatientName(apt, patient);
+  return {
+    ...patient,
+    name: displayName,
+    phone: patient.phone || apt.patientPhone || "",
+    email: patient.email || apt.patientEmail || "",
+    medicalCenter: patient.medicalCenter || apt.clinicName,
+  };
 }
 
 export function stubPatientFromBooking(apt: Appointment): Patient {
@@ -271,18 +316,10 @@ export function suwasiriDoctorCatalogId(opts: {
   staffUserId?: string;
   doctorName?: string;
 }): string {
-  const id = (opts.staffUserId || "").toLowerCase();
-  const name = (opts.doctorName || "").toLowerCase();
-  if (id.includes("silva") || name.includes("priyantha silva")) {
-    return "d-priyantha-silva";
-  }
-  if (id.includes("anoja") || name.includes("anoja")) {
-    return "d-anoja-senanayake";
-  }
-  if (name.includes("kasun") || name.includes("jayawardena")) {
-    return "d-kasun-jayawardena";
-  }
-  return id || "gp-care-doctor";
+  return suwasiriDoctorDocId({
+    staffId: opts.staffUserId,
+    doctorName: opts.doctorName,
+  });
 }
 
 /** Accepts "10:00 AM", "03:00 PM", or 24-hour "15:00" / "09:00". */

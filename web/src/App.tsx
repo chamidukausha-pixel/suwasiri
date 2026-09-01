@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, FormEvent } from "react";
+import React, { useState, useEffect, useMemo, useRef, FormEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Activity,
@@ -12,6 +12,7 @@ import {
   Bell,
   Search,
   CheckSquare,
+  ClipboardList,
   ShieldAlert,
   Loader2,
   Trash2,
@@ -21,13 +22,11 @@ import {
   CreditCard,
   TrendingUp,
   TrendingDown,
-  BrainCircuit,
   Stethoscope,
   Info,
   Clock,
   HeartPulse,
   UserCheck,
-  Sparkles,
   AlertTriangle,
   UserPlus,
   MessageSquare,
@@ -65,24 +64,24 @@ import { formatDateKey, formatLongDate } from "./utils/clinicCalendar";
 import LoginView from "./components/LoginView";
 import PlatformConsoleView from "./components/PlatformConsoleView";
 import PrintablePrescription from "./components/PrintablePrescription";
+import PatientSexAgeBadge from "./components/PatientSexAgeBadge";
+import PatientCriticalAlertBadge from "./components/PatientCriticalAlertBadge";
 import SecureClinicChat from "./components/SecureClinicChat";
 import TelehealthRoom from "./components/TelehealthRoom";
 import PatientDetailsHub from "./components/PatientDetailsHub";
-import DoctorClinicalRecordModal from "./components/DoctorClinicalRecordModal";
-import ClinicalCalculatorsModal from "./components/ClinicalCalculatorsModal";
+import DoctorClinicalRecordModal, { type ClinicalTab } from "./components/DoctorClinicalRecordModal";
+import { mergeClinicalDocuments } from "./components/DocumentManagementHub";
 import RecallsDashboard from "./components/RecallsDashboard";
 import ReceptionBookingScheduler from "./components/ReceptionBookingScheduler";
 import type { ReceptionBookPayload } from "./components/ReceptionBookingScheduler";
 import PatientPortalView from "./components/PatientPortalView";
 import PracticeManagerView from "./components/PracticeManagerView";
 import SystemAdminView from "./components/SystemAdminView";
-import DocumentManagementHub from "./components/DocumentManagementHub";
 import PathologyHub from "./components/PathologyHub";
-import AIFeaturesHub from "./components/AIFeaturesHub";
 import SecurityModuleView from "./components/SecurityModuleView";
 import AuditLogView from "./components/AuditLogView";
 import ReportsAnalyticsView from "./components/ReportsAnalyticsView";
-import { RecallRecord, ClinicalDocument } from "./types";
+import { RecallRecord } from "./types";
 import {
   BRANCH_COLOMBO,
   DEFAULT_STAFF_DIRECTORY,
@@ -98,17 +97,20 @@ import type { User } from "firebase/auth";
 import {
   appointmentPatientName,
   bookGpCareSlotToFirestore,
-  compareAppointmentTime,
+  compareLobbyPlace,
   isDueTelehealth,
   isVideoBooking,
   mergeAppointments,
   mergePatients,
+  overlayBookingIdentity,
+  persistLobbyQueuePlaces,
   stubPatientFromBooking,
   subscribeSuwasiriAppointments,
   suwasiriDoctorCatalogId,
   updateSuwasiriAppointmentStatus,
 } from "./sync/suwasiriAppointments";
 import { issuePrescriptionsToSuwasiri } from "./sync/suwasiriPrescriptions";
+import { issueLabReportToSuwasiri } from "./sync/suwasiriLabs";
 import { lookupSuwasiriHealthId, patientVisibleAtHospital } from "./sync/suwasiriHealthId";
 import { saveConsultationNote } from "./sync/suwasiriConsultSync";
 import {
@@ -117,8 +119,12 @@ import {
   type SuwasiriChartPatch,
 } from "./sync/suwasiriPatientChart";
 import { subscribeSuwasiriVaccinePatients } from "./sync/suwasiriVaccinations";
-import { PATHOLOGY_INVESTIGATIONS, sampleCategoryForTest } from "./catalogs/pathologyInvestigations";
-import { publishClinicDoctorToSuwasiri } from "./sync/suwasiriClinicDoctors";
+import { sampleCategoryForTest } from "./catalogs/pathologyInvestigations";
+import {
+  publishClinicCenterToSuwasiri,
+  publishClinicDoctorToSuwasiri,
+  republishStaffDoctorsToSuwasiri,
+} from "./sync/suwasiriClinicDoctors";
 
 export interface DrugFormularyItem {
   name: string;
@@ -458,6 +464,7 @@ export default function App() {
   // Global Sync State (clinic JSON store + live Suwasiri App Firestore bookings)
   const [clinicPatients, setPatients] = useState<Patient[]>([]);
   const [reviewedLabKeys, setReviewedLabKeys] = useState<Record<string, true>>({});
+  const [criticalLabKeys, setCriticalLabKeys] = useState<Record<string, true>>({});
   const [clinicAppointments, setAppointments] = useState<Appointment[]>([]);
   const [suwasiriAppointments, setSuwasiriAppointments] = useState<Appointment[]>([]);
   const [suwasiriPatients, setSuwasiriPatients] = useState<Patient[]>([]);
@@ -473,14 +480,19 @@ export default function App() {
         if (!patched.labResults?.length) return patched;
         return {
           ...patched,
-          labResults: patched.labResults.map((lr) =>
-            reviewedLabKeys[`${patched.id}:${lr.id}`]
-              ? { ...lr, doctorReviewed: true }
-              : lr
-          ),
+          labResults: patched.labResults.map((lr) => {
+            const key = `${patched.id}:${lr.id}`;
+            return {
+              ...lr,
+              doctorReviewed: reviewedLabKeys[key] ? true : lr.doctorReviewed,
+              criticalAlert: criticalLabKeys[key] ? true : lr.criticalAlert,
+              status: criticalLabKeys[key] ? "CRITICAL" : lr.status,
+              abnormalFlag: criticalLabKeys[key] ? true : lr.abnormalFlag,
+            };
+          }),
         };
       }),
-    [clinicPatients, suwasiriPatients, suwasiriVaccinePatients, suwasiriCharts, reviewedLabKeys]
+    [clinicPatients, suwasiriPatients, suwasiriVaccinePatients, suwasiriCharts, reviewedLabKeys, criticalLabKeys]
   );
   const appointments = useMemo(
     () => mergeAppointments(clinicAppointments, suwasiriAppointments),
@@ -511,6 +523,16 @@ export default function App() {
   );
   const activeRole = roleDefs.find((r) => r.id === activeMembership?.roleId);
   const currentRole = isPlatformSA ? "Platform Super Admin" : isPatientOnly ? "Patient" : (activeRole?.name || "Doctor");
+  const showFrontDeskNotifications =
+    currentRole === "Receptionist" ||
+    currentRole === "Billing Officer" ||
+    /front desk/i.test(currentRole) ||
+    (Boolean(activeRole?.canManageCashierAndInvoicing) && !Boolean(activeRole?.canAccessDoctorDashboard));
+  const isFrontDeskStaff = showFrontDeskNotifications;
+  const hideLiveConsultChrome =
+    isFrontDeskStaff ||
+    isPlatformSA ||
+    currentRole === "Hospital Super Admin";
   const activeHospital = hospitals.find((h) => h.id === sessionHospitalId);
   const activeBranch = branches.find((b) => b.id === sessionBranchId);
   const canEditRbac = isGovernanceEditor(activeRole, isPlatformSA);
@@ -559,6 +581,7 @@ export default function App() {
     }
     setActiveTab(tab);
     setSelectedConsultPatient(null);
+    setExamAppointmentId(null);
   };
 
   // Interface view overlays
@@ -566,8 +589,10 @@ export default function App() {
   const [focusedSearchPatientId, setFocusedSearchPatientId] = useState<string | null>(null);
   const [showNotificationPopup, setShowNotificationPopup] = useState<boolean>(false);
   const [highlightSampleId, setHighlightSampleId] = useState<string | null>(null);
-  const [dispatchTestFilter, setDispatchTestFilter] = useState<string>("ALL");
   const [selectedConsultPatient, setSelectedConsultPatient] = useState<Patient | null>(null);
+  const [examAppointmentId, setExamAppointmentId] = useState<string | null>(null);
+  const [examInitialTab, setExamInitialTab] = useState<ClinicalTab>("consultation");
+  const [examFileOnlyView, setExamFileOnlyView] = useState(false);
   
   // Modal controllers
   const [showAptModal, setShowAptModal] = useState<boolean>(false);
@@ -576,7 +601,9 @@ export default function App() {
   const [showLedgerExplorer, setShowLedgerExplorer] = useState<boolean>(false);
   const [activeReceiptRx, setActiveReceiptRx] = useState<{ patient: Patient; prescription: PrescriptionRecord } | null>(null);
   const [activeHubPatient, setActiveHubPatient] = useState<Patient | null>(null);
-  const [activeHubInitialTab, setActiveHubInitialTab] = useState<"history" | "vaccines" | "labs" | "prescriptions" | "mc">("history");
+  const [activeHubInitialTab, setActiveHubInitialTab] = useState<"history" | "vaccines" | "labs" | "prescriptions" | "mc" | "samples" | "documents">("history");
+  const [hubDispatchProfile, setHubDispatchProfile] = useState(false);
+  const [hubFocusSampleId, setHubFocusSampleId] = useState<string | null>(null);
   const [lastOnlineBookingResult, setLastOnlineBookingResult] = useState<any | null>(null);
   const [barcodeSearchText, setBarcodeSearchText] = useState<string>("");
   const [barcodeLoading, setBarcodeLoading] = useState<boolean>(false);
@@ -585,7 +612,26 @@ export default function App() {
 
   // Bp Premier Doctor Portal & Patient Clinical Record Modal
   const [activeDoctorRecordPatient, setActiveDoctorRecordPatient] = useState<Patient | null>(null);
-  const [showCalculatorsModal, setShowCalculatorsModal] = useState<boolean>(false);
+  const [showShiftChecklist, setShowShiftChecklist] = useState(false);
+  const SHIFT_FAB_SIZE = 92;
+  const [shiftFabPos, setShiftFabPos] = useState<{ x: number; y: number } | null>(() => {
+    try {
+      const raw = localStorage.getItem("suwasiri-shift-fab-pos");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { x: number; y: number };
+      if (typeof parsed?.x === "number" && typeof parsed?.y === "number") return parsed;
+    } catch { /* ignore */ }
+    return null;
+  });
+  const shiftFabDrag = useRef<{
+    startX: number;
+    startY: number;
+    origX: number;
+    origY: number;
+    lastX: number;
+    lastY: number;
+    moved: boolean;
+  } | null>(null);
   const [selectedPatientForPortal, setSelectedPatientForPortal] = useState<Patient | null>(null);
 
   // Recalls & Preventive Health Reminders State
@@ -690,7 +736,6 @@ export default function App() {
 
   // Form input variables
   const [newTaskText, setNewTaskText] = useState<string>("");
-  const [headerSearchPlaceholder, setHeaderSearchPlaceholder] = useState<string>("Search Patients, Lab Orders, or eRx...");
 
   // Appointment states
   const [newAptPatientId, setNewAptPatientId] = useState<string>("");
@@ -700,6 +745,7 @@ export default function App() {
   const [newAptDate, setNewAptDate] = useState<string>(formatDateKey(new Date()));
   const [bookingRecallId, setBookingRecallId] = useState<string | null>(null);
   const [bookingMode, setBookingMode] = useState<"book" | "walkin">("book");
+  const [bookingConsultMode, setBookingConsultMode] = useState<"clinic" | "video">("clinic");
 
   // Consultation active desk states
   const [consultNotes, setConsultNotes] = useState<string>("");
@@ -799,6 +845,21 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (activeTab !== "platform" || !isFirebaseConfigured()) return;
+    for (const h of hospitals) {
+      void republishStaffDoctorsToSuwasiri({
+        staff: staffDirectory.filter((s) => s.hospitalId === h.id),
+        hospitalName: h.name,
+        hospitalId: h.id,
+        branches: branches.filter((b) => b.hospitalId === h.id),
+        region: h.district || "Colombo",
+      });
+    }
+    // Publish once when opening Operations & Governance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  useEffect(() => {
     if (!authUser || !isFirebaseConfigured()) {
       setSuwasiriAppointments([]);
       setSuwasiriPatients([]);
@@ -894,7 +955,7 @@ export default function App() {
   };
 
   const hospitalRoles = roleDefs.filter((r) => r.hospitalId === sessionHospitalId);
-  const hospitalStaff = staffDirectory.filter((s) => s.hospitalId === sessionHospitalId);
+  const hospitalStaff = staffDirectory.filter((s) => s.hospitalId === sessionHospitalId && s.active !== false);
   const workingDoctors = hospitalStaff.filter(
     (s) => s.active && /doctor|medical officer/i.test(s.role || "")
   );
@@ -916,7 +977,7 @@ export default function App() {
   const dayAppointments = tenantAppointments
     .filter((a) => a.date === selectedClinicDate)
     .slice()
-    .sort(compareAppointmentTime);
+    .sort(compareLobbyPlace);
   const appointmentCountsByDate = tenantAppointments.reduce((acc, a) => {
     if (!a.date) return acc;
     acc[a.date] = (acc[a.date] || 0) + 1;
@@ -941,25 +1002,43 @@ export default function App() {
       const name = apt.patientName || p?.name || "Patient";
       if (match) {
         used.add(match.id);
-        rows.push({ ...match, patientName: match.patientName || name, appointmentTime: apt.time });
+        rows.push({
+          ...match,
+          patientName: match.patientName || name,
+          appointmentTime: apt.time,
+          suwasiriReceiptUrl: match.suwasiriReceiptUrl || apt.suwasiriReceiptUrl,
+          paidBySuwasiri: match.paidBySuwasiri || apt.paidBySuwasiri,
+          paymentMethod: match.paymentMethod || (apt.paymentMethod as Billing["paymentMethod"]),
+        });
       } else {
+        const paid = String(apt.paymentStatus || "").toUpperCase() === "PAID";
         rows.push({
           id: `booked-${apt.id}`,
           patientName: name,
           patientId: apt.patientId,
-          amount: 3500,
+          amount: apt.feeAmount || 3500,
           service: apt.reason || (apt.isTelehealth ? "GP Video Consult" : "GP Consultation"),
-          status: "PENDING",
+          status: paid ? "PAID" : "PENDING",
           date: apt.date,
           appointmentTime: apt.time,
+          paymentMethod: apt.paymentMethod as Billing["paymentMethod"],
+          paidBySuwasiri: apt.paidBySuwasiri,
+          suwasiriReceiptUrl: apt.suwasiriReceiptUrl,
         });
       }
     }
     for (const inv of dayBilling) {
       if (!used.has(inv.id)) rows.push(inv);
     }
-    return rows;
+    return rows.sort((a, b) => {
+      const unpaid = (row: typeof a) => row.status !== "PAID" && row.status !== "BULK_BILLED";
+      const au = unpaid(a) ? 0 : 1;
+      const bu = unpaid(b) ? 0 : 1;
+      if (au !== bu) return au - bu;
+      return String(a.appointmentTime || a.date || "").localeCompare(String(b.appointmentTime || b.date || ""));
+    });
   })();
+  const dayUnsettledCount = dayInvoiceRows.filter((r) => r.status !== "PAID" && r.status !== "BULK_BILLED").length;
   const jumpToBillingToday = () => {
     const n = new Date();
     setBillingCalendarMonth({ year: n.getFullYear(), month: n.getMonth() });
@@ -1043,6 +1122,14 @@ export default function App() {
       body: JSON.stringify({ hospitalId, staffDirectory: next }),
     });
     setStaffDirectory((prev) => [...prev.filter((s) => s.hospitalId !== hospitalId), ...next]);
+    const hospital = hospitals.find((h) => h.id === hospitalId);
+    await republishStaffDoctorsToSuwasiri({
+      staff: next,
+      hospitalName: hospital?.name || "GP Care Clinic",
+      hospitalId,
+      branches: branches.filter((b) => b.hospitalId === hospitalId),
+      region: hospital?.district || "Colombo",
+    });
   };
 
   const persistMemberships = async (next: StaffMembership[]) => {
@@ -1114,11 +1201,20 @@ export default function App() {
   };
 
   // Consultation Room activator
-  const handleStartConsultation = (patient: Patient) => {
-    setSelectedConsultPatient(patient);
-    setConsultNotes(patient.notes || "");
-    setConsultAllergiesStr(patient.allergies || "");
-    setConsultMedsList(patient.activeMedications || []);
+  const handleStartConsultation = (
+    patient: Patient,
+    apt?: Appointment | null,
+    options?: { examTab?: ClinicalTab }
+  ) => {
+    if (isFrontDeskStaff) return;
+    const person = apt ? overlayBookingIdentity(apt, patient) : patient;
+    setExamFileOnlyView(false);
+    setSelectedConsultPatient(person);
+    setExamAppointmentId(apt?.id || null);
+    setExamInitialTab(options?.examTab || "consultation");
+    setConsultNotes(person.notes || "");
+    setConsultAllergiesStr(person.allergies || "");
+    setConsultMedsList(person.activeMedications || []);
     setConsultCustomMed("");
     setConsultSelectedMed("");
     setAiAnalysisResult("");
@@ -1132,13 +1228,13 @@ export default function App() {
   } | null>(null);
 
   const openBookedPatient = (apt: Appointment, p?: Patient | null) => {
-    const person = p || stubPatientFromBooking(apt);
+    const person = overlayBookingIdentity(apt, p || stubPatientFromBooking(apt));
     if (isVideoBooking(apt)) {
       setTelehealthFocus({ patientId: person.id, appointmentId: apt.id });
       setActiveTab("telehealth");
       return;
     }
-    handleStartConsultation(person);
+    handleStartConsultation(person, apt);
   };
 
   // Tasks checklist controls
@@ -1228,6 +1324,7 @@ export default function App() {
     consultMode?: "clinic" | "video";
     specialty?: string;
     status?: Appointment["status"];
+    paymentMethod?: string;
   }) => {
     const patient = patients.find((p) => p.id === opts.patientId);
     const doctorName = opts.doctorName || sessionUser?.name || "Dr. Priyantha Silva";
@@ -1272,6 +1369,7 @@ export default function App() {
         consultMode: video ? "video" : "clinic",
         patientName: patient?.name,
         source: "gp_care",
+        paymentMethod: opts.paymentMethod,
       })
     });
     const data = await res.json();
@@ -1367,8 +1465,10 @@ export default function App() {
           setPatients((prev) => prev.some((p) => p.id === patient!.id) ? prev : [patient!, ...prev]);
         }
         setBarcodeSearchText("");
-        setActiveHubInitialTab("history");
-        setActiveHubPatient(patient);
+        if (!isFrontDeskStaff) {
+          setActiveHubInitialTab("history");
+          setActiveHubPatient(patient);
+        }
         alert(`Synced ${patient.name} from Unique Health ID ${input} into ${activeHospital?.name || "this clinic"} only.`);
         return;
       }
@@ -1378,7 +1478,7 @@ export default function App() {
       if (data.state?.patients) setPatients(data.state.patients);
       setBarcodeSearchText("");
       alert(`Loaded patient "${data.patient.name}" into the clinic registry.`);
-      setActiveHubPatient(data.patient);
+      if (!isFrontDeskStaff) setActiveHubPatient(data.patient);
     } catch (err: any) {
       alert("Could not sync Unique Health ID: " + err.message);
     } finally {
@@ -1386,58 +1486,101 @@ export default function App() {
     }
   };
 
-  const persistCalculatorPatient = async (updated: Patient) => {
-    setPatients((prev) => prev.map((p) => p.id === updated.id ? { ...p, ...updated } : p));
-    setSuwasiriPatients((prev) => prev.map((p) => p.id === updated.id ? { ...p, ...updated } : p));
-    setActiveDoctorRecordPatient(updated);
-    setActiveHubPatient((prev) => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
+  const persistClinicalFile = async (updated: Patient) => {
+    setPatients((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
+    setSuwasiriPatients((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
+    setSelectedConsultPatient((prev) => (prev?.id === updated.id ? { ...updated, name: prev.name || updated.name } : prev));
+    setActiveDoctorRecordPatient((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
+    setActiveHubPatient((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
+    if (selectedConsultPatient?.id === updated.id) {
+      setConsultAllergiesStr(updated.allergies || "");
+      if (updated.activeMedications) setConsultMedsList(updated.activeMedications);
+    }
     try {
       const res = await fetch(`/api/patients/${updated.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          age: updated.age,
-          gender: updated.gender,
-          phone: updated.phone,
-          email: updated.email,
-          bloodType: updated.bloodType,
           allergies: updated.allergies,
           medicalHistory: updated.medicalHistory,
+          activeMedications: updated.activeMedications,
+          notes: updated.notes,
           heightCm: updated.heightCm,
           weightKg: updated.weightKg,
           lastSystolicBp: updated.lastSystolicBp,
           lastDiastolicBp: updated.lastDiastolicBp,
-          waistCm: updated.waistCm,
-          clinicalCalculations: updated.clinicalCalculations,
           observationsHistory: updated.observationsHistory,
-          historyEntry: {
-            reason: "Clinical Decision Calculators Suite",
-            doctor: sessionUser?.name || "GP",
-            notes: updated.history?.[0]?.notes || "Calculator details updated",
-          },
+          diagnosesList: updated.diagnosesList,
+          imagingRecords: updated.imagingRecords,
+          referralsList: updated.referralsList,
+          labResults: updated.labResults,
+          vaccineRecords: updated.vaccineRecords,
+          carePlansList: updated.carePlansList,
+          prescriptionsList: updated.prescriptionsList,
+          history: updated.history,
+          clinicalDocuments: updated.clinicalDocuments,
         }),
       });
       if (res.ok) {
         const data = await res.json();
         if (data.state?.patients) {
-          setPatients(data.state.patients);
-          const fresh = data.state.patients.find((p: Patient) => p.id === updated.id);
-          if (fresh) {
-            setActiveDoctorRecordPatient(fresh);
-            setActiveHubPatient((prev) => (prev && prev.id === fresh.id ? fresh : prev));
+          setPatients(
+            data.state.patients.map((p: Patient) =>
+              p.id === updated.id
+                ? { ...p, ...updated }
+                : p
+            )
+          );
+        }
+        const fresh: Patient | undefined =
+          data.patient || data.state?.patients?.find((p: Patient) => p.id === updated.id);
+        if (fresh) {
+          const mergedFresh = {
+            ...fresh,
+            history: updated.history ?? fresh.history,
+            medicalHistory: updated.medicalHistory ?? fresh.medicalHistory,
+            diagnosesList: updated.diagnosesList ?? fresh.diagnosesList,
+            prescriptionsList: updated.prescriptionsList ?? fresh.prescriptionsList,
+            clinicalDocuments: updated.clinicalDocuments ?? fresh.clinicalDocuments,
+            notes: updated.notes ?? fresh.notes,
+            observationsHistory: updated.observationsHistory ?? fresh.observationsHistory,
+            activeMedications: updated.activeMedications ?? fresh.activeMedications,
+            labResults: updated.labResults ?? fresh.labResults,
+            referralsList: updated.referralsList ?? fresh.referralsList,
+            imagingRecords: updated.imagingRecords ?? fresh.imagingRecords,
+            vaccineRecords: updated.vaccineRecords ?? fresh.vaccineRecords,
+            carePlansList: updated.carePlansList ?? fresh.carePlansList,
+            allergies: updated.allergies ?? fresh.allergies,
+            heightCm: updated.heightCm ?? fresh.heightCm,
+            weightKg: updated.weightKg ?? fresh.weightKg,
+            lastSystolicBp: updated.lastSystolicBp ?? fresh.lastSystolicBp,
+            lastDiastolicBp: updated.lastDiastolicBp ?? fresh.lastDiastolicBp,
+          };
+          setSelectedConsultPatient((prev) => (prev?.id === mergedFresh.id ? { ...mergedFresh, name: prev.name || mergedFresh.name } : prev));
+          setActiveDoctorRecordPatient((prev) => (prev?.id === mergedFresh.id ? mergedFresh : prev));
+          setActiveHubPatient((prev) => (prev?.id === mergedFresh.id ? mergedFresh : prev));
+          if (selectedConsultPatient?.id === mergedFresh.id) {
+            setConsultAllergiesStr(mergedFresh.allergies || "");
           }
         }
       }
-      void saveConsultationNote({
-        patientId: updated.id,
-        patientName: updated.name,
-        doctor: sessionUser?.name || "GP",
-        clinicName: activeHospital?.name || updated.medicalCenter,
-        body: updated.history?.[0]?.notes || "Clinical Decision Calculators Suite details updated.",
-      });
     } catch (err) {
-      console.warn("Calculator patient persist:", err);
+      console.warn("Clinical file persist:", err);
     }
+  };
+
+  const bookFromClinicalRecord = async (payload: {
+    patientId: string;
+    date: string;
+    time: string;
+    reason: string;
+    consultMode?: "clinic" | "video";
+    paymentMethod?: string;
+  }) => {
+    await bookClinicSlot(payload);
+    const [y, m] = payload.date.split("-").map(Number);
+    if (y && m) setCalendarMonth({ year: y, month: m - 1 });
+    selectClinicDate(payload.date);
   };
 
   const handleCheckInWalkIn = async (pat: Patient) => {
@@ -1497,72 +1640,67 @@ export default function App() {
     }
   };
 
+  const applyDoctorAppointmentPatch = (updatedApt: Appointment) => {
+    setAppointments((prev) => prev.map((a) => (a.id === updatedApt.id ? { ...a, ...updatedApt } : a)));
+    setSuwasiriAppointments((prev) => prev.map((a) => (a.id === updatedApt.id ? { ...a, ...updatedApt } : a)));
+    if (updatedApt.status === "COMPLETED") {
+      void handleUpdateAptStatus(updatedApt.id, "COMPLETED");
+      setSelectedConsultPatient(null);
+      setExamAppointmentId(null);
+      setExamInitialTab("consultation");
+      setActiveDoctorRecordPatient(null);
+      setActiveTab("dashboard");
+    }
+  };
+
   // Move Appointment Position (Change Patient Place in Queue)
   const handleMoveAppointment = async (id: string, direction: "up" | "down" | "top") => {
     try {
-      const dayList = appointments.filter((a) => a.date === selectedClinicDate);
+      const dayList = tenantAppointments
+        .filter((a) => a.date === selectedClinicDate)
+        .slice()
+        .sort(compareLobbyPlace);
       const currentIndex = dayList.findIndex((a) => a.id === id);
       if (currentIndex === -1) return;
+      if (direction === "up" && currentIndex === 0) return;
+      if (direction === "down" && currentIndex === dayList.length - 1) return;
+      if (direction === "top" && currentIndex === 0) return;
 
       const reorderedDay = [...dayList];
       const [movedItem] = reorderedDay.splice(currentIndex, 1);
       if (direction === "top") {
         reorderedDay.unshift(movedItem);
       } else if (direction === "up") {
-        reorderedDay.splice(Math.max(0, currentIndex - 1), 0, movedItem);
+        reorderedDay.splice(currentIndex - 1, 0, movedItem);
       } else {
-        reorderedDay.splice(Math.min(reorderedDay.length, currentIndex + 1), 0, movedItem);
+        reorderedDay.splice(currentIndex + 1, 0, movedItem);
       }
 
-      let dayCursor = 0;
-      const updated = appointments.map((a) =>
-        a.date === selectedClinicDate ? reorderedDay[dayCursor++] : a
-      );
-      setAppointments(updated);
+      const places = reorderedDay.map((a, i) => ({ id: a.id, queuePlace: i + 1 }));
+      const placeById = new Map(places.map((p) => [p.id, p.queuePlace]));
+      const applyPlaces = (list: Appointment[]) =>
+        list.map((a) => {
+          const queuePlace = placeById.get(a.id);
+          return queuePlace != null ? { ...a, queuePlace } : a;
+        });
 
-      const res = await fetch("/api/appointments/reorder", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appointments: updated }),
-      });
+      setAppointments((prev) => applyPlaces(prev));
+      setSuwasiriAppointments((prev) => applyPlaces(prev));
+
+      const [res] = await Promise.all([
+        fetch("/api/appointments/queue-places", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ places }),
+        }),
+        persistLobbyQueuePlaces(places, suwasiriAppointments.map((a) => a.id)),
+      ]);
       if (res.ok) {
         const data = await res.json();
-        if (data.appointments) setAppointments(data.appointments);
+        if (data.appointments) setAppointments(applyPlaces(data.appointments));
       }
     } catch (err) {
       console.error("Failed to move appointment place:", err);
-    }
-  };
-
-  const handleChangeAppointmentPlace = async (id: string, targetPlaceNum: number) => {
-    try {
-      const dayList = appointments.filter((a) => a.date === selectedClinicDate);
-      const currentIndex = dayList.findIndex((a) => a.id === id);
-      if (currentIndex === -1) return;
-      const targetIndex = Math.max(0, Math.min(dayList.length - 1, targetPlaceNum - 1));
-      if (currentIndex === targetIndex) return;
-
-      const reorderedDay = [...dayList];
-      const [movedItem] = reorderedDay.splice(currentIndex, 1);
-      reorderedDay.splice(targetIndex, 0, movedItem);
-
-      let dayCursor = 0;
-      const updated = appointments.map((a) =>
-        a.date === selectedClinicDate ? reorderedDay[dayCursor++] : a
-      );
-      setAppointments(updated);
-
-      const res = await fetch("/api/appointments/reorder", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ appointments: updated }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.appointments) setAppointments(data.appointments);
-      }
-    } catch (err) {
-      console.error("Failed to reorder appointment place:", err);
     }
   };
 
@@ -1925,6 +2063,9 @@ export default function App() {
 
   // Clinic Messaging team chat handler
   const openClinicalHubWithHistory = (patient: Patient) => {
+    if (isFrontDeskStaff) return;
+    setHubDispatchProfile(false);
+    setHubFocusSampleId(null);
     setActiveHubInitialTab("history");
     setActiveHubPatient(patient);
     const history = (patient.medicalHistory || []).join("; ") || "No previous history on file.";
@@ -1935,6 +2076,26 @@ export default function App() {
       clinicName: activeHospital?.name || patient.medicalCenter,
       body: `Clinical Record Hub opened for ${patient.name}. History: ${history}`,
     });
+  };
+
+  const openDispatchPatientProfile = (patientId: string, sampleId?: string) => {
+    const pObj = patients.find((p) => p.id === patientId);
+    if (!pObj) {
+      alert("Patient file not found for this specimen.");
+      return;
+    }
+    setHubDispatchProfile(true);
+    setHubFocusSampleId(sampleId || null);
+    setActiveHubInitialTab("samples");
+    setActiveHubPatient(pObj);
+  };
+
+  const openPatientProfileFromSearch = (patient: Patient) => {
+    setFocusedSearchPatientId(null);
+    setSearchQuery("");
+    setActiveHubPatient(null);
+    if (isFrontDeskStaff) return;
+    handleStartConsultation(patient);
   };
 
   const submitPatientAccessRequest = async () => {
@@ -2072,33 +2233,104 @@ export default function App() {
     }
   };
 
-  const handleMarkLabReviewed = async (patientId: string, labResultId: string) => {
-    setReviewedLabKeys((prev) => ({ ...prev, [`${patientId}:${labResultId}`]: true }));
+  const handleMarkLabReviewed = async (
+    patientId: string,
+    labResultId: string,
+    opts?: { critical?: boolean; comment?: string }
+  ) => {
+    const key = `${patientId}:${labResultId}`;
+    setReviewedLabKeys((prev) => ({ ...prev, [key]: true }));
+    if (opts?.critical) setCriticalLabKeys((prev) => ({ ...prev, [key]: true }));
+
+    const patchLabs = (list: Patient[]) =>
+      list.map((p) => {
+        if (p.id !== patientId) return p;
+        return {
+          ...p,
+          labResults: (p.labResults || []).map((lr) =>
+            lr.id === labResultId
+              ? {
+                  ...lr,
+                  doctorReviewed: true,
+                  reviewedBy: sessionUser?.name || currentRole,
+                  reviewedDate: new Date().toISOString().split("T")[0],
+                  remarks: opts?.comment ?? lr.remarks,
+                  ...(opts?.critical
+                    ? { status: "CRITICAL" as const, abnormalFlag: true, criticalAlert: true }
+                    : {}),
+                }
+              : lr
+          ),
+        };
+      });
+    setPatients(patchLabs);
+
+    const pat = patients.find((p) => p.id === patientId);
+    const lab = pat?.labResults?.find((l) => l.id === labResultId);
     try {
       await fetch(`/api/patients/${patientId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reviewLabResultId: labResultId, reviewedBy: sessionUser?.name || currentRole }),
-      });
-      const pat = patients.find((p) => p.id === patientId);
-      const lab = pat?.labResults?.find((l) => l.id === labResultId);
-      void logAudit({
-        action: "Reviewed pathology result",
-        category: "PATHOLOGY",
-        patientId,
-        patientName: pat?.name,
-        details: lab
-          ? `Reviewed ${lab.testName}: ${lab.result}. ${lab.remarks || ""}`
-          : `Reviewed lab result ${labResultId}.`,
+        body: JSON.stringify({
+          reviewLabResultId: labResultId,
+          reviewedBy: sessionUser?.name || currentRole,
+          markLabCritical: Boolean(opts?.critical),
+        }),
       });
     } catch (err) {
       console.error(err);
     }
+
+    if (lab) {
+      try {
+        await issueLabReportToSuwasiri({
+          patientId,
+          doctorName: sessionUser?.name || "Dr. Priyantha Silva",
+          clinicName: activeHospital?.name || pat?.medicalCenter,
+          lab: {
+            ...lab,
+            remarks: opts?.comment ?? lab.remarks,
+            criticalAlert: Boolean(opts?.critical),
+            status: opts?.critical ? "CRITICAL" : lab.status,
+          },
+          comment: opts?.comment,
+          critical: Boolean(opts?.critical),
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    if (opts?.critical && pat && lab) {
+      const record: RecallRecord = {
+        id: `rec-path-${lab.id}-${Date.now()}`,
+        patientId: pat.id,
+        patientName: pat.name,
+        patientPhone: pat.phone || "",
+        patientEmail: pat.email || "",
+        category: "Pathology Follow-up",
+        urgency: "HIGH",
+        dueDate: new Date().toISOString().split("T")[0],
+        status: "DUE",
+        notes: `CRITICAL pathology alert: ${lab.testName} — ${lab.result}. Call the patient and rebook in person or video.`,
+        assignedDoctor: sessionUser?.name || "Dr. Priyantha Silva",
+      };
+      void persistRecalls([record, ...recalls.filter((r) => !(r.patientId === pat.id && r.notes.includes(lab.testName) && r.status !== "COMPLETED" && r.status !== "CANCELLED"))]);
+    }
+
+    void logAudit({
+      action: opts?.critical ? "Marked pathology result critical" : "Reviewed pathology result",
+      category: "PATHOLOGY",
+      patientId,
+      patientName: pat?.name,
+      details: lab
+        ? `${opts?.critical ? "CRITICAL / ALERT — " : ""}Reviewed ${lab.testName}: ${lab.result}. ${opts?.comment || lab.remarks || ""}`
+        : `Reviewed lab result ${labResultId}.`,
+    });
   };
 
-  const dispatchInbox = notifications.filter(
-    (n) => n.templateType === "PATHOLOGY_ORDER" && n.status !== "READ" && !n.read
-  );
+  const remainingDispatchJobs = sampleCollections.filter((s) => s.status === "PENDING");
+  const dispatchJobCount = remainingDispatchJobs.length;
 
   const openSampleDispatchFromAlert = async (alert: NotificationLog) => {
     requestTab("sampleCollection");
@@ -2355,6 +2587,15 @@ export default function App() {
     return getSearchMatchDetails(p, searchQuery) !== null;
   });
 
+  const nameSearchPatients = patients.filter((p) => {
+    if (!patientVisibleAtHospital(p, sessionHospitalId)) return false;
+    if (p.accessStatus === "DELETED" || p.accessStatus === "BLOCKED") return false;
+    if (!isPlatformSA && !canViewHospitalWideCharts(activeRole) && (p.branchId || BRANCH_COLOMBO) !== sessionBranchId) return false;
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) return false;
+    return p.name.toLowerCase().includes(query);
+  });
+
   const unreadPathologyPatientCount = patients.filter((p) =>
     p.labResults?.some((lr) => !lr.doctorReviewed)
   ).length;
@@ -2406,7 +2647,7 @@ export default function App() {
               : `Patients matching “${searchQuery}”`}
           </h2>
           <p className="text-[11px] text-slate-500">
-            Only this patient is shown. Click a name to open their details.
+            Click a name to open that patient’s clinical profile.
           </p>
         </div>
         <button
@@ -2432,7 +2673,7 @@ export default function App() {
               <button
                 key={p.id}
                 type="button"
-                onClick={() => setFocusedSearchPatientId(p.id)}
+                onClick={() => openPatientProfileFromSearch(p)}
                 className="w-full text-left p-4 space-y-2 hover:bg-sky-50/70 transition"
               >
                 <p className="font-serif font-bold text-sm text-[#00334f]">
@@ -2514,7 +2755,7 @@ export default function App() {
         <nav className="flex-1 px-4 mt-4 space-y-1 overflow-y-auto">
           {!isPatientOnly && (
           <>
-          {(canOpen("dashboard") || canOpen("clinical") || canOpen("pathology") || canOpen("documents") || canOpen("ai_features") || canOpen("calculators") || canOpen("telehealth")) && (
+          {(canOpen("dashboard") || canOpen("clinical") || canOpen("pathology") || canOpen("telehealth")) && (
           <div className="pb-1">
             <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider px-2">Clinical Core (Doctor Portal)</span>
           </div>
@@ -2559,53 +2800,6 @@ export default function App() {
           >
             <FlaskConical className="w-4 h-4 mr-3 text-emerald-600" />
             <span className="text-[13px] font-medium">Pathology & Diagnostics</span>
-          </button>
-          )}
-
-          {canOpen("documents") && (
-          <button
-            onClick={() => requestTab("documents")}
-            className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
-              activeTab === "documents"
-                ? "text-[#00334f] bg-[#e7eeff] font-bold shadow-xs"
-                : "text-[#72787f] hover:text-[#00334f] hover:bg-[#f0f3ff]"
-            }`}
-          >
-            <FileText className="w-4 h-4 mr-3 text-sky-600" />
-            <span className="text-[13px] font-medium">Document Management</span>
-          </button>
-          )}
-
-          {canOpen("ai_features") && (
-          <button
-            onClick={() => requestTab("ai_features")}
-            className={`flex items-center justify-between w-full px-4 py-2.5 rounded-lg transition-all text-left ${
-              activeTab === "ai_features"
-                ? "text-[#00334f] bg-[#e7eeff] font-bold shadow-xs"
-                : "text-[#72787f] hover:text-[#00334f] hover:bg-[#f0f3ff]"
-            }`}
-          >
-            <div className="flex items-center">
-              <Sparkles className="w-4 h-4 mr-3 text-purple-600 animate-pulse" />
-              <span className="text-[13px] font-medium">AI Clinical Suite</span>
-            </div>
-            <span className="text-[9px] font-bold bg-purple-100 text-purple-800 px-1.5 py-0.2 rounded-full uppercase">
-              AI Scribe
-            </span>
-          </button>
-          )}
-
-          {canOpen("calculators") && (
-          <button
-            onClick={() => requestTab("calculators")}
-            className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
-              activeTab === "calculators"
-                ? "text-[#00334f] bg-[#e7eeff] font-bold shadow-xs"
-                : "text-[#72787f] hover:text-[#00334f] hover:bg-[#f0f3ff]"
-            }`}
-          >
-            <BrainCircuit className="w-4 h-4 mr-3 text-sky-600" />
-            <span className="text-[13px] font-medium">Clinical Calculators</span>
           </button>
           )}
 
@@ -2701,9 +2895,9 @@ export default function App() {
           >
             <FlaskConical className="w-4 h-4 mr-3 text-rose-500" />
             <span className="text-[13px] font-medium flex-1">Sample Dispatch Hub</span>
-            {dispatchInbox.length > 0 && (
+            {dispatchJobCount > 0 && (
               <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center">
-                {dispatchInbox.length}
+                {dispatchJobCount}
               </span>
             )}
           </button>
@@ -2881,13 +3075,14 @@ export default function App() {
         {/* Header toolbar */}
         <header className="flex justify-between items-center h-16 px-6 sticky top-0 z-20 bg-white border-b border-[#c1c7cf] print:hidden gap-4">
           <div className="flex items-center flex-1 relative min-w-0">
+            {!isFrontDeskStaff && (
             <div className="relative w-full max-w-lg">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#72787f]">
                 <Search className="w-4 h-4" />
               </span>
               <input
                 className="w-full pl-10 pr-10 py-2 bg-[#f0f3ff] border border-[#c1c7cf] focus:border-[#00334f] focus:bg-white outline-none text-xs transition-all rounded-lg"
-                placeholder={headerSearchPlaceholder || "Search patient name..."}
+                placeholder="Search patient name..."
                 type="text"
                 value={searchQuery}
                 onChange={(e) => {
@@ -2913,28 +3108,25 @@ export default function App() {
                   <div className="bg-[#f0f3ff] px-4 py-2.5 border-b flex items-center justify-between">
                     <span className="text-xs font-bold text-[#00334f] flex items-center gap-1.5">
                       <Search className="w-3.5 h-3.5 text-[#00334f]" />
-                      Patients matching "{searchQuery}" ({filteredPatients.length})
+                      Patients matching "{searchQuery}" ({nameSearchPatients.length})
                     </span>
                     <span className="text-[10px] text-slate-500 font-semibold">
-                      Click a name to view that patient only
+                      Click a name to open that patient’s clinical profile
                     </span>
                   </div>
 
                   <div className="overflow-y-auto divide-y divide-slate-100 p-1 flex-1">
-                    {filteredPatients.length === 0 ? (
+                    {nameSearchPatients.length === 0 ? (
                       <div className="p-6 text-center text-slate-400 space-y-1">
                         <p className="text-xs font-bold text-slate-600">No matching patient found</p>
-                        <p className="text-[11px]">Try the full patient name, for example Chamidu Kaushal Rathnayake.</p>
+                        <p className="text-[11px]">Try the patient name, for example Suresh Silva.</p>
                       </div>
                     ) : (
-                      filteredPatients.map(p => (
+                      nameSearchPatients.map(p => (
                           <button
                             key={p.id}
                             type="button"
-                            onClick={() => {
-                              setFocusedSearchPatientId(p.id);
-                              setSearchQuery(p.name);
-                            }}
+                            onClick={() => openPatientProfileFromSearch(p)}
                             className="w-full text-left p-3 hover:bg-sky-50 transition flex flex-col gap-1"
                           >
                             <div className="flex items-center gap-2 flex-wrap">
@@ -2945,8 +3137,9 @@ export default function App() {
                                 ID: {p.id}
                               </span>
                             </div>
+                            <PatientSexAgeBadge gender={p.gender} age={p.age} />
                             <p className="text-[11px] text-slate-600">
-                              {p.age} yrs • {p.gender} • {p.phone || "No phone"}
+                              {p.phone || "No phone"} • {p.medicalCenter || "Clinic"}
                             </p>
                           </button>
                       ))
@@ -2955,8 +3148,10 @@ export default function App() {
                 </div>
               )}
             </div>
+            )}
           </div>
 
+          {showFrontDeskNotifications && (
           <div className="relative shrink-0">
             <button
               type="button"
@@ -2966,9 +3161,9 @@ export default function App() {
             >
               <Bell className="w-4 h-4 text-[#00334f]" />
               <span className="text-xs font-bold text-[#00334f] hidden sm:inline">Notifications</span>
-              {dispatchInbox.length > 0 && (
+              {dispatchJobCount > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[10px] font-black flex items-center justify-center">
-                  {dispatchInbox.length}
+                  {dispatchJobCount}
                 </span>
               )}
             </button>
@@ -2979,18 +3174,24 @@ export default function App() {
                   <button type="button" className="text-[10px] font-bold text-slate-400" onClick={() => setShowNotificationPopup(false)}>Close</button>
                 </div>
                 <div className="max-h-72 overflow-y-auto divide-y">
-                  {dispatchInbox.length === 0 ? (
-                    <p className="p-4 text-xs text-slate-500">No new pathology dispatch alerts.</p>
+                  {remainingDispatchJobs.length === 0 ? (
+                    <p className="p-4 text-xs text-slate-500">No specimens waiting for dispatch.</p>
                   ) : (
-                    dispatchInbox.map((alert) => (
+                    remainingDispatchJobs.map((job) => (
                       <button
-                        key={alert.id}
+                        key={job.id}
                         type="button"
-                        onClick={() => { void openSampleDispatchFromAlert(alert); }}
+                        onClick={() => {
+                          requestTab("sampleCollection");
+                          setHighlightSampleId(job.id);
+                          setShowNotificationPopup(false);
+                        }}
                         className="w-full text-left p-3 hover:bg-amber-50 transition"
                       >
-                        <p className="text-xs font-bold text-[#00334f]">{alert.testName || "Pathology order"}</p>
-                        <p className="text-[11px] text-slate-600 mt-0.5">{alert.content}</p>
+                        <p className="text-xs font-bold text-[#00334f]">{job.testName || job.sampleCategory || "Pathology order"}</p>
+                        <p className="text-[11px] text-slate-600 mt-0.5">
+                          {job.patientName} · {job.status === "PENDING" ? "Awaiting collection" : "Ready to deliver"}
+                        </p>
                         <p className="text-[10px] text-amber-800 font-bold mt-1">Open Sample Dispatch Hub →</p>
                       </button>
                     ))
@@ -2999,6 +3200,7 @@ export default function App() {
               </div>
             )}
           </div>
+          )}
 
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 border-r border-[#c1c7cf] pr-4">
@@ -3090,33 +3292,14 @@ export default function App() {
                           <p className="text-[10px] font-bold uppercase text-slate-400">Colombo time</p>
                           <LiveColomboClock className="text-2xl font-mono font-black text-[#00334f] tabular-nums leading-none" />
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setShowCalculatorsModal(true)}
-                          className="bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5"
-                        >
-                          <BrainCircuit className="w-3.5 h-3.5 text-sky-600" />
-                          Clinical Calculators
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedConsultPatient(null);
-                            setActiveTab("clinical");
-                          }}
-                          className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
-                        >
-                          <Stethoscope className="w-3.5 h-3.5" />
-                          GP Exam Room (Standby)
-                        </button>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div
-                        onClick={() => setActiveTab("calendar")}
+                        onClick={() => document.getElementById("doctor-dashboard-queue")?.scrollIntoView({ behavior: "smooth", block: "start" })}
                         className="bg-gradient-to-br from-sky-500 via-blue-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 p-4 rounded-xl cursor-pointer transition shadow-md hover:shadow-lg group text-white"
-                        title="Click to view full appointment schedule"
+                        title="Jump to today’s appointment list on this dashboard"
                       >
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-[11px] uppercase font-extrabold tracking-wider">Appointments</span>
@@ -3129,9 +3312,9 @@ export default function App() {
                       </div>
 
                       <div
-                        onClick={() => setActiveTab("calendar")}
+                        onClick={() => document.getElementById("doctor-dashboard-queue")?.scrollIntoView({ behavior: "smooth", block: "start" })}
                         className="bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 hover:from-amber-300 hover:to-rose-400 p-4 rounded-xl cursor-pointer transition shadow-md hover:shadow-lg group text-white"
-                        title="Click to inspect waiting queue"
+                        title="Jump to today’s waiting list on this dashboard"
                       >
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-[11px] uppercase font-extrabold tracking-wider">Waiting</span>
@@ -3142,9 +3325,9 @@ export default function App() {
                       </div>
 
                       <div
-                        onClick={() => setActiveTab("telehealth")}
+                        onClick={() => document.getElementById("doctor-dashboard-queue")?.scrollIntoView({ behavior: "smooth", block: "start" })}
                         className="bg-gradient-to-br from-violet-500 via-purple-600 to-fuchsia-600 hover:from-violet-400 hover:to-fuchsia-500 p-4 rounded-xl cursor-pointer transition shadow-md hover:shadow-lg group text-white"
-                        title="Click to open Telehealth suite"
+                        title="Jump to today’s video consults on this dashboard"
                       >
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-[11px] uppercase font-extrabold tracking-wider">Telehealth</span>
@@ -3156,31 +3339,32 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="bg-gradient-to-r from-emerald-50 to-teal-50 p-4 border border-emerald-200 rounded-xl flex items-center justify-between">
+                  <div
+                    id="doctor-dashboard-completed"
+                    onClick={() => document.getElementById("doctor-dashboard-queue")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    className="bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 p-5 rounded-xl flex items-center justify-between shadow-md text-white cursor-pointer scroll-mt-4"
+                  >
                     <div className="flex items-center gap-3.5">
-                      <div className="w-10 h-10 bg-emerald-500 text-white rounded-lg flex items-center justify-center">
-                        <Stethoscope className="w-5 h-5" />
+                      <div className="w-12 h-12 bg-white/20 text-white rounded-xl flex items-center justify-center">
+                        <Stethoscope className="w-6 h-6" />
                       </div>
                       <div>
-                        <p className="text-emerald-800 font-bold text-[10px] uppercase">Completed Consultations</p>
-                        <p className="font-bold text-lg text-[#00334f]">{dayAppointments.filter(a => a.status === "COMPLETED").length} finished this date</p>
+                        <p className="text-emerald-50 font-extrabold text-[11px] uppercase tracking-wider">Completed Consultations</p>
+                        <p className="font-black text-2xl">{dayAppointments.filter(a => a.status === "COMPLETED").length} finished this date</p>
                       </div>
                     </div>
-                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-1 rounded">
+                    <span className="text-[11px] font-extrabold text-emerald-900 bg-white/90 px-3 py-1.5 rounded-lg shadow-xs">
                       On Schedule
                     </span>
                   </div>
 
-                  {clinicalSearchPanel}
-
                   {/* EXPANDED LARGE QUEUE & CLINICAL SHIFT DASHBOARD (Removed Quick Patient Registry) */}
-                  {!searchQuery.trim() && (
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                     {/* Primary Large Queue Section (Col Span 8 on Desktop) */}
                     <div className="lg:col-span-8 space-y-6">
                       
                       {/* Today's Appointment Schedule & Live Lobby Queue - EXPANDED LARGE */}
-                      <section className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                      <section id="doctor-dashboard-queue" className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm scroll-mt-4">
                         <div className="px-5 py-4 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-2 bg-[#f0f3ff]">
                           <div className="flex items-center gap-2">
                             <Clock className="w-5 h-5 text-[#00334f]" />
@@ -3197,13 +3381,6 @@ export default function App() {
                             <span className="text-xs text-slate-600 font-semibold bg-white px-2.5 py-1 rounded-md border">
                               {dayAppointments.length} Patients Scheduled
                             </span>
-                            <button
-                              onClick={() => setActiveTab("calendar")}
-                              className="bg-[#00334f] hover:bg-[#0c4a6e] text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition"
-                            >
-                              <SlidersHorizontal className="w-3.5 h-3.5" />
-                              Manage Places
-                            </button>
                           </div>
                         </div>
 
@@ -3211,7 +3388,7 @@ export default function App() {
                           <table className="w-full text-left">
                             <thead>
                               <tr className="bg-slate-50/90 border-b text-[#72787f] font-bold">
-                                <th className="p-3.5 text-center w-24">Queue #</th>
+                                <th className="p-3.5 text-center w-16">#</th>
                                 <th className="p-3.5">Time</th>
                                 <th className="p-3.5">Patient Details</th>
                                 <th className="p-3.5">Presenting Complaint</th>
@@ -3228,52 +3405,10 @@ export default function App() {
                                 </tr>
                               ) : dayAppointments.map((apt, index) => {
                                 const p = patients.find(pat => pat.id === apt.patientId);
-                                const isFirst = index === 0;
-                                const isLast = index === dayAppointments.length - 1;
                                 return (
                                   <tr key={apt.id} className="hover:bg-sky-50/50 transition-colors group">
-                                    {/* Queue Place Number & Reorder Controls */}
                                     <td className="p-3.5 text-center">
-                                      <div className="inline-flex items-center gap-1.5 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">
-                                        <span className={`font-mono font-black text-xs ${
-                                          index === 0 
-                                            ? "text-emerald-700 bg-emerald-100 px-1 rounded font-bold" 
-                                            : index === 1 
-                                            ? "text-sky-700 font-bold" 
-                                            : "text-slate-700"
-                                        }`}>
-                                          #{index + 1}
-                                        </span>
-                                        
-                                        <div className="flex flex-col gap-0.5">
-                                          <button
-                                            type="button"
-                                            disabled={isFirst}
-                                            onClick={() => handleMoveAppointment(apt.id, "up")}
-                                            className={`p-0.5 rounded transition-colors ${
-                                              isFirst 
-                                                ? "text-slate-300 cursor-not-allowed" 
-                                                : "text-slate-600 hover:bg-slate-200 hover:text-[#00334f]"
-                                            }`}
-                                            title="Move patient up 1 place in queue"
-                                          >
-                                            <ChevronUp className="w-3 h-3" />
-                                          </button>
-                                          <button
-                                            type="button"
-                                            disabled={isLast}
-                                            onClick={() => handleMoveAppointment(apt.id, "down")}
-                                            className={`p-0.5 rounded transition-colors ${
-                                              isLast 
-                                                ? "text-slate-300 cursor-not-allowed" 
-                                                : "text-slate-600 hover:bg-slate-200 hover:text-[#00334f]"
-                                            }`}
-                                            title="Move patient down 1 place in queue"
-                                          >
-                                            <ChevronDown className="w-3 h-3" />
-                                          </button>
-                                        </div>
-                                      </div>
+                                      <span className="font-mono font-black text-xs text-slate-600">#{index + 1}</span>
                                     </td>
 
                                     <td className="p-3.5 font-bold text-[#00334f] whitespace-nowrap">
@@ -3289,6 +3424,8 @@ export default function App() {
                                         <span>{appointmentPatientName(apt, p)}</span>
                                         <Stethoscope className="w-3.5 h-3.5 text-sky-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                                       </div>
+                                      <PatientSexAgeBadge gender={p?.gender} age={p?.age} />
+                                      {p ? <PatientCriticalAlertBadge patient={p} /> : null}
                                       <div className="text-[10px] text-slate-500 flex items-center gap-2 mt-0.5 flex-wrap">
                                         <span className="font-mono bg-slate-100 px-1 rounded">ID: {apt.patientId}</span>
                                         {apt.source === "suwasiri_app" && (
@@ -3301,7 +3438,7 @@ export default function App() {
                                             Video
                                           </span>
                                         )}
-                                        {p && p.age > 0 && <span>{p.gender}, {p.age} yrs • {p.bloodType}</span>}
+                                        {p && p.age > 0 && <span>Blood: {p.bloodType}</span>}
                                         {(p?.phone || apt.patientPhone) && <span>{p?.phone || apt.patientPhone}</span>}
                                         {apt.doctorName && <span>{apt.doctorName}</span>}
                                         {p?.allergies && p.allergies !== "NKDA" && p.allergies !== "None" && (
@@ -3345,7 +3482,7 @@ export default function App() {
                                               return;
                                             }
                                             handleUpdateAptStatus(apt.id, "IN EXAM ROOM");
-                                            handleStartConsultation(person);
+                                            handleStartConsultation(person, apt);
                                           }}
                                           className="text-amber-900 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors shadow-xs text-xs font-bold inline-flex items-center gap-1"
                                         >
@@ -3355,6 +3492,7 @@ export default function App() {
                                       )}
 
                                       {apt.status === "IN EXAM ROOM" && (
+                                        <>
                                         <button
                                           onClick={() => openBookedPatient(apt, p)}
                                           className="text-red-700 bg-red-100 hover:bg-red-200 px-3 py-1.5 rounded-lg transition-colors text-xs font-bold inline-flex items-center gap-1"
@@ -3362,22 +3500,18 @@ export default function App() {
                                           <Stethoscope className="w-3.5 h-3.5" />
                                           {isVideoBooking(apt) ? "Resume Telehealth →" : "Resume Consult →"}
                                         </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => void handleUpdateAptStatus(apt.id, "COMPLETED")}
+                                          className="text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-lg transition-colors text-xs font-bold inline-flex items-center gap-1"
+                                        >
+                                          Completed
+                                        </button>
+                                        </>
                                       )}
 
                                       {apt.status === "COMPLETED" && (
                                         <span className="text-emerald-700 font-normal text-xs">Consult Completed</span>
-                                      )}
-
-                                      {p && (
-                                        <button
-                                          type="button"
-                                          onClick={() => setActiveDoctorRecordPatient(p)}
-                                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs transition inline-flex items-center gap-1"
-                                          title="View full 16-tab medical history & records"
-                                        >
-                                          <FileText className="w-3 h-3" />
-                                          Record
-                                        </button>
                                       )}
                                     </td>
                                   </tr>
@@ -3389,46 +3523,11 @@ export default function App() {
                       </section>
                     </div>
 
-                    {/* Right Column: month calendar + checklist */}
+                    {/* Right Column: month calendar */}
                     <div className="lg:col-span-4 space-y-6">
                       {clinicCalendar}
-                      
-                      {/* Clinical checklist tasks */}
-                      <div className="bg-white border border-slate-200 p-4 rounded-xl space-y-3 shadow-xs">
-                        <h4 className="font-bold text-xs uppercase text-slate-600 tracking-wider flex items-center justify-between">
-                          <span>Clinical Shift Checklist</span>
-                          <span className="text-[10px] font-normal text-slate-400 font-sans">{tasks.filter(t=>t.completed).length}/{tasks.length} done</span>
-                        </h4>
-                        <form onSubmit={handleAddTask} className="flex gap-1.5 text-xs">
-                          <input
-                            type="text"
-                            placeholder="e.g. Sterilize diagnostic equipment..."
-                            className="flex-grow p-2 border rounded-lg focus:border-[#00334f] text-xs outline-none"
-                            value={newTaskText}
-                            onChange={(e) => setNewTaskText(e.target.value)}
-                          />
-                          <button type="submit" className="bg-[#00334f] text-white px-3 py-2 rounded-lg font-bold text-xs">Add</button>
-                        </form>
-
-                        <div className="space-y-1.5 text-xs max-h-56 overflow-y-auto">
-                          {tasks.map(t => (
-                            <div key={t.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-100">
-                              <label className="flex items-center gap-2 cursor-pointer font-semibold flex-1">
-                                <input
-                                  type="checkbox"
-                                  checked={t.completed}
-                                  onChange={(e) => handleToggleTask(t.id, e.target.checked)}
-                                />
-                                <span className={t.completed ? "line-through text-slate-400" : "text-slate-700"}>{t.text}</span>
-                              </label>
-                              <button onClick={() => handleDeleteTask(t.id)} className="text-red-400 hover:text-red-600 ml-2"><Trash2 className="w-3.5 h-3.5" /></button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
                     </div>
                   </div>
-                  )}
                 </div>
               )
             )}
@@ -3450,7 +3549,7 @@ export default function App() {
                             Lobby Schedule & Patient Queue Order
                           </h2>
                           <p className="text-xs text-slate-500">
-                            {formatLongDate(selectedClinicDate)} — reorder the queue, check patients in, and open charts. Use the side calendar to change date.
+                            {formatLongDate(selectedClinicDate)} — reorder the queue and check patients in. Use the side calendar to change date.
                           </p>
                         </div>
                       </div>
@@ -3486,9 +3585,9 @@ export default function App() {
                   </div>
                 </div>
 
-                {clinicalSearchPanel}
+                {!isFrontDeskStaff && clinicalSearchPanel}
 
-                {!searchQuery.trim() && (
+                {(!searchQuery.trim() || isFrontDeskStaff) && (
                 <>
                 {/* Filter & Search Bar */}
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
@@ -3546,13 +3645,13 @@ export default function App() {
                       </h3>
                     </div>
                     <p className="text-[11px] text-slate-500 font-medium">
-                      💡 Use the <span className="font-bold text-slate-700">⬆️ / ⬇️</span> buttons or place selector dropdown to change a patient's position in the lobby queue.
+                      💡 Use the <span className="font-bold text-slate-700">⬆️ / ⬇️</span> buttons to change a patient's position in the lobby queue.
                     </p>
                   </div>
 
-                  <div className="overflow-x-auto">
+                  <div className="max-h-[min(60vh,32rem)] overflow-y-scroll overflow-x-auto [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:#cbd5e1_#f1f5f9]">
                     <table className="w-full text-left text-xs">
-                      <thead>
+                      <thead className="sticky top-0 z-10">
                         <tr className="bg-slate-50 border-b text-[#72787f]">
                           <th className="p-3.5 font-bold text-center w-36">Patient Place #</th>
                           <th className="p-3.5 font-bold">Shift Position</th>
@@ -3597,35 +3696,17 @@ export default function App() {
                                     : "hover:bg-slate-50"
                                 }`}
                               >
-                                {/* Place Badge & Dropdown */}
+                                {/* Place badge */}
                                 <td className="p-3 text-center">
-                                  <div className="flex flex-col items-center gap-1.5">
-                                    <div className={`px-2.5 py-1 rounded-md font-mono font-black text-xs border flex items-center gap-1 shadow-xs ${
-                                      actualIdx === 0
-                                        ? "bg-emerald-600 text-white border-emerald-700"
-                                        : actualIdx === 1
-                                        ? "bg-sky-100 text-sky-900 border-sky-300"
-                                        : "bg-slate-100 text-slate-700 border-slate-300"
-                                    }`}>
-                                      {actualIdx === 0 && <Star className="w-3 h-3 fill-amber-300 text-amber-300" />}
-                                      <span>Place #{actualIdx + 1}</span>
-                                    </div>
-                                    
-                                    {/* Direct place selector */}
-                                    <div className="flex items-center gap-1">
-                                      <span className="text-[10px] text-slate-400 font-semibold">Move to:</span>
-                                      <select
-                                        value={actualIdx + 1}
-                                        onChange={(e) => handleChangeAppointmentPlace(apt.id, Number(e.target.value))}
-                                        className="bg-white border rounded text-[10px] font-bold px-1.5 py-0.5 text-slate-700 outline-none hover:border-[#00334f]"
-                                      >
-                                        {dayAppointments.map((_, pNum) => (
-                                          <option key={pNum} value={pNum + 1}>
-                                            #{pNum + 1} {pNum === 0 ? "(Next)" : ""}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </div>
+                                  <div className={`inline-flex px-2.5 py-1 rounded-md font-mono font-black text-xs border items-center gap-1 shadow-xs ${
+                                    actualIdx === 0
+                                      ? "bg-emerald-600 text-white border-emerald-700"
+                                      : actualIdx === 1
+                                      ? "bg-sky-100 text-sky-900 border-sky-300"
+                                      : "bg-slate-100 text-slate-700 border-slate-300"
+                                  }`}>
+                                    {actualIdx === 0 && <Star className="w-3 h-3 fill-amber-300 text-amber-300" />}
+                                    <span>Place #{actualIdx + 1}</span>
                                   </div>
                                 </td>
 
@@ -3698,9 +3779,12 @@ export default function App() {
                                 {/* Patient Bio */}
                                 <td className="p-3">
                                   <div 
-                                    className="flex items-start gap-2.5 cursor-pointer group"
-                                    onClick={() => openBookedPatient(apt, p)}
-                                    title={isVideoBooking(apt) ? "Open Telehealth room and call this patient" : "Click patient name to launch GP Exam Room"}
+                                    className={`flex items-start gap-2.5 ${isFrontDeskStaff ? "" : "cursor-pointer group"}`}
+                                    onClick={() => {
+                                      if (isFrontDeskStaff) return;
+                                      openBookedPatient(apt, p);
+                                    }}
+                                    title={isFrontDeskStaff ? undefined : (isVideoBooking(apt) ? "Open Telehealth room and call this patient" : "Click patient name to launch GP Exam Room")}
                                   >
                                     <div className="w-8 h-8 rounded-full bg-[#dee8ff] text-[#00334f] font-bold text-xs flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                                       {(appointmentPatientName(apt, p) || "P").split(" ").map(n => n[0]).join("").slice(0, 2)}
@@ -3757,6 +3841,7 @@ export default function App() {
                                 <td className="p-3 text-right space-x-1.5 whitespace-nowrap">
                                   {apt.status === "SCHEDULED" && (
                                     <button
+                                      type="button"
                                       onClick={() => handleUpdateAptStatus(apt.id, "CHECKED IN")}
                                       className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-2.5 py-1.5 rounded font-bold transition-colors text-xs"
                                     >
@@ -3765,53 +3850,34 @@ export default function App() {
                                   )}
 
                                   {apt.status === "CHECKED IN" && (
-                                    <button
-                                      onClick={() => {
-                                        if (currentRole === "Receptionist") {
-                                          alert("Check-in confirmed. Starting examination requires Doctor role.");
-                                          return;
-                                        }
-                                        const person = p || stubPatientFromBooking(apt);
-                                        if (isVideoBooking(apt)) {
-                                          openBookedPatient(apt, person);
-                                          return;
-                                        }
-                                        handleUpdateAptStatus(apt.id, "IN EXAM ROOM");
-                                        handleStartConsultation(person);
-                                      }}
-                                      className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded font-bold transition-colors text-xs shadow-xs"
-                                    >
-                                      {isVideoBooking(apt) ? "Open Telehealth →" : "Call to GP Exam →"}
-                                    </button>
+                                    <div className="inline-flex flex-col items-end gap-1.5">
+                                      <span className="text-amber-800 font-semibold bg-amber-50 px-2 py-1 rounded text-[11px] border border-amber-200">
+                                        Waiting in lobby
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateAptStatus(apt.id, "IN EXAM ROOM")}
+                                        className="bg-red-600 hover:bg-red-700 text-white px-2.5 py-1.5 rounded font-bold transition-colors text-xs"
+                                        title={isVideoBooking(apt) ? "Mark this patient as called into the Telehealth room" : "Mark this patient as called into the GP Exam Room"}
+                                      >
+                                        {isVideoBooking(apt) ? "Call to Telehealth" : "Call to GP Exam Room"}
+                                      </button>
+                                    </div>
                                   )}
 
                                   {apt.status === "IN EXAM ROOM" && (
-                                    <button
-                                      onClick={() => openBookedPatient(apt, p)}
-                                      className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded font-bold transition-colors text-xs"
+                                    <span
+                                      className="inline-flex items-center text-red-700 font-bold bg-red-50 px-2.5 py-1.5 rounded text-[11px] border border-red-200 cursor-default select-none"
+                                      title="Exam room is with the doctor — reception cannot open it from Lobby"
                                     >
                                       {isVideoBooking(apt) ? "Active Telehealth" : "Active Exam Room"}
-                                    </button>
+                                    </span>
                                   )}
 
                                   {apt.status === "COMPLETED" && (
                                     <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-1 rounded text-[11px] border border-emerald-200">
                                       ✓ Consult Closed
                                     </span>
-                                  )}
-
-                                  {p && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setActiveHubInitialTab("history");
-                                        setActiveHubPatient(p);
-                                      }}
-                                      className="text-slate-500 hover:text-[#00334f] p-1.5 rounded hover:bg-slate-100"
-                                      title="Open Patient Hub"
-                                    >
-                                      <FileText className="w-3.5 h-3.5" />
-                                    </button>
                                   )}
                                 </td>
                               </tr>
@@ -3846,8 +3912,14 @@ export default function App() {
               <div className="bg-white p-6 border rounded space-y-4">
                 <div className="flex justify-between items-center pb-2 border-b">
                   <div>
-                    <h2 className="font-serif font-bold text-lg text-[#00334f]">Patient Clinical Records — Front Desk</h2>
-                    <p className="text-xs text-slate-500 font-sans">Sync a caller’s Unique Health ID, then check walk-in availability or open their file.</p>
+                    <h2 className="font-serif font-bold text-lg text-[#00334f]">
+                      {isFrontDeskStaff ? "Patient Clinical Records — Front Desk" : "Patient Clinical Records"}
+                    </h2>
+                    <p className="text-xs text-slate-500 font-sans">
+                      {isFrontDeskStaff
+                        ? "Sync a caller’s Unique Health ID and check walk-in availability. Click a name to open their file (live consult booking and fees are hidden)."
+                        : "Click a patient name to open their GP Exam Room clinical profile."}
+                    </p>
                   </div>
                   <button
                     onClick={() => setShowPatientModal(true)}
@@ -3964,8 +4036,14 @@ export default function App() {
                       key={pat.id}
                       className="border p-4 rounded-lg bg-slate-50/50 hover:bg-white hover:border-[#00334f] hover:shadow transition-all space-y-3 cursor-pointer"
                       onClick={() => {
-                        setActiveHubInitialTab("history");
-                        setActiveHubPatient(pat);
+                        if (hideLiveConsultChrome) {
+                          setHubDispatchProfile(false);
+                          setExamInitialTab("consultation");
+                          setExamFileOnlyView(true);
+                          setActiveDoctorRecordPatient(pat);
+                          return;
+                        }
+                        handleStartConsultation(pat);
                       }}
                     >
                       <div className="flex gap-3 items-center">
@@ -3974,7 +4052,9 @@ export default function App() {
                         </div>
                         <div>
                           <h3 className="font-bold text-xs text-[#00334f]">{pat.name}</h3>
-                          <p className="text-[10px] text-slate-400">ID: {pat.id} • {pat.gender}, {pat.age} yrs</p>
+                          <PatientSexAgeBadge gender={pat.gender} age={pat.age} />
+                          <PatientCriticalAlertBadge patient={pat} />
+                          <p className="text-[10px] text-slate-400">ID: {pat.id}</p>
                           <div className="flex flex-wrap gap-1 mt-1">
                             <span className="bg-emerald-50 text-emerald-800 text-[8px] font-bold px-1.5 py-0.5 rounded border border-emerald-200">
                               ⚕ {pat.medicalCenter || "Colombo Central Clinic"}
@@ -4051,81 +4131,70 @@ export default function App() {
             {activeTab === "clinical" && (
               <div className="space-y-6">
                 {selectedConsultPatient ? (
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    {/* Diagnostic Progress Notes (8 cols) */}
-                    <div className="lg:col-span-8 bg-white p-6 border rounded space-y-4">
-                      
-                      <div className="border-b pb-3 flex justify-between items-start">
-                        <div>
-                          <span className="bg-red-100 text-red-800 text-[9px] font-extrabold px-2 py-0.5 rounded tracking-wide uppercase">Active Clinical Consultation Room</span>
-                          <h2 className="font-serif font-bold text-xl text-[#00334f] mt-1">{selectedConsultPatient.name}</h2>
-                          <p className="text-xs text-slate-500">Age parameter: {selectedConsultPatient.age} | ID: {selectedConsultPatient.id} | Declared sensitivity: <span className="font-bold text-red-600">{selectedConsultPatient.allergies}</span></p>
-                        </div>
-
-                        <button
-                          onClick={() => { setSelectedConsultPatient(null); setActiveTab("dashboard"); }}
-                          className="text-xs text-slate-400 hover:text-slate-700 font-bold border border-slate-300 px-3 py-1 bg-slate-50 rounded"
-                        >
-                          Cancel Examination
-                        </button>
-                      </div>
-
-                      {/* MEDICAL CERTIFICATE DIRECT HUB REDIRECT */}
-                      <div className="bg-amber-50 border border-amber-200/60 p-3.5 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                        <div className="flex items-start gap-2.5">
-                          <FileText className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-                          <div>
-                            <p className="font-bold text-amber-900">Patient asks for a Medical Certificate (MC)?</p>
-                            <p className="text-[11px] text-slate-600 mt-0.5 animate-pulse">
-                              Directly open the Clinical Record Hub section for {selectedConsultPatient.name} to view their full medical history and draft/issue certificates.
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => openClinicalHubWithHistory(selectedConsultPatient)}
-                          className="bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 rounded-md font-extrabold text-[10px] uppercase tracking-wider shrink-0 transition-all flex items-center gap-1 cursor-pointer self-start sm:self-auto shadow-sm active:scale-95"
-                        >
-                          View Clinical Hub (MC Section) &rarr;
-                        </button>
-                      </div>
-
-                      {/* Progress findings */}
-                      <div className="space-y-1.5 text-xs">
-                        <label className="block text-[10px] font-extrabold text-slate-500 uppercase">Consultation clinical findings & Vitals notes</label>
-                        <textarea
-                          placeholder="Include symptom onset duration, cardiovascular sounds, throat inflammation check..."
-                          className="w-full h-40 p-3 border rounded focus:border-[#00334f] font-serif-medical"
-                          value={consultNotes}
-                          onChange={(e) => setConsultNotes(e.target.value)}
-                        />
+                  <div className="space-y-6">
+                    <DoctorClinicalRecordModal
+                      embedded
+                      initialTab={examInitialTab}
+                      patient={(() => {
+                        const charted = applySuwasiriChart(
+                          patients.find((p) => p.id === selectedConsultPatient.id) || selectedConsultPatient,
+                          suwasiriCharts[selectedConsultPatient.id]
+                        );
+                        const named = mergeClinicalDocuments({ ...charted, name: selectedConsultPatient.name || charted.name });
+                        const apt = examFileOnlyView
+                          ? undefined
+                          : ((examAppointmentId && appointments.find((a) => a.id === examAppointmentId))
+                          || appointments.find((a) => a.patientId === selectedConsultPatient.id && a.status !== "COMPLETED"));
+                        return apt ? overlayBookingIdentity(apt, named) : named;
+                      })()}
+                      appointments={appointments}
+                      billingList={billing}
+                      currentRole={currentRole}
+                      clinicName={activeHospital?.name || selectedConsultPatient.medicalCenter}
+                      sessionDoctorName={sessionUser?.name || "GP"}
+                      linkedAppointmentId={examFileOnlyView ? undefined : (examAppointmentId || undefined)}
+                      hideActiveConsultDetails={examFileOnlyView}
+                      heightMode="natural"
+                      onClose={() => {
+                        setSelectedConsultPatient(null);
+                        setExamAppointmentId(null);
+                        setExamInitialTab("consultation");
+                        setActiveTab("dashboard");
+                      }}
+                      onUpdatePatient={persistClinicalFile}
+                      onBookAppointment={bookFromClinicalRecord}
+                      onOrderPathology={(testName, remarks) => {
+                        void handleHubOrderLabTest(selectedConsultPatient.id, testName, remarks);
+                      }}
+                      onUpdateAppointment={applyDoctorAppointmentPatch}
+                      onRenderPrescription={(rx) => {
+                        setSelectedConsultPatient((prev) => prev ? {
+                          ...prev,
+                          prescriptionRecords: [...(prev.prescriptionRecords || []), rx]
+                        } : prev);
+                        setPatients((prev) => prev.map((p) => p.id === selectedConsultPatient.id ? {
+                          ...p,
+                          prescriptionRecords: [...(p.prescriptionRecords || []), rx]
+                        } : p));
+                      }}
+                      onLaunchTelehealth={(apt) => {
+                        setTelehealthFocus({ patientId: apt.patientId, appointmentId: apt.id });
+                        setActiveTab("telehealth");
+                      }}
+                      consultationFooter={!examFileOnlyView ? (
+                    <div className="grid grid-cols-1 gap-6">
+                    <div className="bg-white p-6 border rounded space-y-4">
+                      <div className="border-b pb-3">
+                        <span className="bg-red-100 text-red-800 text-[9px] font-extrabold px-2 py-0.5 rounded tracking-wide uppercase">Active Clinical Consultation Room</span>
+                        <h2 className="font-serif font-bold text-lg text-[#00334f] mt-1">{selectedConsultPatient.name}</h2>
+                        <PatientSexAgeBadge gender={selectedConsultPatient.gender} age={selectedConsultPatient.age} />
+                        <PatientCriticalAlertBadge patient={selectedConsultPatient} />
+                        <p className="text-xs text-slate-500">Issue medicines for {selectedConsultPatient.name} and sync to Suwasiri.</p>
                       </div>
 
                       {/* Prescriptions & Medication Search Bar section */}
                       <div className="space-y-4 text-xs">
                         
-                        {/* Allergies & Patient Sensitivity Alert */}
-                        <div className="bg-amber-50/60 border border-amber-200 p-3 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                          <div className="space-y-0.5 flex-1">
-                            <label className="block text-[10px] font-bold text-amber-900 uppercase tracking-wide flex items-center gap-1">
-                              <ShieldAlert className="w-3.5 h-3.5 text-red-600" />
-                              Patient Known Sensitivities & Allergies
-                            </label>
-                            <input
-                              type="text"
-                              className="w-full p-2 border border-amber-300 bg-white rounded text-xs text-red-700 font-bold focus:border-red-500 outline-none"
-                              value={consultAllergiesStr}
-                              onChange={(e) => setConsultAllergiesStr(e.target.value)}
-                              placeholder="e.g. Penicillin, Sulfa drugs, Aspirin, NSAIDs..."
-                            />
-                          </div>
-                          {consultAllergiesStr && consultAllergiesStr !== "None declared" && (
-                            <div className="bg-red-100 border border-red-300 text-red-800 text-[10px] px-3 py-1.5 rounded font-bold self-start sm:self-center shrink-0">
-                              ⚠️ Contraindication Shield Active
-                            </div>
-                          )}
-                        </div>
-
                         {/* DRUG FORMULARY SEARCH BAR & FAST ADD */}
                         <div className="bg-slate-50 border border-slate-300/80 rounded-lg p-4 space-y-3.5">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-2.5">
@@ -4513,62 +4582,9 @@ export default function App() {
                       </div>
 
                     </div>
-
-                    {/* Copilot Clinical recommendations Assistant (4 cols) */}
-                    <div className="lg:col-span-4 space-y-4">
-                      
-                      <div className="bg-white border-2 border-[#00334f] p-5 rounded space-y-3 shadow-sm">
-                        <div className="flex justify-between items-center border-b pb-2">
-                          <div className="flex items-center gap-2">
-                            <BrainCircuit className="w-5 h-5 text-[#00334f]" />
-                            <h3 className="font-serif font-bold text-xs text-[#00334f]">Clinical Copilot Advisor</h3>
-                          </div>
-                          <span className="bg-[#dee8ff] text-[#00334f] text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase">GEMINI 3.5</span>
-                        </div>
-
-                        <p className="text-slate-600 text-[11px] leading-relaxed">
-                          This AI assistant evaluates progress notes in real-time, alerts on drug allergies, and provides differential recommendations under family practice.
-                        </p>
-
-                        <button
-                          onClick={handleAskGemini}
-                          disabled={aiLoading}
-                          className="w-full bg-[#00334f] text-white py-2 px-4 text-xs font-bold rounded hover:bg-[#0c4a6e] transition-colors flex items-center justify-center gap-1 cursor-pointer disabled:bg-slate-300"
-                        >
-                          {aiLoading ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              Running safety analyzer...
-                            </>
-                          ) : (
-                            <>
-                              <BrainCircuit className="w-4 h-4" />
-                              Query safe drug interaction
-                            </>
-                          )}
-                        </button>
-
-                        <div className="bg-slate-50 p-3 rounded border text-xs" id="gemini_advisor_results">
-                          <h4 className="font-bold text-slate-500 text-[10px] uppercase tracking-wider mb-2">Copilot safe findings:</h4>
-                          {aiAnalysisResult ? (
-                            <div className="space-y-2 leading-relaxed text-slate-700 max-h-80 overflow-y-auto pr-1">
-                              {aiAnalysisResult.split("\n").map((line, lIdx) => {
-                                if (line.startsWith("###")) {
-                                  return <p key={lIdx} className="font-bold text-xs text-[#00334f] mt-3">{line.replace("###", "")}</p>;
-                                }
-                                if (line.startsWith("**") || line.startsWith("1.") || line.startsWith("2.") || line.startsWith("3.")) {
-                                  return <p key={lIdx} className="font-bold text-xs text-slate-800 mt-1.5">{line}</p>;
-                                }
-                                return <p key={lIdx} className="text-[11px] text-slate-600">{line}</p>;
-                              })}
-                            </div>
-                          ) : (
-                            <p className="text-slate-400 italic text-[11px]">No active examination safety logs loaded. Double check patient allergies before saving.</p>
-                          )}
-                        </div>
-                      </div>
-
-                    </div>
+                  </div>
+                      ) : undefined}
+                    />
                   </div>
                 ) : (
                   <div className="bg-white border rounded p-12 text-center max-w-xl mx-auto space-y-4">
@@ -4616,6 +4632,27 @@ export default function App() {
                   });
                 }}
                 onTelehealthSyncSuccess={fetchState}
+                onUpdatePatient={persistClinicalFile}
+                billingList={billing}
+                currentRole={currentRole}
+                clinicName={activeHospital?.name}
+                onBookAppointment={bookFromClinicalRecord}
+                onOrderPathology={(testName, remarks) => {
+                  const pid = telehealthFocus?.patientId;
+                  if (pid) void handleHubOrderLabTest(pid, testName, remarks);
+                }}
+                onUpdateAppointment={applyDoctorAppointmentPatch}
+                onRenderPrescription={(rx) => {
+                  const pid = telehealthFocus?.patientId;
+                  if (!pid) return;
+                  setPatients((prev) =>
+                    prev.map((p) =>
+                      p.id === pid
+                        ? { ...p, prescriptionRecords: [...(p.prescriptionRecords || []), rx] }
+                        : p
+                    )
+                  );
+                }}
                 onUpdatePatientMedications={(patId, newMedications) => {
                   setPatients(prev => prev.map(p => p.id === patId ? { ...p, currentMedications: newMedications } : p));
                   fetch(`/api/patients/${patId}`, {
@@ -4691,142 +4728,6 @@ export default function App() {
                     </span>
                   </div>
 
-                  {/* LOG NEW COLLECTION ACCORDION */}
-                  <div className="bg-slate-50 p-4 rounded border space-y-3">
-                    <h4 className="text-xs font-bold uppercase text-slate-700 flex items-center gap-1.5">
-                      <span>➕</span> Quick-Log New Patient Specimen Drew
-                    </h4>
-                    <form
-                      onSubmit={async (e) => {
-                        e.preventDefault();
-                        const f = e.currentTarget;
-                        const patId = (f.elements.namedItem("patSelect") as HTMLSelectElement).value;
-                        const testName = (f.elements.namedItem("testSelect") as HTMLSelectElement).value;
-                        const cat = sampleCategoryForTest(testName);
-                        if (!patId) {
-                          alert("Please select a registered patient.");
-                          return;
-                        }
-                        const pat = patients.find((p) => p.id === patId);
-                        try {
-                          const res = await fetch("/api/sample-collections", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              patientId: patId,
-                              sampleCategory: cat,
-                              patientName: pat?.name,
-                              testName,
-                              orderedBy: sessionUser?.name || currentRole,
-                            })
-                          });
-                          if (!res.ok) throw new Error("Could not log collection reference");
-                          const data = await res.json();
-                          if (data.state?.sampleCollections) setSampleCollections(data.state.sampleCollections);
-                          else fetchState();
-                          alert("Patient clinical sample collection successfully logged!");
-                          f.reset();
-                        } catch (err: any) {
-                          alert("Error: " + err.message);
-                        }
-                      }}
-                      className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end"
-                    >
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500">Select Patient Profile</label>
-                        <select name="patSelect" required className="p-2 border rounded w-full text-xs bg-white">
-                          <option value="">-- Choose Registered Citizen --</option>
-                          {patients.map(p => (
-                            <option key={p.id} value={p.id}>{p.name} (ID: {p.id} - Age: {p.age})</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-500">Test / Investigation Profile</label>
-                        <select name="testSelect" required className="p-2 border rounded w-full text-xs bg-white">
-                          {PATHOLOGY_INVESTIGATIONS.map((inv) => (
-                            <option key={inv.name} value={inv.name}>
-                              {inv.category}: {inv.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <button
-                        type="submit"
-                        className="bg-[#00334f] hover:bg-[#0c4a6e] text-white text-xs font-bold py-2.5 px-4 rounded transition duration-150"
-                      >
-                        Log Collection Entry
-                      </button>
-                    </form>
-                  </div>
-
-                  <div className="border border-emerald-100 rounded-lg p-3 bg-emerald-50/40">
-                    <h4 className="text-[10px] font-bold uppercase text-emerald-900 mb-2">Test / Investigation Profile</h4>
-                    <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
-                      <button
-                        type="button"
-                        onClick={() => setDispatchTestFilter("ALL")}
-                        className={`text-[10px] font-bold px-2 py-1 rounded-full border ${
-                          dispatchTestFilter === "ALL" ? "bg-[#00334f] text-white border-[#00334f]" : "bg-white text-slate-700 border-slate-200"
-                        }`}
-                      >
-                        All tests
-                      </button>
-                      {PATHOLOGY_INVESTIGATIONS.map((inv) => (
-                        <button
-                          key={inv.name}
-                          type="button"
-                          onClick={() => setDispatchTestFilter(inv.name)}
-                          className={`text-[10px] font-bold px-2 py-1 rounded-full border ${
-                            dispatchTestFilter === inv.name ? "bg-[#00334f] text-white border-[#00334f]" : "bg-white text-slate-700 border-slate-200"
-                          }`}
-                          title={inv.category}
-                        >
-                          {inv.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* FILTERS & SEARCH */}
-                  <div className="flex flex-col sm:flex-row gap-3 items-center justify-between pt-2">
-                    <div className="relative w-full sm:max-w-xs">
-                      <input
-                        type="text"
-                        placeholder="Filter by patient name or ID..."
-                        className="text-xs p-2 border pl-8 rounded w-full border-slate-200"
-                        id="globalSampleSearch"
-                        onChange={(e) => {
-                          const query = e.target.value.toLowerCase();
-                          setSearchQuery(query); 
-                        }}
-                      />
-                      <span className="absolute left-2.5 top-2.5 text-slate-400 text-xs">🔍</span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
-                      <span className="text-[11px] font-bold text-slate-400 mr-1 hidden md:inline">Filters:</span>
-                      {["ALL", "PENDING", "COLLECTED", "DELIVERED"].map((st) => (
-                        <button
-                          key={st}
-                          onClick={() => {
-                            const el = document.getElementById("selectedStatusFilter") as HTMLInputElement;
-                            if (el) {
-                              el.value = st;
-                              fetchState();
-                            }
-                          }}
-                          className="text-[10px] font-bold px-3 py-1.5 border rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700"
-                        >
-                          {st === "ALL" ? "All Entries" : st}
-                        </button>
-                      ))}
-                      <input type="hidden" id="selectedStatusFilter" defaultValue="ALL" />
-                    </div>
-                  </div>
-
                   {/* RESULTS LIST TABLE */}
                   <div className="border rounded-lg overflow-hidden bg-white">
                     <table className="w-full text-left border-collapse text-xs">
@@ -4837,24 +4738,13 @@ export default function App() {
                           <th className="p-3">Investigation</th>
                           <th className="p-3">Category</th>
                           <th className="p-3">Collection Details</th>
-                          <th className="p-3">Registered By</th>
                           <th className="p-3">LankaLab Sync Status</th>
                           <th className="p-3">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {sampleCollections
-                          .filter(s => {
-                            const sq = searchQuery ? searchQuery.toLowerCase() : "";
-                            const filterEl = document.getElementById("selectedStatusFilter") as HTMLInputElement;
-                            const filterStatus = filterEl ? filterEl.value : "ALL";
-                            
-                            const matchesSearch = s.patientName.toLowerCase().includes(sq) || s.patientId.toLowerCase().includes(sq) || s.id.toLowerCase().includes(sq) || (s.testName || "").toLowerCase().includes(sq);
-                            const matchesStatus = filterStatus === "ALL" || s.status === filterStatus;
-                            const matchesTest = dispatchTestFilter === "ALL" || s.testName === dispatchTestFilter;
-                            
-                            return matchesSearch && matchesStatus && matchesTest;
-                          })
+                          .filter((s) => s.status !== "DELIVERED")
                           .map((sample) => (
                             <tr
                               key={sample.id}
@@ -4865,13 +4755,16 @@ export default function App() {
                               <td className="p-3 font-mono font-bold text-slate-400">{sample.id}</td>
                               <td className="p-3">
                                 <div className="font-semibold text-slate-800">{sample.patientName}</div>
-                                <div className="text-[10px] text-slate-400">File ID: <button type="button" onClick={() => {
-                                  const pObj = patients.find(p => p.id === sample.patientId);
-                                  if (pObj) {
-                                    setActiveHubPatient(pObj);
-                                    setActiveHubInitialTab("samples");
-                                  }
-                                }} className="underline hover:text-[#00334f] text-slate-550 font-bold">{sample.patientId}</button></div>
+                                <div className="text-[10px] text-slate-400">
+                                  File ID:{" "}
+                                  {isFrontDeskStaff ? (
+                                    <span className="font-bold text-slate-550">{sample.patientId}</span>
+                                  ) : (
+                                    <button type="button" onClick={() => {
+                                      openDispatchPatientProfile(sample.patientId, sample.id);
+                                    }} className="underline hover:text-[#00334f] text-slate-550 font-bold">{sample.patientId}</button>
+                                  )}
+                                </div>
                               </td>
                               <td className="p-3">
                                 <span className="font-bold text-[#00334f]">{sample.testName || "—"}</span>
@@ -4907,13 +4800,6 @@ export default function App() {
                                 )}
                               </td>
                               <td className="p-3">
-                                {sample.registeredBy ? (
-                                  <span className="font-bold text-emerald-800">{sample.registeredBy}</span>
-                                ) : (
-                                  <span className="text-slate-400 italic">Not registered</span>
-                                )}
-                              </td>
-                              <td className="p-3">
                                 {sample.lankaLabSyncStatus === "SYNCED" ? (
                                   <div className="space-y-1">
                                     <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 border border-emerald-250 rounded inline-block">
@@ -4929,30 +4815,6 @@ export default function App() {
                               </td>
                               <td className="p-3">
                                 <div className="flex gap-2 flex-wrap">
-                                  {!sample.registeredBy && (
-                                    <button
-                                      type="button"
-                                      onClick={async () => {
-                                        const registrar = sessionUser?.name || currentRole;
-                                        try {
-                                          const r = await fetch(`/api/sample-collections/${sample.id}/register`, {
-                                            method: "POST",
-                                            headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({ registeredBy: registrar }),
-                                          });
-                                          if (!r.ok) throw new Error();
-                                          const data = await r.json();
-                                          if (data.state?.sampleCollections) setSampleCollections(data.state.sampleCollections);
-                                          else fetchState();
-                                        } catch (e) {
-                                          alert("Could not register name.");
-                                        }
-                                      }}
-                                      className="bg-amber-600 hover:bg-amber-700 text-white font-bold p-1 px-3 rounded text-[10px]"
-                                    >
-                                      Register my name
-                                    </button>
-                                  )}
                                   {sample.status === "PENDING" && (
                                     <button
                                       type="button"
@@ -4960,8 +4822,21 @@ export default function App() {
                                         try {
                                           const r = await fetch(`/api/sample-collections/${sample.id}/collect`, { method: "POST" });
                                           if (!r.ok) throw new Error();
-                                          fetchState();
-                                          alert("Sample drawer completed. Specimen marked as COLLECTED!");
+                                          const data = await r.json();
+                                          if (data.state?.sampleCollections) setSampleCollections(data.state.sampleCollections);
+                                          setNotifications((prev) => {
+                                            const next = data.state?.notifications || prev;
+                                            return next.map((n) =>
+                                              n.sampleId === sample.id ||
+                                              (n.templateType === "PATHOLOGY_ORDER" &&
+                                                n.patientName === sample.patientName &&
+                                                n.status !== "READ" &&
+                                                !n.read &&
+                                                (!n.sampleId || n.sampleId === sample.id))
+                                                ? { ...n, read: true, status: "READ" }
+                                                : n
+                                            );
+                                          });
                                         } catch (e) {
                                           alert("Error saving record.");
                                         }
@@ -4974,13 +4849,7 @@ export default function App() {
                                   {sample.status === "COLLECTED" && (
                                     <button
                                       type="button"
-                                      onClick={() => {
-                                        const pObj = patients.find(p => p.id === sample.patientId);
-                                        if (pObj) {
-                                          setActiveHubPatient(pObj);
-                                          setActiveHubInitialTab("samples");
-                                        }
-                                      }}
+                                      onClick={() => openDispatchPatientProfile(sample.patientId, sample.id)}
                                       className="bg-sky-600 hover:bg-sky-700 text-white font-bold p-1 px-3 rounded text-[10px]"
                                     >
                                       Delivered
@@ -5014,10 +4883,10 @@ export default function App() {
                             </tr>
                           ))}
 
-                        {sampleCollections.length === 0 && (
+                        {sampleCollections.filter((s) => s.status !== "DELIVERED").length === 0 && (
                           <tr>
-                            <td colSpan={8} className="text-center py-12 italic text-slate-400">
-                              No specimen collection requests registered on system. Use the builder above to log one.
+                            <td colSpan={7} className="text-center py-12 italic text-slate-400">
+                              No specimens waiting for dispatch. Delivered samples leave this list and stay on the patient file.
                             </td>
                           </tr>
                         )}
@@ -5433,17 +5302,34 @@ export default function App() {
                     Click a date to show invoices only for patients booked that day. Reception can view and download bank slips uploaded from the Suwasiri app.
                   </p>
                 </div>
-              <div className="xl:col-span-8 bg-white p-6 border rounded space-y-6">
-                <div>
-                  <h2 className="font-serif font-bold text-lg text-[#00334f]">Invoices & Billing Panel</h2>
-                  <p className="text-xs text-slate-500">
-                    {formatLongDate(selectedBillingDate)} — booked patients only ({dayInvoiceRows.length} invoice{dayInvoiceRows.length === 1 ? "" : "s"}).
-                  </p>
+              <div className="xl:col-span-8 bg-white p-6 border rounded space-y-4 min-h-0">
+                <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+                  <div>
+                    <h2 className="font-serif font-bold text-lg text-[#00334f]">Invoices & Billing Panel</h2>
+                    <p className="text-xs text-slate-500">
+                      {formatLongDate(selectedBillingDate)} — booked patients only ({dayInvoiceRows.length} invoice{dayInvoiceRows.length === 1 ? "" : "s"}). Scroll the list to review payments.
+                    </p>
+                  </div>
+                  {dayInvoiceRows.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${
+                        dayUnsettledCount > 0
+                          ? "bg-amber-100 text-amber-900 border-amber-300"
+                          : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      }`}>
+                        {dayUnsettledCount} not settled
+                      </span>
+                      <span className="text-[11px] font-bold px-2.5 py-1 rounded-full border bg-emerald-50 text-emerald-800 border-emerald-200">
+                        {dayInvoiceRows.length - dayUnsettledCount} paid
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="border rounded overflow-hidden">
+                  <div className="max-h-[min(60vh,32rem)] overflow-y-scroll overflow-x-auto [scrollbar-gutter:stable] [scrollbar-width:thin] [scrollbar-color:#cbd5e1_#f1f5f9]">
                   <table className="w-full text-left font-sans text-xs">
-                    <thead className="bg-[#d8e3fb] border-b">
+                    <thead className="sticky top-0 z-10 bg-[#d8e3fb] border-b">
                       <tr>
                         <th className="p-3 font-bold text-gray-700">Invoice ID</th>
                         <th className="p-3 font-bold text-gray-700">Patient Name</th>
@@ -5462,8 +5348,20 @@ export default function App() {
                           </td>
                         </tr>
                       )}
-                      {dayInvoiceRows.map(invoice => (
-                        <tr key={invoice.id} className="hover:bg-slate-50">
+                      {dayInvoiceRows.map(invoice => {
+                        const notSettled = invoice.status !== "PAID" && invoice.status !== "BULK_BILLED";
+                        const overdue = invoice.status === "OVERDUE";
+                        return (
+                        <tr
+                          key={invoice.id}
+                          className={
+                              overdue
+                              ? "bg-rose-100 hover:bg-rose-200 border-l-4 border-l-rose-600"
+                              : notSettled
+                              ? "bg-amber-50 hover:bg-amber-100 border-l-4 border-l-amber-500"
+                              : "hover:bg-slate-50 border-l-4 border-l-transparent"
+                          }
+                        >
                           <td className="p-3 font-semibold text-slate-500">{invoice.id}</td>
                           <td className="p-3">
                             <div className="flex items-center gap-3">
@@ -5507,7 +5405,9 @@ export default function App() {
                               )}
 
                               <div className="flex flex-col gap-1">
-                                <span className="font-bold text-slate-700">{invoice.patientName}</span>
+                                <span className={`font-bold ${notSettled ? "text-amber-950" : "text-slate-700"}`}>
+                                  {invoice.patientName}
+                                </span>
                                 {invoice.appointmentTime && (
                                   <span className="text-[10px] text-slate-500 font-medium">{invoice.appointmentTime}</span>
                                 )}
@@ -5578,13 +5478,22 @@ export default function App() {
                           <td className="p-3 text-slate-400">{invoice.date}</td>
                           <td className="p-3 font-bold text-[#00334f]">Rs {invoice.amount.toLocaleString()}.00</td>
                           <td className="p-3">
+                            <div className="flex flex-col items-start gap-1">
                             <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                              invoice.status === "PAID"
+                              invoice.status === "PAID" || invoice.status === "BULK_BILLED"
                                 ? "bg-emerald-100 text-emerald-800 border-emerald-200 border"
-                                : "bg-amber-50 text-amber-800 border-amber-200 border"
+                                : overdue
+                                ? "bg-rose-600 text-white border-rose-700 border"
+                                : "bg-amber-200 text-amber-950 border-amber-400 border"
                             }`}>
-                              {invoice.status}
+                              {notSettled ? (overdue ? "OVERDUE — not settled" : "NOT SETTLED") : invoice.status}
                             </span>
+                            {notSettled && (
+                              <span className={`text-[9px] font-extrabold uppercase tracking-wide ${overdue ? "text-rose-800" : "text-amber-800"}`}>
+                                Payment outstanding
+                              </span>
+                            )}
+                            </div>
                           </td>
                           <td className="p-3">
                             <div className="flex items-center justify-end gap-1.5">
@@ -5627,9 +5536,11 @@ export default function App() {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               </div>
               </div>
@@ -5901,6 +5812,7 @@ export default function App() {
                         </p>
                         
                         <div className="flex gap-2">
+                          {!isFrontDeskStaff && (
                           <button
                             type="button"
                             onClick={() => {
@@ -5910,6 +5822,7 @@ export default function App() {
                           >
                             Open Details & Enter Rest / MC
                           </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => setLastOnlineBookingResult(null)}
@@ -5928,56 +5841,6 @@ export default function App() {
                         </p>
                       </div>
                     )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB: CLINICAL CALCULATORS (STANDALONE VIEW) */}
-            {activeTab === "calculators" && (
-              <div className="space-y-6">
-                <div className="bg-white p-6 border rounded-xl shadow-xs">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4 mb-6">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <BrainCircuit className="w-6 h-6 text-sky-600" />
-                        <h2 className="font-serif font-bold text-xl text-[#00334f]">Clinical Calculators Suite</h2>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-1">
-                        Validated diagnostic scoring engines: Body Mass Index (BMI), Australian CVD Risk (Framingham/NVDPA), AUSDRISK, eGFR (CKD-EPI 2021), Blood Pressure Classification, Pregnancy EDD & Paediatric Dosing.
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-600">Select Active Patient:</span>
-                      <select 
-                        className="text-xs p-2 border rounded-lg bg-slate-50 font-bold text-[#00334f] outline-none"
-                        value={activeDoctorRecordPatient?.id || (patients[0]?.id || "")}
-                        onChange={(e) => {
-                          const found = patients.find(p => p.id === e.target.value);
-                          if (found) setActiveDoctorRecordPatient(found);
-                        }}
-                      >
-                        {patients.map(p => (
-                          <option key={p.id} value={p.id}>{p.name} ({p.age}y, {p.gender})</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Render the embedded clinical calculators component */}
-                  <div className="bg-slate-50 p-6 rounded-xl border">
-                    <ClinicalCalculatorsModal 
-                      patient={activeDoctorRecordPatient || patients[0]}
-                      patients={patients}
-                      calculatedBy={sessionUser?.name || "GP"}
-                      embedded
-                      onClose={() => setActiveTab("dashboard")} 
-                      onSaveToConsultation={(resultText) => {
-                        alert("Calculator result copied to clinical consultation clipboard:\n\n" + resultText);
-                      }}
-                      onPersistPatient={persistCalculatorPatient}
-                    />
                   </div>
                 </div>
               </div>
@@ -6003,11 +5866,12 @@ export default function App() {
                     } : r);
                     void persistRecalls(next);
                   }}
-                  onBookAppointment={(recall) => {
+                  onBookAppointment={(recall, consultMode) => {
                     setNewAptPatientId(recall.patientId);
-                    setNewAptReason("Follow up");
+                    setNewAptReason(recall.notes?.startsWith("CRITICAL") ? "Test results" : "Follow up");
                     setBookingRecallId(recall.id);
                     setBookingMode("book");
+                    setBookingConsultMode(consultMode || "clinic");
                     setShowAptModal(true);
                   }}
                   onCreateRecall={(newRecall) => {
@@ -6046,25 +5910,6 @@ export default function App() {
               </div>
             )}
 
-            {/* TAB: AI MEDICAL FEATURES HUB */}
-            {activeTab === "ai_features" && (
-              <div className="space-y-6">
-                <AIFeaturesHub
-                  patients={patients}
-                  activePatient={selectedConsultPatient || activeDoctorRecordPatient || patients[0]}
-                  onCommitSoapToChart={(patientId, soap) => {
-                    alert(`SOAP Note successfully committed to chart for patient (${patientId}):\n\nSubjective: ${soap.subjective}\nObjective: ${soap.objective}\nAssessment: ${soap.assessment}\nPlan: ${soap.plan}`);
-                  }}
-                  onApplyPrescriptionSuggestion={(patientId, rx) => {
-                    alert(`Prescription suggestion applied: ${rx.drug} ${rx.dose} (${rx.frequency})`);
-                  }}
-                  onApplyRecallSuggestion={(patientId, title) => {
-                    alert(`Preventive recall scheduled: ${title}`);
-                  }}
-                />
-              </div>
-            )}
-
             {/* TAB: PATHOLOGY & DIAGNOSTICS HUB */}
             {activeTab === "pathology" && (
               <div className="space-y-6">
@@ -6072,30 +5917,11 @@ export default function App() {
                   patients={patients}
                   labOrders={labOrders}
                   currentRole={currentRole}
-                  onOpenPatientEverything={(pat) => setActiveDoctorRecordPatient(pat)}
                   onStartConsultation={(pat) => handleStartConsultation(pat)}
                   onOrderLabTest={handleHubOrderLabTest}
-                  onMarkLabReviewed={handleMarkLabReviewed}
-                />
-              </div>
-            )}
-
-            {/* TAB: DOCUMENT MANAGEMENT HUB */}
-            {activeTab === "documents" && (
-              <div className="space-y-6">
-                <DocumentManagementHub
-                  patients={patients}
-                  onUploadDocument={(doc) => {
-                    alert(`Clinical document "${doc.title}" successfully uploaded and registered!`);
+                  onReviewLab={(pat, lab, opts) => {
+                    void handleMarkLabReviewed(pat.id, lab.id, opts);
                   }}
-                  onAllocateDocument={(docId, patientId, doctorName) => {
-                    alert(`Document allocated to patient (${patientId}) under ${doctorName}.`);
-                  }}
-                  onDigitalSign={(docId, doctorName) => {
-                    alert(`Document digitally signed and verified by ${doctorName}.`);
-                  }}
-                  onOpenPatientEverything={(pat) => setActiveDoctorRecordPatient(pat)}
-                  onStartConsultation={(pat) => handleStartConsultation(pat)}
                 />
               </div>
             )}
@@ -6108,16 +5934,28 @@ export default function App() {
                 roles={roleDefs}
                 branches={branches}
                 staffDirectory={staffDirectory}
-                onCreateHospital={async (name) => {
+                onCreateHospital={async (name, district) => {
                   const res = await fetch("/api/tenancy/hospitals", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ name }),
+                    body: JSON.stringify({ name, district }),
                   });
                   const data = await res.json();
                   if (data.hospital) {
                     setHospitals((prev) => [...prev, data.hospital]);
                     if (data.roles) setRoleDefs((prev) => [...prev, ...data.roles]);
+                    if (data.branch) setBranches((prev) => [...prev, data.branch]);
+                    try {
+                      await publishClinicCenterToSuwasiri({
+                        hospitalId: data.hospital.id,
+                        name: data.hospital.name,
+                        region: data.hospital.district || district || "Colombo",
+                        address: data.branch?.address,
+                        branchName: data.branch?.name,
+                      });
+                    } catch (err) {
+                      console.warn("Could not publish clinic centre to Suwasiri:", err);
+                    }
                   }
                 }}
                 onToggleHospitalStatus={async (hospitalId, status) => {
@@ -6151,21 +5989,48 @@ export default function App() {
                   if (data.staff) setStaffDirectory((prev) => [...prev, data.staff]);
                   if (payload.roleName === "Doctor" && data.staff) {
                     const hospital = hospitals.find((h) => h.id === payload.hospitalId);
-                    const branch = branches.find((b) => payload.branchIds?.includes(b.id));
+                    const branch = branches.find((b) => payload.branchIds?.includes(b.id))
+                      || branches.find((b) => b.hospitalId === payload.hospitalId);
                     try {
                       await publishClinicDoctorToSuwasiri({
                         staffId: data.staff.id,
                         name: payload.name,
                         specialty: payload.specialty || data.staff.specialty || "General Practitioner",
-                        hospitalName: hospital?.name || "GP Care Clinic",
+                        hospitalName: branch?.name || hospital?.name || "GP Care Clinic",
+                        hospitalId: payload.hospitalId,
                         branchName: branch?.name,
+                        branchId: branch?.id,
+                        region: hospital?.district || "Colombo",
                         email: payload.email,
                         phone: payload.phone,
+                        rosterHours: data.staff.rosterHours,
+                        roster: data.staff.roster,
+                      });
+                      await publishClinicCenterToSuwasiri({
+                        hospitalId: payload.hospitalId,
+                        name: hospital?.name || payload.name,
+                        region: hospital?.district || "Colombo",
+                        address: branch?.address,
+                        branchName: branch?.name,
                       });
                     } catch (err) {
                       console.warn("Could not publish clinic doctor to Suwasiri:", err);
                     }
                   }
+                }}
+                onRemoveStaff={async ({ staffId, hospitalId }) => {
+                  const res = await fetch(`/api/tenancy/staff/${encodeURIComponent(staffId)}`, {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ hospitalId }),
+                  });
+                  const data = await res.json().catch(() => ({}));
+                  if (!res.ok) {
+                    alert(data.error || "Could not remove staff");
+                    return;
+                  }
+                  if (data.staffDirectory) setStaffDirectory(data.staffDirectory);
+                  if (data.memberships) setMemberships(data.memberships);
                 }}
               />
             )}
@@ -6320,7 +6185,6 @@ export default function App() {
                   }}
                   onOpenGpExam={(p) => {
                     handleStartConsultation(p);
-                    setActiveTab("clinicalRoom");
                   }}
                   onOpenDoctorClinicalRecord={(p) => {
                     setActiveDoctorRecordPatient(p);
@@ -6344,6 +6208,7 @@ export default function App() {
           initialPatientId={newAptPatientId}
           initialDate={newAptDate}
           initialReason={newAptReason}
+          initialConsultMode={bookingConsultMode}
           includeToday={bookingMode === "walkin"}
           walkInMode={bookingMode === "walkin"}
           walkInOverflowUsed={appointments.filter((a) =>
@@ -6355,6 +6220,7 @@ export default function App() {
             setShowAptModal(false);
             setBookingRecallId(null);
             setBookingMode("book");
+            setBookingConsultMode("clinic");
           }}
           onConfirm={handleSchedulerConfirm}
         />
@@ -6643,7 +6509,7 @@ export default function App() {
       )}
 
       {/* OVERLAY HUB PANEL: DETAILED PATIENT HISTORY CARD */}
-      {activeHubPatient && (
+      {activeHubPatient && (!isFrontDeskStaff || hubDispatchProfile) && (
         <PatientDetailsHub
           patient={applySuwasiriChart(
             patients.find((p) => p.id === activeHubPatient.id) || activeHubPatient,
@@ -6653,7 +6519,28 @@ export default function App() {
           drugsDatabase={drugs}
           currentRole={currentRole}
           initialSubTab={activeHubInitialTab}
-          onClose={() => setActiveHubPatient(null)}
+          dispatchProfileOnly={hubDispatchProfile}
+          focusSampleId={hubFocusSampleId}
+          onUpdatePatient={persistClinicalFile}
+          onOpenClinicalProfile={
+            isFrontDeskStaff || hubDispatchProfile
+              ? undefined
+              : (pat) => {
+                  setExamInitialTab("documents");
+                  setActiveDoctorRecordPatient(pat);
+                }
+          }
+          onSampleDelivered={() => {
+            setActiveHubPatient(null);
+            setHubDispatchProfile(false);
+            setHubFocusSampleId(null);
+            setHighlightSampleId(null);
+          }}
+          onClose={() => {
+            setActiveHubPatient(null);
+            setHubDispatchProfile(false);
+            setHubFocusSampleId(null);
+          }}
           onAddHistoryItem={handleHubAddHistoryItem}
           onAddVaccine={handleHubAddVaccine}
           onOrderLabTest={handleHubOrderLabTest}
@@ -6701,6 +6588,9 @@ export default function App() {
         <PrintablePrescription
           patient={activeReceiptRx.patient}
           prescription={activeReceiptRx.prescription}
+          doctorName={sessionUser?.name || "Dr. Priyantha Silva"}
+          clinicName={activeHospital?.name || "Sri Lankan GP Care"}
+          slmcNo="12908"
           onClose={() => setActiveReceiptRx(null)}
         />
       )}
@@ -7051,21 +6941,21 @@ export default function App() {
       {/* 16-TAB DOCTOR CLINICAL RECORD (BP PREMIER / SRI LANKAN STANDARD CONSULTATION) */}
       {activeDoctorRecordPatient && (
         <DoctorClinicalRecordModal
-          patient={applySuwasiriChart(
+          initialTab={examInitialTab}
+          hideActiveConsultDetails={examFileOnlyView || hideLiveConsultChrome}
+          patient={mergeClinicalDocuments(applySuwasiriChart(
             patients.find((p) => p.id === activeDoctorRecordPatient.id) || activeDoctorRecordPatient,
             suwasiriCharts[activeDoctorRecordPatient.id]
-          )}
+          ))}
           appointments={appointments}
           billingList={billing}
           currentRole={currentRole}
+          clinicName={activeHospital?.name}
+          sessionDoctorName={sessionUser?.name || "GP"}
           onClose={() => setActiveDoctorRecordPatient(null)}
-          onUpdatePatient={(updatedPatient) => {
-            setPatients(prev => prev.map(p => p.id === updatedPatient.id ? updatedPatient : p));
-            setActiveDoctorRecordPatient(updatedPatient);
-          }}
-          onUpdateAppointment={(updatedApt) => {
-            setAppointments(prev => prev.map(a => a.id === updatedApt.id ? updatedApt : a));
-          }}
+          onUpdatePatient={persistClinicalFile}
+          onBookAppointment={bookFromClinicalRecord}
+          onUpdateAppointment={applyDoctorAppointmentPatch}
           onRenderPrescription={(rx) => {
             if (activeDoctorRecordPatient) {
               const updated = {
@@ -7083,18 +6973,124 @@ export default function App() {
         />
       )}
 
-      {/* STANDALONE CLINICAL CALCULATORS MODAL */}
-      {showCalculatorsModal && (
-        <ClinicalCalculatorsModal
-          patient={activeDoctorRecordPatient || patients[0]}
-          patients={patients}
-          calculatedBy={sessionUser?.name || "GP"}
-          onClose={() => setShowCalculatorsModal(false)}
-          onSaveToConsultation={(resultText) => {
-            alert("Calculator result copied to consultation clipboard:\n\n" + resultText);
+      {["dashboard", "clinical", "pathology", "telehealth"].includes(activeTab) &&
+      (isPlatformSA || Boolean(activeRole?.canAccessDoctorDashboard)) && (() => {
+        const clampFab = (x: number, y: number) => {
+          const margin = 8;
+          const maxX = Math.max(margin, window.innerWidth - SHIFT_FAB_SIZE - margin);
+          const maxY = Math.max(margin, window.innerHeight - SHIFT_FAB_SIZE - margin);
+          return { x: Math.min(maxX, Math.max(margin, x)), y: Math.min(maxY, Math.max(margin, y)) };
+        };
+        const pos = shiftFabPos || {
+          x: typeof window !== "undefined" ? window.innerWidth - SHIFT_FAB_SIZE - 24 : 24,
+          y: typeof window !== "undefined" ? window.innerHeight - SHIFT_FAB_SIZE - 24 : 24,
+        };
+        return (
+        <button
+          type="button"
+          onPointerDown={(e) => {
+            (e.currentTarget as HTMLButtonElement).setPointerCapture(e.pointerId);
+            const start = shiftFabPos || clampFab(window.innerWidth - SHIFT_FAB_SIZE - 24, window.innerHeight - SHIFT_FAB_SIZE - 24);
+            shiftFabDrag.current = {
+              startX: e.clientX,
+              startY: e.clientY,
+              origX: start.x,
+              origY: start.y,
+              lastX: start.x,
+              lastY: start.y,
+              moved: false,
+            };
           }}
-          onPersistPatient={persistCalculatorPatient}
-        />
+          onPointerMove={(e) => {
+            const drag = shiftFabDrag.current;
+            if (!drag) return;
+            const dx = e.clientX - drag.startX;
+            const dy = e.clientY - drag.startY;
+            if (Math.hypot(dx, dy) > 6) drag.moved = true;
+            if (drag.moved) {
+              const next = clampFab(drag.origX + dx, drag.origY + dy);
+              drag.lastX = next.x;
+              drag.lastY = next.y;
+              setShiftFabPos(next);
+            }
+          }}
+          onPointerUp={() => {
+            const drag = shiftFabDrag.current;
+            shiftFabDrag.current = null;
+            if (!drag) return;
+            if (drag.moved) {
+              const next = { x: drag.lastX, y: drag.lastY };
+              setShiftFabPos(next);
+              localStorage.setItem("suwasiri-shift-fab-pos", JSON.stringify(next));
+              return;
+            }
+            setShowShiftChecklist(true);
+          }}
+          className="fixed z-40 w-[5.75rem] h-[5.75rem] rounded-full bg-cyan-400 hover:bg-cyan-300 text-cyan-950 shadow-lg flex flex-col items-center justify-center gap-0.5 print:hidden cursor-grab active:cursor-grabbing touch-none select-none"
+          style={{ left: pos.x, top: pos.y }}
+          title="Clinical Shift Checklist — drag to move"
+        >
+          <ClipboardList className="w-6 h-6 pointer-events-none" />
+          <span className="text-[8px] font-black leading-[1.05] text-center px-1.5 pointer-events-none">
+            Clinical<br />Shift<br />Checklist
+          </span>
+        </button>
+        );
+      })()}
+
+      {showShiftChecklist && (
+        <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-end sm:items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-cyan-200 overflow-hidden">
+            <div className="bg-cyan-400 px-4 py-3 flex items-center justify-between text-cyan-950">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="w-5 h-5" />
+                <h3 className="font-black text-sm">Clinical Shift Checklist</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowShiftChecklist(false)}
+                className="p-1 rounded-lg hover:bg-cyan-300"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-[11px] text-slate-500 font-semibold">
+                {tasks.filter((t) => t.completed).length}/{tasks.length} done this shift
+              </p>
+              <form onSubmit={handleAddTask} className="flex gap-1.5 text-xs">
+                <input
+                  type="text"
+                  placeholder="e.g. Sterilize diagnostic equipment..."
+                  className="flex-grow p-2 border rounded-lg focus:border-cyan-600 text-xs outline-none"
+                  value={newTaskText}
+                  onChange={(e) => setNewTaskText(e.target.value)}
+                />
+                <button type="submit" className="bg-cyan-700 text-white px-3 py-2 rounded-lg font-bold text-xs">Add</button>
+              </form>
+              <div className="space-y-1.5 text-xs max-h-72 overflow-y-auto">
+                {tasks.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-cyan-50 border border-transparent hover:border-cyan-100">
+                    <label className="flex items-center gap-2 cursor-pointer font-semibold flex-1">
+                      <input
+                        type="checkbox"
+                        checked={t.completed}
+                        onChange={(e) => handleToggleTask(t.id, e.target.checked)}
+                      />
+                      <span className={t.completed ? "line-through text-slate-400" : "text-slate-700"}>{t.text}</span>
+                    </label>
+                    <button type="button" onClick={() => handleDeleteTask(t.id)} className="text-red-400 hover:text-red-600 ml-2">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+                {tasks.length === 0 && (
+                  <p className="text-slate-400 italic p-3">No shift tasks yet. Add the first item for this session.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

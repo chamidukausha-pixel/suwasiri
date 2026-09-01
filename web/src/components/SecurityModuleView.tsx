@@ -316,10 +316,10 @@ export default function SecurityModuleView({
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div className="bg-white p-6 border rounded-xl shadow-xs">
+      <div className="bg-gradient-to-r from-sky-50 via-violet-50 to-emerald-50 p-6 border border-sky-100 rounded-xl shadow-xs">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-900 text-emerald-400 flex items-center justify-center shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-xs">
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
@@ -327,7 +327,7 @@ export default function SecurityModuleView({
                 Enterprise Security, Governance & Access Control
               </h1>
               <p className="text-xs text-slate-500">
-                MFA, encryption, Role-Based Access Control, and break-glass — scoped to{" "}
+                Super Admin can edit MFA, passwords, sessions, backup, retention, and RBAC for{" "}
                 <strong>{hospitalName || "this hospital"}</strong>. Toggle flags, then Commit & Save so staff nav and module access update immediately.
               </p>
             </div>
@@ -363,78 +363,26 @@ export default function SecurityModuleView({
         </div>
 
         {/* Security Sub-Navigation */}
-        <div className="flex items-center gap-2 mt-6 pt-4 border-t border-slate-100 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab("OVERVIEW")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-              activeTab === "OVERVIEW"
-                ? "bg-[#00334f] text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            1. Security Hardening Overview
-          </button>
-
-          <button
-            onClick={() => setActiveTab("RBAC")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-              activeTab === "RBAC"
-                ? "bg-[#00334f] text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            2. Role-Based Access Control (RBAC)
-          </button>
-
-          <button
-            onClick={() => setActiveTab("SESSIONS")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-              activeTab === "SESSIONS"
-                ? "bg-[#00334f] text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            <Radio className="w-3.5 h-3.5" />
-            3. Active Sessions ({sessions.length})
-          </button>
-
-          <button
-            onClick={() => setActiveTab("BACKUP")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-              activeTab === "BACKUP"
-                ? "bg-[#00334f] text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            <HardDrive className="w-3.5 h-3.5" />
-            4. Backup & Disaster Recovery
-          </button>
-
-          <button
-            onClick={() => setActiveTab("BREAKGLASS")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-              activeTab === "BREAKGLASS"
-                ? "bg-[#00334f] text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            <Flame className="w-3.5 h-3.5 text-rose-600" />
-            5. Break-Glass Audit Trail ({breakGlassLogs.length})
-          </button>
-
-          <button
-            onClick={() => setActiveTab("RETENTION")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-              activeTab === "RETENTION"
-                ? "bg-[#00334f] text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            <History className="w-3.5 h-3.5" />
-            6. Retention & Compliance Policy
-          </button>
+        <div className="flex items-center gap-2 mt-6 pt-4 border-t border-sky-100 overflow-x-auto">
+          {([
+            { id: "OVERVIEW" as const, label: "1. Security Hardening Overview", icon: ShieldCheck, on: "bg-sky-600 text-white", off: "bg-sky-100 text-sky-800 hover:bg-sky-200" },
+            { id: "RBAC" as const, label: "2. Role-Based Access Control (RBAC)", icon: Users, on: "bg-violet-600 text-white", off: "bg-violet-100 text-violet-800 hover:bg-violet-200" },
+            { id: "SESSIONS" as const, label: `3. Active Sessions (${sessions.length})`, icon: Radio, on: "bg-amber-500 text-white", off: "bg-amber-100 text-amber-900 hover:bg-amber-200" },
+            { id: "BACKUP" as const, label: "4. Backup & Disaster Recovery", icon: HardDrive, on: "bg-emerald-600 text-white", off: "bg-emerald-100 text-emerald-800 hover:bg-emerald-200" },
+            { id: "BREAKGLASS" as const, label: `5. Break-Glass Audit Trail (${breakGlassLogs.length})`, icon: Flame, on: "bg-rose-600 text-white", off: "bg-rose-100 text-rose-800 hover:bg-rose-200" },
+            { id: "RETENTION" as const, label: "6. Retention & Compliance Policy", icon: History, on: "bg-teal-600 text-white", off: "bg-teal-100 text-teal-800 hover:bg-teal-200" },
+          ]).map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                activeTab === tab.id ? tab.on : tab.off
+              }`}
+            >
+              <tab.icon className="w-3.5 h-3.5" />
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -445,90 +393,168 @@ export default function SecurityModuleView({
         <div className="space-y-6">
           {/* Key Security Telemetry Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white p-5 border rounded-xl shadow-xs space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+            <div className="bg-emerald-50 p-5 border border-emerald-100 rounded-xl shadow-xs space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-emerald-800">
                 <span className="flex items-center gap-1.5">
-                  <Smartphone className="w-4 h-4 text-emerald-600" /> MFA Policy
+                  <Smartphone className="w-4 h-4" /> MFA Policy
                 </span>
-                <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-bold">Enforced</span>
+                <span className="text-emerald-800 bg-white px-2 py-0.5 rounded font-bold">{config.mfaEnabled ? "Enforced" : "Off"}</span>
               </div>
-              <div className="text-lg font-bold text-slate-900">TOTP Authenticator</div>
-              <p className="text-[11px] text-slate-500">Mandatory 6-digit TOTP / FIDO2 hardware token for all clinical logins.</p>
+              {isAdmin ? (
+                <select
+                  value={config.mfaMethod}
+                  onChange={(e) => setConfig((c) => ({ ...c, mfaMethod: e.target.value as SecurityStatusConfig["mfaMethod"] }))}
+                  className="text-sm font-bold text-slate-900 border rounded-lg px-2 py-1 bg-white w-full"
+                >
+                  <option value="AUTHENTICATOR_APP">TOTP Authenticator</option>
+                  <option value="SMS_OTP">SMS OTP</option>
+                  <option value="HARDWARE_FIDO2">FIDO2 hardware</option>
+                </select>
+              ) : (
+                <div className="text-lg font-bold text-slate-900">TOTP Authenticator</div>
+              )}
+              <p className="text-[11px] text-slate-500">Mandatory second factor for clinical logins.</p>
+              {isAdmin && (
+                <label className="flex items-center gap-2 text-[11px] font-bold text-emerald-900">
+                  <input
+                    type="checkbox"
+                    checked={config.mfaEnabled}
+                    onChange={(e) => setConfig((c) => ({ ...c, mfaEnabled: e.target.checked }))}
+                  />
+                  MFA enabled
+                </label>
+              )}
             </div>
 
-            <div className="bg-white p-5 border rounded-xl shadow-xs space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+            <div className="bg-sky-50 p-5 border border-sky-100 rounded-xl shadow-xs space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-sky-800">
                 <span className="flex items-center gap-1.5">
-                  <Lock className="w-4 h-4 text-sky-600" /> Encryption at Rest
+                  <Lock className="w-4 h-4" /> Encryption at Rest
                 </span>
-                <span className="text-sky-700 bg-sky-50 px-2 py-0.5 rounded font-bold">Active</span>
+                <span className="text-sky-800 bg-white px-2 py-0.5 rounded font-bold">Active</span>
               </div>
-              <div className="text-lg font-bold text-slate-900">AES-256-GCM</div>
+              <div className="text-lg font-bold text-slate-900">{config.encryptionRestStatus}</div>
               <p className="text-[11px] text-slate-500">All patient charts, notes, and attachments encrypted on disk with HSM keys.</p>
             </div>
 
-            <div className="bg-white p-5 border rounded-xl shadow-xs space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+            <div className="bg-violet-50 p-5 border border-violet-100 rounded-xl shadow-xs space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-violet-800">
                 <span className="flex items-center gap-1.5">
-                  <Globe className="w-4 h-4 text-purple-600" /> In-Transit Security
+                  <Globe className="w-4 h-4" /> In-Transit Security
                 </span>
-                <span className="text-purple-700 bg-purple-50 px-2 py-0.5 rounded font-bold">TLS 1.3</span>
+                <span className="text-violet-800 bg-white px-2 py-0.5 rounded font-bold">TLS 1.3</span>
               </div>
               <div className="text-lg font-bold text-slate-900">Perfect Forward Secrecy</div>
               <p className="text-[11px] text-slate-500">HTTPS only, HSTS preloaded, certificate pinning enabled for API endpoints.</p>
             </div>
 
-            <div className="bg-white p-5 border rounded-xl shadow-xs space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+            <div className="bg-amber-50 p-5 border border-amber-100 rounded-xl shadow-xs space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-amber-900">
                 <span className="flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-amber-600" /> Auto-Lockout
+                  <Clock className="w-4 h-4" /> Auto-Lockout
                 </span>
-                <span className="text-amber-800 bg-amber-50 px-2 py-0.5 rounded font-bold">15 Mins</span>
+                <span className="text-amber-900 bg-white px-2 py-0.5 rounded font-bold">{config.sessionTimeoutMinutes} Mins</span>
               </div>
-              <div className="text-lg font-bold text-slate-900">Session Lock Timer</div>
-              <p className="text-[11px] text-slate-500">Terminals lock after 15 minutes of inactivity to prevent unattended snooping.</p>
+              {isAdmin ? (
+                <input
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={config.sessionTimeoutMinutes}
+                  onChange={(e) => setConfig((c) => ({ ...c, sessionTimeoutMinutes: Number(e.target.value) || 15 }))}
+                  className="text-lg font-bold text-slate-900 border rounded-lg px-2 py-1 w-24"
+                />
+              ) : (
+                <div className="text-lg font-bold text-slate-900">Session Lock Timer</div>
+              )}
+              <p className="text-[11px] text-slate-500">Terminals lock after inactivity to prevent unattended snooping.</p>
             </div>
           </div>
 
           {/* Password Policy & Threat Monitoring Configuration Panel */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white p-6 border rounded-xl shadow-xs space-y-4">
-              <div className="flex items-center gap-2 border-b pb-3 font-bold text-sm text-[#00334f]">
+            <div className="bg-sky-50 p-6 border border-sky-100 rounded-xl shadow-xs space-y-4">
+              <div className="flex items-center gap-2 border-b border-sky-100 pb-3 font-bold text-sm text-[#00334f]">
                 <KeyRound className="w-4 h-4 text-sky-600" />
                 Password & Authentication Governance
               </div>
 
               <div className="space-y-3 text-xs">
-                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg border">
+                <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-sky-100">
                   <div>
                     <span className="font-bold text-slate-800 block">Minimum Password Length</span>
                     <span className="text-slate-500 text-[11px]">NIST SP 800-63B standard</span>
                   </div>
-                  <span className="font-mono font-bold bg-white px-2 py-1 border rounded text-[#00334f]">12 Characters</span>
+                  {isAdmin ? (
+                    <input
+                      type="number"
+                      min={8}
+                      max={32}
+                      value={config.passwordMinLength}
+                      onChange={(e) => setConfig((c) => ({ ...c, passwordMinLength: Number(e.target.value) || 12 }))}
+                      className="font-mono font-bold bg-sky-50 px-2 py-1 border rounded text-[#00334f] w-20"
+                    />
+                  ) : (
+                    <span className="font-mono font-bold bg-white px-2 py-1 border rounded text-[#00334f]">{config.passwordMinLength} Characters</span>
+                  )}
                 </div>
 
-                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg border">
+                <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-sky-100">
                   <div>
                     <span className="font-bold text-slate-800 block">Complexity Rules (Upper/Lower/Symbol/Digit)</span>
                     <span className="text-slate-500 text-[11px]">Enforced on user registration & password resets</span>
                   </div>
-                  <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-1 rounded text-[11px]">Active</span>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      onClick={() => setConfig((c) => ({ ...c, passwordComplexityEnforced: !c.passwordComplexityEnforced }))}
+                      className={`font-bold px-2 py-1 rounded text-[11px] ${
+                        config.passwordComplexityEnforced ? "text-emerald-800 bg-emerald-50" : "text-slate-600 bg-slate-100"
+                      }`}
+                    >
+                      {config.passwordComplexityEnforced ? "Active" : "Off"}
+                    </button>
+                  ) : (
+                    <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-1 rounded text-[11px]">Active</span>
+                  )}
                 </div>
 
-                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg border">
+                <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-sky-100">
                   <div>
                     <span className="font-bold text-slate-800 block">Password Expiration Rotation</span>
-                    <span className="text-slate-500 text-[11px]">Mandatory rotation interval</span>
+                    <span className="text-slate-500 text-[11px]">Mandatory rotation interval (days)</span>
                   </div>
-                  <span className="font-mono font-bold bg-white px-2 py-1 border rounded text-[#00334f]">90 Days</span>
+                  {isAdmin ? (
+                    <input
+                      type="number"
+                      min={30}
+                      max={365}
+                      value={config.passwordExpiryDays}
+                      onChange={(e) => setConfig((c) => ({ ...c, passwordExpiryDays: Number(e.target.value) || 90 }))}
+                      className="font-mono font-bold bg-sky-50 px-2 py-1 border rounded text-[#00334f] w-20"
+                    />
+                  ) : (
+                    <span className="font-mono font-bold bg-white px-2 py-1 border rounded text-[#00334f]">{config.passwordExpiryDays} Days</span>
+                  )}
                 </div>
 
-                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg border">
+                <div className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-sky-100">
                   <div>
                     <span className="font-bold text-slate-800 block">Lockout After Failed Attempts</span>
                     <span className="text-slate-500 text-[11px]">Mitigates credential brute-force attacks</span>
                   </div>
-                  <span className="font-mono font-bold bg-white px-2 py-1 border rounded text-rose-700">5 Attempts (30m Lockout)</span>
+                  {isAdmin ? (
+                    <input
+                      type="number"
+                      min={3}
+                      max={20}
+                      value={config.failedLoginLockoutAttempts}
+                      onChange={(e) => setConfig((c) => ({ ...c, failedLoginLockoutAttempts: Number(e.target.value) || 5 }))}
+                      className="font-mono font-bold bg-rose-50 px-2 py-1 border rounded text-rose-700 w-20"
+                    />
+                  ) : (
+                    <span className="font-mono font-bold bg-white px-2 py-1 border rounded text-rose-700">{config.failedLoginLockoutAttempts} Attempts</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -580,7 +606,7 @@ export default function SecurityModuleView({
       {/* 2. ROLE-BASED ACCESS CONTROL (RBAC) */}
       {/* ============================================================ */}
       {activeTab === "RBAC" && (
-        <div className="bg-white p-6 border rounded-xl shadow-xs space-y-4">
+        <div className="bg-violet-50/50 p-6 border border-violet-100 rounded-xl shadow-xs space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4">
             <div>
               <div className="flex items-center gap-2">
@@ -1215,15 +1241,37 @@ export default function SecurityModuleView({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-              <span className="font-bold text-slate-500 uppercase text-[10px] block">RPO (Recovery Point Objective)</span>
-              <div className="text-xl font-black text-[#00334f]">&lt; 15 Minutes</div>
+            <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100 space-y-1">
+              <span className="font-bold text-emerald-800 uppercase text-[10px] block">RPO (Recovery Point Objective)</span>
+              {isAdmin ? (
+                <input
+                  type="number"
+                  min={5}
+                  max={120}
+                  value={config.disasterRecoveryRpoMinutes}
+                  onChange={(e) => setConfig((c) => ({ ...c, disasterRecoveryRpoMinutes: Number(e.target.value) || 15 }))}
+                  className="text-xl font-black text-[#00334f] border rounded px-2 py-1 w-24"
+                />
+              ) : (
+                <div className="text-xl font-black text-[#00334f]">&lt; {config.disasterRecoveryRpoMinutes} Minutes</div>
+              )}
               <p className="text-[11px] text-slate-500">Maximum possible data loss window in severe disaster scenario.</p>
             </div>
 
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-              <span className="font-bold text-slate-500 uppercase text-[10px] block">RTO (Recovery Time Objective)</span>
-              <div className="text-xl font-black text-[#00334f]">&lt; 30 Minutes</div>
+            <div className="p-4 bg-sky-50 rounded-xl border border-sky-100 space-y-1">
+              <span className="font-bold text-sky-800 uppercase text-[10px] block">RTO (Recovery Time Objective)</span>
+              {isAdmin ? (
+                <input
+                  type="number"
+                  min={5}
+                  max={180}
+                  value={config.disasterRecoveryRtoMinutes}
+                  onChange={(e) => setConfig((c) => ({ ...c, disasterRecoveryRtoMinutes: Number(e.target.value) || 30 }))}
+                  className="text-xl font-black text-[#00334f] border rounded px-2 py-1 w-24"
+                />
+              ) : (
+                <div className="text-xl font-black text-[#00334f]">&lt; {config.disasterRecoveryRtoMinutes} Minutes</div>
+              )}
               <p className="text-[11px] text-slate-500">Time to restore full clinical operations on standby failover node.</p>
             </div>
 
@@ -1301,17 +1349,43 @@ export default function SecurityModuleView({
           </div>
 
           <div className="space-y-3 text-xs">
-            <div className="p-4 bg-slate-50 rounded-xl border space-y-2">
+            <div className="p-4 bg-teal-50 rounded-xl border border-teal-100 space-y-2">
               <span className="font-bold text-slate-800 block text-sm">Adult Health Records Policy (Sri Lanka MoH & PHSRC)</span>
               <p className="text-slate-600 leading-relaxed">
-                In compliance with the <strong>Personal Data Protection Act No. 9 of 2022 (PDPA Sri Lanka)</strong> and <strong>Private Medical Institutions (Registration) Act No. 21 of 2006 (PHSRC)</strong>, adult medical records, inpatient/outpatient notes, and diagnostic test reports are retained for a minimum of <strong>10 years</strong> from the date of the last medical consultation before eligibility for secure cryptographic archiving or de-identification.
+                Adult medical records are retained for a minimum of{" "}
+                {isAdmin ? (
+                  <input
+                    type="number"
+                    min={5}
+                    max={25}
+                    value={config.dataRetentionAdultYears}
+                    onChange={(e) => setConfig((c) => ({ ...c, dataRetentionAdultYears: Number(e.target.value) || 10 }))}
+                    className="inline-block w-14 border rounded px-1 font-bold"
+                  />
+                ) : (
+                  <strong>{config.dataRetentionAdultYears}</strong>
+                )}{" "}
+                years from the last consultation before secure archiving, in line with PDPA Act No. 9 of 2022.
               </p>
             </div>
 
-            <div className="p-4 bg-slate-50 rounded-xl border space-y-2">
+            <div className="p-4 bg-violet-50 rounded-xl border border-violet-100 space-y-2">
               <span className="font-bold text-slate-800 block text-sm">Paediatric Records Policy (Child Rights & Medico-Legal Framework)</span>
               <p className="text-slate-600 leading-relaxed">
-                Under Sri Lankan healthcare directives, clinical notes and immunization records of patients who were minors (&lt;18 years) at the time of consultation must be preserved until the patient attains <strong>21 years of age + 3 years</strong> (minimum age 24, or 10 years after last encounter, whichever is longer) to guarantee legal protection under the Age of Majority Ordinance.
+                Notes for patients who were minors must be preserved until age{" "}
+                {isAdmin ? (
+                  <input
+                    type="number"
+                    min={18}
+                    max={30}
+                    value={config.dataRetentionPaediatricAgeYears}
+                    onChange={(e) => setConfig((c) => ({ ...c, dataRetentionPaediatricAgeYears: Number(e.target.value) || 21 }))}
+                    className="inline-block w-14 border rounded px-1 font-bold"
+                  />
+                ) : (
+                  <strong>{config.dataRetentionPaediatricAgeYears}</strong>
+                )}{" "}
+                plus 3 years (or 10 years after last encounter, whichever is longer).
               </p>
             </div>
 

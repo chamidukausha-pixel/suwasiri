@@ -66,11 +66,14 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Web lobby + doctor dashboard month calendar (current month/time, prev/next month, click a date for that day’s appointments and patient details)
 - [x] Suwasiri App bookings sync to GP Care calendar (Firestore `appointments`; clinic + video; patient name/time/doctor on the selected date)
 - [x] Clicking a booked name: clinic visit → GP Exam Room; video booking → Telehealth room (doctor can Call start)
-- [x] Header search filters by patient name so the doctor sees only that patient; click opens that file only
+- [x] Header search lists matching names under the search box; clicking a name opens that patient’s clinical profile (Consultation SOAP file), not the other history-hub overlay
 - [x] Doctor dashboard Colombo clock enlarged; Lobby Active Queue counts receptionist Check In Now
 - [x] Pathology shows unread reports; Mark read lowers the unread patient count; Unreviewed tests lists tests under names
-- [x] Pathology order notifies receptionist Sample Dispatch Hub (sidebar + top-bar); click registers receptionist name
-- [x] Test/Investigation Profile catalog shared on Pathology and Sample Dispatch Hub
+- [x] Pathology order notifies receptionist Sample Dispatch Hub (sidebar + top-bar)
+- [x] Sample Dispatch Hub lists doctor-ordered specimens only (Quick-Log / Select Patient Profile, status Filters, in-page search, and Test / Investigation Profile chips removed); reception header has no Search Patients / Lab Orders / eRx box
+- [x] Sample Dispatch **Notifications** badge equals remaining hub jobs (not leftover unread alerts); finishing a job reduces the count (e.g. 3 → 2)
+- [x] After courier dispatch details are saved, that specimen leaves Sample Dispatch Hub (record remains on the patient file)
+- [x] Sample-collection **Documents** has **Add document** (Scan / Drag and drop / Browse); files write onto that patient’s GP Exam Room Documents; reception does not get **Open clinical profile**
 - [x] Video consults: Telehealth **Call start** (beside Record) opens in-browser camera/mic to the Suwasiri App Call tab — no WhatsApp
 - [x] Telehealth-issued medicines sync to Suwasiri **Call → E-Prescription**
 - [x] Suwasiri bookings show the real patient name on GP Care (Chamidu / Sakuni / family member)
@@ -87,7 +90,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Recalls & Reminders live on Receptionist / Front Desk; SMS/email via registered phone/email; completing a recall drops the active count (e.g. 5 → 4)
 - [x] Reception **Book scheduler appointment slot**: drag working doctors, sage dates, coral times, 6‑month window; in-person → Suwasiri Home **blue** card, video → **purple** card; doctor + receptionist calendars show the name on that date
 - [x] Patient Clinical Records lives on Receptionist & Front Desk; Unique Health ID → **Sync to Portal** loads the Suwasiri `users` file (name, phone, details)
-- [x] **Check walk-in availability** uses the same sage/coral 6‑month scheduler; if the session is full, reception can add up to 5 walk-ins at the end of the list; Lobby ⬆️⬇️ / place selector still reorders the queue
+- [x] **Check walk-in availability** uses the same sage/coral 6‑month scheduler; if the session is full, reception can add up to 5 walk-ins at the end of the list; Lobby ⬆️⬇️ reorders the queue
 - [x] Telehealth right rail is the clinical consultation room (not Active GP room); View Clinical Hub opens history and syncs to that patient’s Suwasiri file
 - [x] Telehealth e-Rx: view, download, and print after medicines are issued; still writes Suwasiri Call E-Prescription
 - [x] Unique Health ID Sync to Portal is clinic-scoped (PrimeCare vs other hospitals); Chamidu `SW3C6F5B5A27` / Sakuni `SW6CF9340271`
@@ -106,9 +109,41 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Sample Collections: full specimen categories + receptionist PATHOLOGY_ORDER alert + Sample Dispatch Hub
 - [x] Clinical calculators save vitals/details onto that patient’s visit history
 - [x] Telehealth: click booked name fills Active Clinical Consultation Room (replaces generic “Patient”); View Clinical Hub opens that file
-- [x] Receipts & Invoices: calendar date lists that day’s booked patients (lobby-style rows)
+- [x] Receipts & Invoices: calendar date lists that day’s booked patients; the billing panel scrolls; unpaid invoices are highlighted (amber / overdue red) and listed first
 - [x] Platform Console: doctor specialty required; published to Suwasiri Doctors tab under clinic + category
-- [x] Doctor Dashboard: Appointments / Waiting / Telehealth colourful cards; Pathology, Recalls, Documents, Clinical Alerts, Lobby Active Queue, and Check In removed
+- [x] Doctor Dashboard: Appointments / Waiting / Telehealth colourful cards stay on the doctor page (do not open receptionist Lobby); Completed Consultations uses a matching green gradient; Pathology, Recalls, Documents, Clinical Alerts, Lobby Active Queue, and Check In removed
+- [x] GP Exam Room: Clinical Record tabs (Summary through Billing) sit under the patient name; View Clinical Hub banner and vitals-notes box removed; e-Rx panel kept below
+- [x] GP Exam Room: colourful left-nav boxes (no Summary / Medications / My Health Record); click opens that section on the right; allergies and other file updates show under the patient name and persist; doctor can book from Appointments onto the clinic calendar
+- [x] GP Exam Room: clicked booking name (e.g. Chamidu) is shown on the file; Consultation is first (drag-drop reorder); Medical History + Diagnoses live inside Consultation; SOAP reason comes from the Suwasiri booking; consult/calculator/diagnosis writes Date, Issued doctor, Medical clinic; Copilot Advisor and Known Sensitivities panels removed
+- [x] GP Exam Room: Insert Calculator Score and pink calculator rail removed; Clinical Calculators sit in the teal header corner; SOAP uses stacked click-to-scroll boxes (no Quick Template); Observations & BMI left-nav removed; Pathology/Imaging have history + request; Documents/Referrals print-email-phone; referral sample templates; appointment booking includes payment method
+- [x] GP Exam Room: Consultation encounter line is the current booking (date, time, reason); modality and fee stay as booked; Medical History Appointment link lists previous dates/times and loads that visit’s SOAP; Billing removed from left nav; clinical pane is height-capped through Appointments with inner scroll
+- [x] GP Exam Room: Consultation SOAP is Subjective + Diagnoses (writes to Medical History) + Plan; Assessment and Objective note boxes removed
+- [x] Suwasiri Doctors: search by doctor name, clinic name, and all 25 Sri Lankan districts; GP Care Platform Console medical centres + doctors (e.g. Dr. Chamidu Rathnayake) publish to Firestore and show in the app
+- [x] Booking checkout: Pay at counter, Online Debit/Card, and Manual Bank Slip (receipt photo) sync to GP Care invoices; available times include today and Practice Manager roster hours
+- [x] Suwasiri CTAs use liquid pill buttons in trust blue
+- [x] Doctor Dashboard: cyan round **Clinical Shift Checklist** is draggable; the side-column checklist card was removed
+- [x] GP Care sidebar: **AI Clinical Suite** (Medical Scribe / Executive Summary / Clinical Assistant) and the standalone **Clinical Calculators** page removed; calculators remain in the GP Exam Room header
+- [x] GP Care e-prescription view: doctor **digital signature** + **SLMC digital stamp** (exam room seal and telehealth view/print)
+- [x] Doctor portal patient names show a highlighted **sex · age** badge underneath (Dashboard, GP Exam Room, Pathology, Documents, Telehealth)
+- [x] Clinical Shift Checklist FAB only on doctor portal tabs (Dashboard, GP Exam Room, Pathology, Telehealth)
+- [x] Document Management sidebar page removed; **Add document** (Scan / Drag and drop / Browse) lives on the patient profile **Documents** section
+- [x] Doctor Dashboard: **GP Exam Room (Standby)** shortcut removed
+- [x] Pathology page: colourful **Unread Pathology** card only (critical / unreviewed / total KPI cards and the Test / Investigation Profile chip strip removed; order-modal investigation dropdown kept)
+- [x] Pathology: **Inspect Full Record** removed; **View** opens the report; **Completed** files it under exam-room Pathology history and syncs to Suwasiri Vault Lab reports; **Critical / Alert** red-flags the patient and notifies Front Desk Recalls (Call + in-person / video rebook)
+- [x] Pathology & Diagnoses seeds unread sample reports (6 clinic patients: TSH/FBC, ACR, CRP/Dengue, HbA1c, LFT, Troponin/U&E) so the unread inbox is populated
+- [x] Telehealth: video consult name opens the exam-room **patient profile** beside the call (Consultation SOAP + clinical sections); **Live Consultation Notes** removed; the profile pane has its own scrollbar so the video stays still
+- [x] Telehealth lists **today’s video consults for that doctor** under the Virtual Exam Room heading; a patient file opens only after clicking a name in that list; if there is no video appointment, no profile is shown
+- [x] Doctor Dashboard: queue place cannot be changed (no ⬆️⬇️ / Manage Places); Record overlay removed from the queue; **Completed** finishes a consult and writes SOAP/diagnoses/meds/docs onto that patient’s profile (the extra completed-patient list under the green card is removed — those visits stay in the appointment queue)
+- [x] Lobby Patient queue is a scrollable list; reception **Up / Down** changes that patient’s place (saved as `queuePlace`); no #1 / #2 / #3 place dropdown; **Check In Now** shows **Waiting in lobby** plus **Call to GP Exam Room** (status only — does not open the exam room); **Active Exam Room** is a status label only; reception cannot open the patient clinical profile from Lobby, Patient Clinical Records, Unique Health ID sync, or Sample Dispatch File ID
+- [x] Sample Dispatch Hub: **Register my name** removed; **Delivered** still opens courier Sample Collections + Documents only (no Open clinical profile for reception)
+- [x] GP Exam Room Pathology history: **View** report + **Save note** on each filed result
+- [x] Super Admin / clinicians click a name on Patient Clinical Records to open the GP Exam Room profile (reception still cannot)
+- [x] Platform Console **Operations & Governance**: add employees and **Remove (resigned)**
+- [x] Practice Manager MBS & Private Fees: inline edit, add MBS item, bulk-billable column removed
+- [x] Security & RBAC: Super Admin can edit MFA / password / session / backup / retention; light colourful tabs
+- [x] Reports & Analytics: month calendar; This Month / Last Quarter / YTD 2026 filters the results panel; export Excel, Notepad, PDF; click a date for collected, outstanding, invoices, and completed consults
+- [x] Patient file from Patient Clinical Records: Reception and Super Admin do not see encounter / modality / fee or Active Clinical Consultation e-Rx
+- [x] Doctor Dashboard name click opens GP Exam Room SOAP with Active Clinical Consultation e-Rx (search medication / add to Rx) at the bottom of the Consultation record
 
 ## In progress / next
 
@@ -120,6 +155,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [ ] FCM push (`firebase_messaging` is in pubspec, not wired in UI yet)
 - [ ] Firebase Storage for vault file uploads (`fileUrl`)
 - [ ] Tighten `notifications` rules to owner-scoped (`userId == auth.uid`)
+- [ ] Deploy updated `firestore.rules` (`clinic_centers`) if not already: `firebase deploy --only firestore:rules`
 - [ ] Telehealth/Call: live WebRTC to GP Care is wired (STUN); a TURN server may be needed on some mobile networks
 - [ ] Web + mobile sync: appointments (including receptionist Book scheduler and walk-ins), Unique Health ID lookup, telehealth notes/chat, e-Rx, medical certificates, clinical calculator snapshots, and GP Care–published `clinic_doctors` are on Firestore; Vault → GP Care sync is **vaccine history only**. Remaining GP EMR charts still use the web JSON store. Tenancy/RBAC is in the web JSON store; tenancy collections are documented, not deployed.
 

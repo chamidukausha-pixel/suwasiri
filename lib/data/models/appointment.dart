@@ -20,6 +20,9 @@ class Doctor extends Equatable {
     this.latitude,
     this.longitude,
     this.photoUrl,
+    this.hospitalId = '',
+    this.branchId = '',
+    this.rosterHours = const {},
   });
 
   final String id;
@@ -36,6 +39,54 @@ class Doctor extends Equatable {
   final double? latitude;
   final double? longitude;
   final String? photoUrl;
+  final String hospitalId;
+  final String branchId;
+  /// Weekday → `{start: "16:00", end: "18:00"}` from GP Care Practice Manager.
+  final Map<String, Map<String, String>> rosterHours;
+
+  /// Platform Console published a medical centre with no doctors yet.
+  bool get isClinicOnly =>
+      id.startsWith('center-') || specialty == 'Medical Centre';
+
+  Doctor copyWith({
+    String? id,
+    String? name,
+    String? specialty,
+    String? hospital,
+    double? rating,
+    String? region,
+    int? yearsExperience,
+    int? feeLkr,
+    String? bio,
+    String? nextAvailable,
+    String? address,
+    double? latitude,
+    double? longitude,
+    String? photoUrl,
+    String? hospitalId,
+    String? branchId,
+    Map<String, Map<String, String>>? rosterHours,
+  }) {
+    return Doctor(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      specialty: specialty ?? this.specialty,
+      hospital: hospital ?? this.hospital,
+      rating: rating ?? this.rating,
+      region: region ?? this.region,
+      yearsExperience: yearsExperience ?? this.yearsExperience,
+      feeLkr: feeLkr ?? this.feeLkr,
+      bio: bio ?? this.bio,
+      nextAvailable: nextAvailable ?? this.nextAvailable,
+      address: address ?? this.address,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      photoUrl: photoUrl ?? this.photoUrl,
+      hospitalId: hospitalId ?? this.hospitalId,
+      branchId: branchId ?? this.branchId,
+      rosterHours: rosterHours ?? this.rosterHours,
+    );
+  }
 
   /// Network avatar when no clinic photo is stored.
   String get displayPhotoUrl =>
@@ -67,6 +118,9 @@ class Doctor extends Equatable {
         latitude,
         longitude,
         photoUrl,
+        hospitalId,
+        branchId,
+        rosterHours,
       ];
 
   /// GP Care Platform Console doctors published to Firestore `clinic_doctors`.
@@ -85,7 +139,23 @@ class Doctor extends Equatable {
           map['nextAvailable'] as String? ?? 'Mon–Fri · 09:00–17:00',
       address: map['address'] as String? ?? '',
       photoUrl: map['photoUrl'] as String?,
+      hospitalId: map['hospitalId'] as String? ?? '',
+      branchId: map['branchId'] as String? ?? '',
+      rosterHours: _parseRosterHours(map['rosterHours']),
     );
+  }
+
+  static Map<String, Map<String, String>> _parseRosterHours(dynamic raw) {
+    if (raw is! Map) return const {};
+    final out = <String, Map<String, String>>{};
+    raw.forEach((key, value) {
+      if (value is! Map) return;
+      final start = value['start']?.toString() ?? '';
+      final end = value['end']?.toString() ?? '';
+      if (start.isEmpty && end.isEmpty) return;
+      out[key.toString()] = {'start': start, 'end': end};
+    });
+    return out;
   }
 }
 
@@ -114,6 +184,9 @@ class Appointment extends Equatable {
     this.branchId = '',
     this.paymentMethod,
     this.feeLkr,
+    this.paymentStatus = 'PAID',
+    this.paidBySuwasiri = false,
+    this.suwasiriReceiptUrl,
   });
 
   final String id;
@@ -134,6 +207,9 @@ class Appointment extends Equatable {
   final String branchId;
   final String? paymentMethod;
   final int? feeLkr;
+  final String paymentStatus;
+  final bool paidBySuwasiri;
+  final String? suwasiriReceiptUrl;
 
   bool get isVideo => consultMode == ConsultMode.video;
 
@@ -186,8 +262,10 @@ class Appointment extends Equatable {
         'hospitalId': hospitalId,
         'branchId': branchId,
         'source': 'suwasiri_app',
-        'paymentStatus': 'PAID',
+        'paymentStatus': paymentStatus,
         'paymentMethod': paymentMethod,
+        'paidBySuwasiri': paidBySuwasiri,
+        'suwasiriReceiptUrl': suwasiriReceiptUrl,
         'feeAmount': feeLkr,
         'bookedAt': (bookedAt ?? DateTime.now()).toIso8601String(),
       };
@@ -228,6 +306,9 @@ class Appointment extends Equatable {
       paymentMethod: map['paymentMethod'] as String?,
       feeLkr: (map['feeAmount'] as num?)?.toInt() ??
           (map['feeLkr'] as num?)?.toInt(),
+      paymentStatus: map['paymentStatus'] as String? ?? 'PAID',
+      paidBySuwasiri: map['paidBySuwasiri'] == true,
+      suwasiriReceiptUrl: map['suwasiriReceiptUrl'] as String?,
     );
   }
 
@@ -251,5 +332,8 @@ class Appointment extends Equatable {
         branchId,
         paymentMethod,
         feeLkr,
+        paymentStatus,
+        paidBySuwasiri,
+        suwasiriReceiptUrl,
       ];
 }
