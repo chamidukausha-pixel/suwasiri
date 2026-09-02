@@ -16,7 +16,6 @@ import '../../data/models/appointment.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
-import '../widgets/liquid_button.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/sheet_close_bar.dart';
 import 'booking_confirm_step.dart';
@@ -140,7 +139,7 @@ Future<void> showBookingCheckoutFlow(
         ],
       ),
       actions: [
-        FilledButton(
+        LiquidFilledButton(
           onPressed: () => Navigator.pop(ctx),
           child: Text(l.t('done')),
         ),

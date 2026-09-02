@@ -145,7 +145,7 @@ class _VaccineScreenState extends State<VaccineScreen> {
               const SizedBox(height: 14),
               SizedBox(
                 width: double.infinity,
-                child: FilledButton.icon(
+                child: LiquidFilledButton.icon(
                   onPressed: _openBookingSheet,
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(58),
@@ -716,7 +716,7 @@ class _ProtocolCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          FilledButton(
+                          LiquidFilledButton(
                             onPressed: onSchedule,
                             style: FilledButton.styleFrom(
                               minimumSize: const Size(0, 36),

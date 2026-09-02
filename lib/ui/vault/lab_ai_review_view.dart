@@ -3,13 +3,22 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/models/appointment.dart';
 import '../../data/services/lab_assistant_replies.dart';
-import '../appointments/booking_checkout_flow.dart';
+
+typedef LabDoctorBookingHandler = Future<void> Function(
+  BuildContext context,
+  Doctor doctor,
+);
 
 /// Dark markdown-style lab explanation with tappable doctor names.
 class LabAiReviewView extends StatefulWidget {
-  const LabAiReviewView({super.key, required this.review});
+  const LabAiReviewView({
+    super.key,
+    required this.review,
+    this.onBookDoctor,
+  });
 
   final LabAiReview review;
+  final LabDoctorBookingHandler? onBookDoctor;
 
   @override
   State<LabAiReviewView> createState() => _LabAiReviewViewState();
@@ -24,8 +33,11 @@ class _LabAiReviewViewState extends State<LabAiReviewView> {
     super.dispose();
   }
 
-  Future<void> _book(BuildContext context, Doctor doctor) {
-    return showBookingCheckoutFlow(context, doctor: doctor);
+  Future<void> _book(BuildContext context, Doctor doctor) async {
+    final handler = widget.onBookDoctor;
+    if (handler != null) {
+      await handler(context, doctor);
+    }
   }
 
   @override
@@ -313,7 +325,7 @@ class _DoctorBookRow extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            '${specialty} · ${doctor.hospital}',
+            '$specialty · ${doctor.hospital}',
             style: const TextStyle(
               color: Color(0xFFCBD5E1),
               fontSize: 12,

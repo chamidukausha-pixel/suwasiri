@@ -8,7 +8,6 @@ import '../../data/models/appointment.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
-import '../widgets/liquid_button.dart';
 import '../widgets/suwasiri_brand_header.dart';
 import 'booking_checkout_flow.dart';
 import 'doctor_directory_intent.dart';
@@ -330,48 +329,36 @@ class _CategoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = selected ? color : AppColors.surface;
-    final fg = selected ? Colors.white : color;
+    final fg = selected ? AppColors.ink(context) : color;
 
     return MinTap(
       onTap: onTap,
-      child: Container(
+      selected: selected,
+      glowColor: selected ? AppColors.liquidGlow : color,
+      borderRadius: BorderRadius.circular(18),
+      child: SizedBox(
         width: 86,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: selected ? color : AppColors.border,
-          ),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: color.withValues(alpha: 0.25),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : null,
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: fg, size: 24),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: selected ? Colors.white : AppColors.trustBlueDark,
-                fontWeight: FontWeight.w700,
-                fontSize: 10,
-                height: 1.15,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: fg, size: 24),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: fg,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 10,
+                  height: 1.15,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

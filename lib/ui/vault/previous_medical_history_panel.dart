@@ -60,7 +60,7 @@ class PreviousMedicalHistoryPanel extends StatelessWidget {
                 decoration: const InputDecoration(labelText: 'Notes'),
               ),
               const SizedBox(height: 14),
-              FilledButton(
+              LiquidFilledButton(
                 onPressed: () => Navigator.pop(ctx, true),
                 child: const Text('Create folder'),
               ),
@@ -104,7 +104,7 @@ class PreviousMedicalHistoryPanel extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              FilledButton.icon(
+              LiquidFilledButton.icon(
                 onPressed: () => _createFolder(context),
                 icon: const Icon(Icons.create_new_folder_outlined),
                 label: const Text('Create folder'),
@@ -292,7 +292,7 @@ class _PreviousMedicalFolderPageState extends State<PreviousMedicalFolderPage> {
             ),
           ),
           const SizedBox(height: 10),
-          FilledButton(
+          LiquidFilledButton(
             onPressed: _saveNotes,
             child: const Text('Save notes'),
           ),

@@ -6,6 +6,7 @@ import '../../bloc/notification/notification_cubit.dart';
 import '../../bloc/vault/vault_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../localization/app_localizations.dart';
+import '../widgets/common_widgets.dart';
 
 /// Lanka Lab + GP Care portal sync controls (Account Settings).
 class VaultPortalSyncSection extends StatelessWidget {
@@ -266,7 +267,7 @@ class _PortalSyncCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             height: 32,
-            child: FilledButton(
+            child: LiquidFilledButton(
               onPressed: loading ? null : onSync,
               style: FilledButton.styleFrom(
                 backgroundColor: buttonColor,

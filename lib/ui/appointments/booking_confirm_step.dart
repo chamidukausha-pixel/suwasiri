@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import '../../data/catalogs/doctor_schedule_slots.dart';
 import '../../data/models/appointment.dart';
 import '../widgets/common_widgets.dart';
-import '../widgets/liquid_button.dart';
 
 /// Booking confirm UI matching the product mockup (dates, times, reason, CTA).
 class BookingConfirmStep extends StatelessWidget {

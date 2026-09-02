@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/common_widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
@@ -411,7 +412,7 @@ class _HealthIntakeScreenState extends State<HealthIntakeScreen> {
                   if (_step > 0 || widget.editing) const SizedBox(width: 10),
                   Expanded(
                     flex: 2,
-                    child: FilledButton(
+                    child: LiquidFilledButton(
                       onPressed: _next,
                       child: Text(
                         _step == _steps - 1

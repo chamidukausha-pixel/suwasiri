@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/common_widgets.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../localization/app_localizations.dart';
@@ -122,7 +123,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-              child: FilledButton(
+              child: LiquidFilledButton(
                 onPressed: () {
                   if (_index < cards.length - 1) {
                     _page.nextPage(

@@ -9,6 +9,7 @@ import '../../core/theme/app_colors.dart';
 import '../../data/catalogs/vaccine_catalog.dart';
 import '../../data/models/vaccine_models.dart';
 import '../../localization/app_localizations.dart';
+import '../widgets/common_widgets.dart';
 import '../widgets/sheet_close_bar.dart';
 
 /// National Vaccine Slot Booking sheet (MOH Scheduling Coordinator).
@@ -548,7 +549,7 @@ class VaccineBookingSheet extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     flex: 2,
-                    child: FilledButton(
+                    child: LiquidFilledButton(
                       onPressed: state.selectedSlot == null ||
                               state.bookingStage != null
                           ? null

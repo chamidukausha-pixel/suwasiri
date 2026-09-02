@@ -33,6 +33,9 @@ abstract final class AppColors {
   static const Color heartPink = Color(0xFFE11D48);
   static const Color onlineGreen = Color(0xFF22C55E);
   static const Color limePrice = Color(0xFF00E676);
+  /// Liquid button active glow (reference mockup amber).
+  static const Color liquidGlow = Color(0xFFF59E0B);
+  static const Color liquidGlowSoft = Color(0xFFFFEDD5);
 
   /// Pure black page background in dark mode.
   static const Color darkCanvas = Color(0xFF000000);

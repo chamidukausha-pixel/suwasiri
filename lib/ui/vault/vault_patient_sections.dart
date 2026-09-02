@@ -1,4 +1,4 @@
-Ôªøimport 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
@@ -18,7 +18,7 @@ import 'lab_report_detail_sheet.dart';
 import 'prescription_form_view.dart';
 import 'previous_medical_history_panel.dart';
 
-/// Pending e-prescriptions only ‚Äî shown above AI Lab Assistant in Vault.
+/// Pending e-prescriptions only ó shown above AI Lab Assistant in Vault.
 class VaultEPrescriptionSection extends StatelessWidget {
   const VaultEPrescriptionSection({super.key, required this.state});
 
@@ -123,7 +123,7 @@ class VaultEPrescriptionSection extends StatelessWidget {
                       )
                     else ...[
                       Text(
-                        '${l.t('issuedDate')}: ${pending.first.issuedAt != null ? DateFormat('d MMM yyyy ¬∑ hh:mm a').format(pending.first.issuedAt!) : '‚Äî'}',
+                        '${l.t('issuedDate')}: ${pending.first.issuedAt != null ? DateFormat('d MMM yyyy ù hh:mm a').format(pending.first.issuedAt!) : 'ù'}',
                         style: const TextStyle(
                           color: AppColors.slateMuted,
                           fontSize: 12,
@@ -451,7 +451,7 @@ class _HistoryMedicinesList extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${l.t('issuedDate')}: ${e.value.first.issuedAt != null ? DateFormat('d MMM yyyy').format(e.value.first.issuedAt!) : '‚Äî'}',
+                      '${l.t('issuedDate')}: ${e.value.first.issuedAt != null ? DateFormat('d MMM yyyy').format(e.value.first.issuedAt!) : 'ù'}',
                       style: const TextStyle(
                         color: AppColors.slateMuted,
                         fontSize: 11,
@@ -477,7 +477,7 @@ class _HistoryMedicinesList extends StatelessWidget {
                     ),
                     ...e.value.map(
                       (m) => Text(
-                        '‚Ä¢ ${m.medicine}',
+                        'ù ${m.medicine}',
                         style: const TextStyle(
                           color: AppColors.trustBlueDark,
                           fontSize: 12,
@@ -538,7 +538,7 @@ class _LabsList extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '${r.facility ?? r.issuedBy} ¬∑ ${DateFormat('d MMM yyyy').format(r.date)}',
+                            '${r.facility ?? r.issuedBy} ù ${DateFormat('d MMM yyyy').format(r.date)}',
                             style: const TextStyle(
                               color: AppColors.slateMuted,
                               fontSize: 11,
@@ -682,7 +682,7 @@ class _VaccinesList extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '${e.issuer} ¬∑ ${DateFormat('d MMM yyyy').format(e.date)}',
+                            '${e.issuer} ù ${DateFormat('d MMM yyyy').format(e.date)}',
                             style: const TextStyle(
                               color: AppColors.slateMuted,
                               fontSize: 11,
@@ -778,7 +778,7 @@ class _CertificatesList extends StatelessWidget {
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
-                  child: FilledButton.icon(
+                  child: LiquidFilledButton.icon(
                     onPressed: () async {
                       final email = user?.email ?? '';
                       if (email.isEmpty) {
@@ -858,7 +858,7 @@ class _CertificatesList extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '${c.doctor} ¬∑ ${DateFormat('d MMM yyyy').format(c.date)}',
+                            '${c.doctor} ù ${DateFormat('d MMM yyyy').format(c.date)}',
                             style: const TextStyle(
                               color: AppColors.slateMuted,
                               fontSize: 11,
@@ -934,7 +934,7 @@ class _NotesList extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                '${n.doctor} ¬∑ ${n.clinicName}',
+                '${n.doctor} ù ${n.clinicName}',
                 style: const TextStyle(
                   color: AppColors.slateMuted,
                   fontSize: 12,
@@ -1002,7 +1002,7 @@ class _NotesList extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            '${n.doctor} ¬∑ ${DateFormat('d MMM yyyy').format(n.date)}',
+                            '${n.doctor} ù ${DateFormat('d MMM yyyy').format(n.date)}',
                             style: const TextStyle(
                               color: AppColors.slateMuted,
                               fontSize: 11,

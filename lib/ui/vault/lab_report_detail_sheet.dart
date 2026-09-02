@@ -10,6 +10,8 @@ import '../../data/models/vault_report.dart';
 import '../../data/services/lab_assistant_replies.dart';
 import '../../data/services/prescription_export_service.dart';
 import '../../localization/app_localizations.dart';
+import '../appointments/booking_checkout_flow.dart';
+import '../widgets/common_widgets.dart';
 import '../widgets/sheet_close_bar.dart';
 import 'lab_ai_review_view.dart';
 
@@ -174,7 +176,7 @@ class _LabReportDetailBodyState extends State<_LabReportDetailBody> {
                     Expanded(
                       child: SizedBox(
                         height: 48,
-                        child: FilledButton.icon(
+                        child: LiquidFilledButton.icon(
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFFE8EEF5),
                             foregroundColor: AppColors.trustBlueDark,
@@ -197,7 +199,7 @@ class _LabReportDetailBodyState extends State<_LabReportDetailBody> {
                     const SizedBox(width: 10),
                     SizedBox(
                       height: 48,
-                      child: FilledButton(
+                      child: LiquidFilledButton(
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.trustBlueDark,
                           foregroundColor: Colors.white,
@@ -713,7 +715,11 @@ class _CopilotCard extends StatelessWidget {
           ],
           if (review != null) ...[
             const SizedBox(height: 10),
-            LabAiReviewView(review: review!),
+            LabAiReviewView(
+              review: review!,
+              onBookDoctor: (context, doctor) =>
+                  showBookingCheckoutFlow(context, doctor: doctor),
+            ),
           ],
           const SizedBox(height: 10),
           Wrap(
@@ -768,7 +774,7 @@ class _CopilotCard extends StatelessWidget {
               const SizedBox(width: 8),
               SizedBox(
                 height: 48,
-                child: FilledButton(
+                child: LiquidFilledButton(
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.trustBlue,
                     shape: RoundedRectangleBorder(

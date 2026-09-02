@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../widgets/common_widgets.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
@@ -853,7 +854,7 @@ class _BubbleTile extends StatelessWidget {
                 ),
               SizedBox(
                 width: double.infinity,
-                child: FilledButton.icon(
+                child: LiquidFilledButton.icon(
                   onPressed: onOpenDoctors,
                   icon: const Icon(Icons.calendar_month_outlined, size: 18),
                   label: Text(l.t('helpOpenDoctors')),

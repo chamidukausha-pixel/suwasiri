@@ -609,7 +609,7 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
                         ),
                   ),
                   const SizedBox(height: 12),
-                  FilledButton.icon(
+                  LiquidFilledButton.icon(
                     onPressed: () => MainTabScope.go(context, 1),
                     icon: const Icon(Icons.videocam_outlined),
                     label: Text(l.t('bookVideoFromDoctors')),
@@ -992,7 +992,7 @@ class _EPrescriptionCard extends StatelessWidget {
                       const SizedBox(height: 12),
                       SizedBox(
                         width: double.infinity,
-                        child: FilledButton.icon(
+                        child: LiquidFilledButton.icon(
                           onPressed: open,
                           icon: const Icon(Icons.description_outlined),
                           label: Text(l.t('viewEPrescription')),
@@ -1150,7 +1150,7 @@ class _InCallMessagesCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              FilledButton(
+              LiquidFilledButton(
                 onPressed: onSend,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size(0, 48),

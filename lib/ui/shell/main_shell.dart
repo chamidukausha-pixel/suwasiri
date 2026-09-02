@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/common_widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
@@ -14,7 +15,7 @@ import '../home/home_screen.dart';
 import '../profile/profile_screen.dart';
 import '../telehealth/telehealth_screen.dart';
 import '../vaccine/vaccine_screen.dart';
-import '../vault/vault_screen.dart';
+import '../vault/vault_tab.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/toast_overlay.dart';
 
@@ -45,11 +46,11 @@ class _MainShellState extends State<MainShell> {
             '${appt.doctorName} starts in about 5 minutes.\nOpen Call to answer when the doctor rings from Lanka GP Care.',
           ),
           actions: [
-            TextButton(
+            LiquidTextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('OK'),
             ),
-            FilledButton(
+            LiquidFilledButton(
               onPressed: () {
                 Navigator.pop(ctx);
                 _goTo(2);
@@ -91,7 +92,7 @@ class _MainShellState extends State<MainShell> {
       HomeScreen(onNavigate: _goTo, isActive: _index == 0),
       AppointmentsScreen(isActive: _index == 1),
       TelehealthScreen(isActive: _index == 2),
-      const VaultScreen(),
+      const VaultTab(),
       VaccineScreen(isActive: _index == 4),
       const ProfileScreen(),
     ];

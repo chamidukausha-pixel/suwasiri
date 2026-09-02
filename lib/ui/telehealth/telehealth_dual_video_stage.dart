@@ -162,7 +162,7 @@ class TelehealthDualVideoStage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                FilledButton.icon(
+                LiquidFilledButton.icon(
                   onPressed: joiningLive ? null : onAnswerCall,
                   icon: Icon(joiningLive ? Icons.hourglass_top : Icons.call),
                   label: Text(
@@ -180,7 +180,7 @@ class TelehealthDualVideoStage extends StatelessWidget {
         else if (canJoinLive && !liveConnected)
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: FilledButton.icon(
+            child: LiquidFilledButton.icon(
               onPressed: joiningLive ? null : onJoinLive,
               icon: Icon(joiningLive ? Icons.hourglass_top : Icons.videocam),
               label: Text(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/common_widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
@@ -206,7 +207,7 @@ class _EmailForm extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          FilledButton(
+          LiquidFilledButton(
             onPressed: loading ? null : onSubmit,
             child: loading
                 ? const SizedBox(
@@ -261,7 +262,7 @@ class _PhoneForm extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          FilledButton(
+          LiquidFilledButton(
             onPressed: loading ? null : onSubmit,
             child: Text(l.t('login')),
           ),

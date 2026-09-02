@@ -5,11 +5,18 @@ import '../../bloc/auth/auth_cubit.dart';
 import '../../bloc/vault/vault_cubit.dart';
 import '../../core/theme/app_colors.dart';
 import '../../localization/app_localizations.dart';
+import '../widgets/common_widgets.dart';
 import '../widgets/suwasiri_brand_header.dart';
-import 'patient_health_section.dart';
 
 class VaultScreen extends StatefulWidget {
-  const VaultScreen({super.key});
+  const VaultScreen({
+    super.key,
+    required this.eprescriptionBuilder,
+    required this.historyBuilder,
+  });
+
+  final Widget Function(VaultState state) eprescriptionBuilder;
+  final Widget Function(VaultState state) historyBuilder;
 
   @override
   State<VaultScreen> createState() => _VaultScreenState();
@@ -51,95 +58,94 @@ class _VaultScreenState extends State<VaultScreen> {
           prev.activeFamilyKey != curr.activeFamilyKey,
       listener: (context, state) => _loadForUser(),
       child: BlocBuilder<VaultCubit, VaultState>(
-      builder: (context, state) {
-        if (!state.unlocked) {
+        builder: (context, state) {
+          if (!state.unlocked) {
+            return SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.fingerprint,
+                          size: 64, color: AppColors.trustBlue),
+                      const SizedBox(height: 16),
+                      Text(
+                        l.t('unlockVault'),
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        l.t('unlockVaultHint'),
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 20),
+                      LiquidFilledButton.icon(
+                        onPressed: _tryUnlock,
+                        icon: const Icon(Icons.lock_open),
+                        label: Text(l.t('authenticate')),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+
           return SafeArea(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+            bottom: false,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+              children: [
+                const SuwasiriBrandHeader(),
+                const SizedBox(height: 18),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.fingerprint,
-                        size: 64, color: AppColors.trustBlue),
-                    const SizedBox(height: 16),
-                    Text(
-                      l.t('unlockVault'),
-                      style: Theme.of(context).textTheme.headlineMedium,
+                    Container(
+                      width: 4,
+                      height: 28,
+                      margin: const EdgeInsets.only(top: 4, right: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.trustBlue,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      l.t('unlockVaultHint'),
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: _tryUnlock,
-                      icon: const Icon(Icons.lock_open),
-                      label: Text(l.t('authenticate')),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l.t('medicalVault'),
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineMedium
+                                ?.copyWith(fontSize: 26),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            l.t('vaultSubtitle'),
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 16),
+                widget.eprescriptionBuilder(state),
+                if (state.loading) ...[
+                  const SizedBox(height: 12),
+                  const LinearProgressIndicator(),
+                ],
+                const SizedBox(height: 20),
+                widget.historyBuilder(state),
+              ],
             ),
           );
-        }
-
-        return SafeArea(
-          bottom: false,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-            children: [
-              const SuwasiriBrandHeader(),
-              const SizedBox(height: 18),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 4,
-                    height: 28,
-                    margin: const EdgeInsets.only(top: 4, right: 10),
-                    decoration: BoxDecoration(
-                      color: AppColors.trustBlue,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          l.t('medicalVault'),
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineMedium
-                              ?.copyWith(fontSize: 26),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          l.t('vaultSubtitle'),
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              VaultEPrescriptionSection(state: state),
-              if (state.loading) ...[
-                const SizedBox(height: 12),
-                const LinearProgressIndicator(),
-              ],
-              const SizedBox(height: 20),
-              IssuedMedicalHistorySection(state: state),
-            ],
-          ),
-        );
-      },
-      ), // BlocBuilder
-    ); // BlocListener
+        },
+      ),
+    );
   }
 }
-

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../widgets/common_widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../bloc/auth/auth_cubit.dart';
@@ -168,7 +169,7 @@ class SosOverlay extends StatelessWidget {
                               ),
                             ],
                           ),
-                          child: FilledButton.icon(
+                          child: LiquidFilledButton.icon(
                             onPressed: state.phase == SosPhase.locating
                                 ? null
                                 : () => context

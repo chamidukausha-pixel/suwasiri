@@ -337,46 +337,40 @@ class _ServiceNeedCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return MinTap(
       onTap: onTap,
-      child: Container(
+      selected: highlight,
+      glowColor: highlight ? AppColors.liquidGlow : AppColors.trustBlue,
+      borderRadius: BorderRadius.circular(20),
+      child: SizedBox(
         width: 132,
-        padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.border),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.ink(context).withValues(alpha: 0.05),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: AppColors.trustBlueSoft,
-                shape: BoxShape.circle,
+        height: 112,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.trustBlueSoft.withValues(alpha: 0.65),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: highlight ? accent : iconColor, size: 24),
               ),
-              child: Icon(icon, color: highlight ? accent : iconColor, size: 24),
-            ),
-            const Spacer(),
-            Text(
-              label,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: highlight ? AppColors.trustBlue : AppColors.trustBlueDark,
-                fontWeight: FontWeight.w800,
-                fontSize: 13,
-                height: 1.2,
+              const Spacer(),
+              Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: highlight ? AppColors.trustBlue : AppColors.trustBlueDark,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  height: 1.2,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -400,27 +394,17 @@ class _QuickActionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return MinTap(
       onTap: onTap,
-      child: Container(
+      glowColor: iconBg,
+      borderRadius: BorderRadius.circular(18),
+      child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 16, 10, 14),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.border),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.ink(context).withValues(alpha: 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
         child: Column(
           children: [
             Container(
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: iconBg,
+                color: iconBg.withValues(alpha: 0.92),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: Colors.white, size: 24),
@@ -431,7 +415,8 @@ class _QuickActionCard extends StatelessWidget {
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: AppColors.ink(context),
+              style: TextStyle(
+                color: AppColors.ink(context),
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
                 height: 1.25,
@@ -585,16 +570,17 @@ class _UpcomingAppointmentCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             height: 48,
-            child: FilledButton(
+            child: LiquidFilledButton(
+              onPressed: onDetails,
+              glowColor: Colors.white,
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.white,
+                backgroundColor: Colors.transparent,
                 foregroundColor: color,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(28),
                 ),
                 elevation: 0,
               ),
-              onPressed: onDetails,
               child: Text(
                 detailsLabel,
                 style: const TextStyle(fontWeight: FontWeight.w700),
@@ -692,16 +678,17 @@ class _UpcomingVaccineCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             height: 48,
-            child: FilledButton(
+            child: LiquidFilledButton(
+              onPressed: () => onDetails(primary),
+              glowColor: Colors.white,
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.white,
+                backgroundColor: Colors.transparent,
                 foregroundColor: AppColors.emerald,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(28),
                 ),
                 elevation: 0,
               ),
-              onPressed: () => onDetails(primary),
               child: Text(
                 l.t('viewDetailsMap'),
                 style: const TextStyle(fontWeight: FontWeight.w700),

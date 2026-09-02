@@ -7,6 +7,7 @@ import '../../data/models/vault_report.dart';
 import '../../data/services/prescription_export_service.dart';
 import '../../localization/app_localizations.dart';
 import '../vault/prescription_form_view.dart';
+import '../widgets/common_widgets.dart';
 import '../widgets/sheet_close_bar.dart';
 
 /// Sheet showing a doctor's issued script with email / MediLanka / PDF actions.
@@ -164,7 +165,7 @@ class _PrescriptionDetailSheetState extends State<_PrescriptionDetailSheet> {
             ],
           ),
           actions: [
-            FilledButton(
+            LiquidFilledButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('OK'),
             ),
@@ -341,7 +342,7 @@ class _ActionButton extends StatelessWidget {
     if (filled) {
       return SizedBox(
         width: double.infinity,
-        child: FilledButton.icon(
+        child: LiquidFilledButton.icon(
           onPressed: onTap,
           icon: child,
           label: Text(label),

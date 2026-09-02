@@ -455,7 +455,7 @@ Future<void> _showAddFamilyMemberSheet(BuildContext context) async {
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
-                    child: FilledButton(
+                    child: LiquidFilledButton(
                       onPressed: onSave,
                       child: const Text('Save'),
                     ),
