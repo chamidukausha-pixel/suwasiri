@@ -27,6 +27,7 @@ import { issueLabReportToSuwasiri, issueImagingReportToSuwasiri } from "../sync/
 import { issueVaccineHistoryToSuwasiri } from "../sync/suwasiriVaccinations";
 import { syncPatientAllergiesToSuwasiri } from "../sync/suwasiriAllergies";
 import { issueMedicalCertificateToSuwasiri } from "../sync/suwasiriCertificates";
+import { pushSuwasiriNotification } from "../sync/suwasiriNotifications";
 
 export type ClinicalTab = 
   | "summary"
@@ -164,17 +165,20 @@ export default function DoctorClinicalRecordModal({
       setSoapObjective(soap.objective || "");
       setSoapAssessment(soap.assessment || "");
       setSoapPlan(soap.plan || "");
+      setDoctorNote(soap.plan || soap.subjective || soap.assessment || "");
     } else if (match?.soapSubjective || match?.soapObjective || match?.soapAssessment || match?.soapPlan) {
       if (match.reason) setSoapReason(match.reason);
       setSoapSubjective(match.soapSubjective || "");
       setSoapObjective(match.soapObjective || "");
       setSoapAssessment(match.soapAssessment || "");
       setSoapPlan(match.soapPlan || "");
+      setDoctorNote(match.soapPlan || match.soapSubjective || match.notes || "");
     } else {
       setSoapSubjective("");
       setSoapObjective("");
       setSoapAssessment("");
       setSoapPlan("");
+      setDoctorNote("");
     }
   }, [patient.id, linkedAppointmentId]);
 
@@ -188,6 +192,7 @@ export default function DoctorClinicalRecordModal({
         setSoapObjective(soap.objective || "");
         setSoapAssessment(soap.assessment || "");
         setSoapPlan(soap.plan || "");
+        setDoctorNote(soap.plan || soap.subjective || soap.assessment || "");
         return;
       }
     }
@@ -198,6 +203,7 @@ export default function DoctorClinicalRecordModal({
       setSoapObjective(match.soapObjective || "");
       setSoapAssessment(match.soapAssessment || "");
       setSoapPlan(match.soapPlan || "");
+      setDoctorNote(match.soapPlan || match.soapSubjective || match.notes || "");
     }
   }, [selectedAppointmentId]);
 
@@ -218,17 +224,14 @@ export default function DoctorClinicalRecordModal({
 
   // Allergy add state
   const [newAllergyInput, setNewAllergyInput] = useState("");
+  const [editingAllergyIndex, setEditingAllergyIndex] = useState<number | null>(null);
   const [bookDate, setBookDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [bookTime, setBookTime] = useState("09:00 AM");
   const [bookReason, setBookReason] = useState("GP Follow-up");
   const [bookMode, setBookMode] = useState<"clinic" | "video">("clinic");
   const [bookPayment, setBookPayment] = useState("Pay at clinic");
   const [bookingSlot, setBookingSlot] = useState(false);
-  const [openSoapBoxes, setOpenSoapBoxes] = useState({
-    subjective: true,
-    objective: true,
-    plan: true,
-  });
+  const [doctorNote, setDoctorNote] = useState("");
   const [refEmail, setRefEmail] = useState("lalith.fernando@asiri.lk");
   const [docEmail, setDocEmail] = useState("");
   const [docPhone, setDocPhone] = useState("");
@@ -303,6 +306,20 @@ export default function DoctorClinicalRecordModal({
     setTimeout(() => setToastMsg(null), 3000);
   };
 
+  const allergyItems = (patient.allergies || "")
+    .split(/[,;]+/)
+    .map((s) => s.trim())
+    .filter((s) => s && !/^nkda$/i.test(s) && !/^none$/i.test(s) && !/^no known allergies$/i.test(s));
+
+  const persistAllergies = (items: string[]) => {
+    const joined = items.join(", ");
+    onUpdatePatient({ ...patient, allergies: joined });
+    void syncPatientAllergiesToSuwasiri({
+      patientId: patient.id,
+      allergies: joined,
+    });
+  };
+
   const isVideoApt = (apt: Appointment) =>
     Boolean(apt.isTelehealth || apt.type === "Telehealth Video" || String(apt.consultMode || "").toLowerCase().includes("video"));
   const encounterLabel = (apt: Appointment) =>
@@ -349,16 +366,19 @@ export default function DoctorClinicalRecordModal({
       setSoapObjective(soap.objective || "");
       setSoapAssessment(soap.assessment || "");
       setSoapPlan(soap.plan || "");
+      setDoctorNote(soap.plan || soap.subjective || soap.assessment || "");
     } else if (hist) {
       setSoapSubjective(hist.soapSubjective || "");
       setSoapObjective(hist.soapObjective || "");
       setSoapAssessment(hist.soapAssessment || "");
       setSoapPlan(hist.soapPlan || "");
+      setDoctorNote(hist.soapPlan || hist.soapSubjective || hist.notes || "");
     } else {
       setSoapSubjective("");
       setSoapObjective("");
       setSoapAssessment("");
       setSoapPlan("");
+      setDoctorNote("");
     }
     showToast(`Opened encounter ${apt.date} (${apt.time})`);
   };
@@ -690,13 +710,19 @@ export default function DoctorClinicalRecordModal({
       referralsList: [newRef, ...(patient.referralsList || [])]
     };
     onUpdatePatient(updated);
-    showToast(`eReferral dispatched to ${refSpecialist}`);
+    showToast(`Referral sent to ${refSpecialist}. ${patient.name} was notified in Suwasiri.`);
+    void pushSuwasiriNotification({
+      patientId: patient.id,
+      title: "Specialist referral issued",
+      body: `${issuedDoctor} referred you to ${refSpecialist} (${refSpecialty}). Open Suwasiri for the clinic details.`,
+      type: "appointment",
+    });
   };
 
   // Tabs — exam room hides Summary, Medications, My Health Record
   const clinicalTabs = [
     { id: "summary", label: "Summary", icon: User, box: "bg-slate-100 border-slate-300 text-slate-800", active: "bg-gradient-to-r from-slate-600 to-slate-800 text-white border-slate-700" },
-    { id: "consultation", label: "Consultation (SOAP)", icon: Stethoscope, box: "bg-sky-100 border-sky-300 text-sky-900", active: "bg-gradient-to-r from-sky-500 to-blue-600 text-white border-sky-600" },
+    { id: "consultation", label: "Consultation", icon: Stethoscope, box: "bg-sky-100 border-sky-300 text-sky-900", active: "bg-gradient-to-r from-sky-500 to-blue-600 text-white border-sky-600" },
     { id: "history", label: "Medical History", icon: Clock, box: "bg-amber-100 border-amber-300 text-amber-950", active: "bg-gradient-to-r from-amber-400 to-orange-500 text-white border-amber-500" },
     { id: "diagnoses", label: "Diagnoses", icon: FileText, box: "bg-indigo-100 border-indigo-300 text-indigo-950", active: "bg-gradient-to-r from-indigo-500 to-violet-600 text-white border-indigo-600" },
     { id: "medications", label: "Medications (Rx)", icon: Pill, box: "bg-emerald-100 border-emerald-300 text-emerald-950", active: "bg-gradient-to-r from-emerald-500 to-teal-600 text-white border-emerald-600" },
@@ -958,10 +984,10 @@ export default function DoctorClinicalRecordModal({
               <div className="border-b pb-4">
                 <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                   <Stethoscope className="w-4 h-4 text-sky-600" />
-                  Doctor Clinical Consultation & Activity Record
+                  Doctor Clinical Consultation
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Live SOAP clinical encounter logger with active appointment linkage, SLMC compliance, and MoH record sync
+                  Write one doctor note for this visit. Completed notes sync to Suwasiri Vault.
                 </p>
               </div>
 
@@ -1021,109 +1047,24 @@ export default function DoctorClinicalRecordModal({
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-3">
-                {([
-                  { id: "subjective" as const, title: "Subjective", subtitle: "History of Presenting Complaint", value: soapSubjective, set: setSoapSubjective, box: "border-sky-300 bg-sky-50", active: "ring-sky-400" },
-                ]).map((box) => {
-                  const open = openSoapBoxes[box.id];
-                  return (
-                    <div
-                      key={box.id}
-                      className={`rounded-xl border-2 ${box.box} ${open ? `ring-2 ${box.active}` : ""} overflow-hidden`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setOpenSoapBoxes((prev) => ({ ...prev, [box.id]: !prev[box.id] }))}
-                        className="w-full text-left px-3 py-2 flex items-center justify-between gap-2 shrink-0"
-                      >
-                        <span>
-                          <span className="block font-extrabold text-slate-900 text-[11px]">{box.title}</span>
-                          <span className="block text-[10px] text-slate-600">({box.subtitle})</span>
-                        </span>
-                        <span className="text-[10px] font-bold text-slate-500">{open ? "Hide" : "Open"}</span>
-                      </button>
-                      {open && (
-                        <div className="px-3 pb-3">
-                          <textarea
-                            rows={8}
-                            value={box.value}
-                            onChange={(e) => box.set(e.target.value)}
-                            className="w-full h-48 overflow-y-auto p-2 bg-white border border-slate-200 rounded-lg text-xs resize-none"
-                            placeholder={`Enter ${box.title.toLowerCase()} notes…`}
-                            readOnly={viewingPastEncounter}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                <div className={`rounded-xl border-2 border-teal-300 bg-teal-50 ${openSoapBoxes.objective ? "ring-2 ring-teal-400" : ""} overflow-hidden`}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenSoapBoxes((prev) => ({ ...prev, objective: !prev.objective }))}
-                    className="w-full text-left px-3 py-2 flex items-center justify-between gap-2 shrink-0"
-                  >
-                    <span>
-                      <span className="block font-extrabold text-slate-900 text-[11px]">Diagnoses (writes to Medical History)</span>
-                    </span>
-                    <span className="text-[10px] font-bold text-slate-500">{openSoapBoxes.objective ? "Hide" : "Open"}</span>
-                  </button>
-                  {openSoapBoxes.objective && (
-                    <div className="px-3 pb-3 space-y-3 max-h-56 overflow-y-auto">
-                      {!viewingPastEncounter && (
-                      <form onSubmit={handleAddDiagnosis} className="p-3 bg-white rounded-xl border border-teal-100 flex flex-col sm:flex-row gap-3 items-end">
-                        <div className="flex-1">
-                          <label className="block font-bold text-slate-700 mb-1">Condition:</label>
-                          <input
-                            type="text"
-                            value={newDiagnosisInput}
-                            onChange={(e) => setNewDiagnosisInput(e.target.value)}
-                            placeholder="e.g. Essential Hypertension"
-                            className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold"
-                            required
-                          />
-                        </div>
-                        <div className="w-32">
-                          <label className="block font-bold text-slate-700 mb-1">ICD-10:</label>
-                          <input
-                            type="text"
-                            value={newIcd10}
-                            onChange={(e) => setNewIcd10(e.target.value)}
-                            className="w-full p-2 bg-white border border-slate-300 rounded-lg font-mono font-bold"
-                          />
-                        </div>
-                        <button type="submit" className="px-4 py-2 bg-teal-700 text-white font-bold rounded-lg shrink-0">
-                          Add Diagnosis
-                        </button>
-                      </form>
-                      )}
-                      <div className="divide-y divide-teal-100 bg-white rounded-xl border border-teal-100 px-3">
-                        {visitDiagnoses.map((d) => (
-                          <div key={d.id} className="py-2 flex justify-between gap-2">
-                            <span className="font-bold text-slate-900">{d.condition}</span>
-                            <span className="text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded font-bold">{d.icd10Code || d.status}</span>
-                          </div>
-                        ))}
-                        {visitHistory.filter((h) => /^Diagnosis:/i.test(h.reason) && !visitDiagnoses.some((d) => h.reason.includes(d.condition))).map((h, i) => (
-                          <div key={`hist-dx-${i}`} className="py-2 flex justify-between gap-2">
-                            <span className="font-bold text-slate-900">{h.reason.replace(/^Diagnosis:\s*/i, "")}</span>
-                            <span className="text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded font-bold">{h.date}</span>
-                          </div>
-                        ))}
-                        {visitDiagnoses.length === 0 && visitHistory.every((h) => !/^Diagnosis:/i.test(h.reason)) && (
-                          <p className="text-slate-400 italic py-2">
-                            {viewingApt
-                              ? `No diagnoses issued on ${viewingApt.date}.`
-                              : "No diagnoses on file yet. Adding one writes Date, Issued doctor, and Medical clinic to Medical History."}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
+              <div className="rounded-xl border-2 border-sky-300 bg-sky-50 overflow-hidden">
+                <div className="px-3 py-2">
+                  <span className="block font-extrabold text-slate-900 text-[11px]">Doctor notes</span>
+                  <span className="block text-[10px] text-slate-600">Clinical notes for this visit — synced to Suwasiri Vault when you press Completed</span>
                 </div>
+                <div className="px-3 pb-3">
+                  <textarea
+                    rows={10}
+                    value={doctorNote}
+                    onChange={(e) => setDoctorNote(e.target.value)}
+                    className="w-full h-56 overflow-y-auto p-2 bg-white border border-slate-200 rounded-lg text-xs resize-none"
+                    placeholder="Write the consultation note…"
+                    readOnly={viewingPastEncounter}
+                  />
+                </div>
+              </div>
 
-                <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50 overflow-hidden">
+              <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50 overflow-hidden">
                   <div className="px-3 py-2 flex items-center gap-2">
                     <Pill className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
                     <span>
@@ -1153,43 +1094,6 @@ export default function DoctorClinicalRecordModal({
                   </div>
                 </div>
 
-                {([
-                  { id: "plan" as const, title: "Plan & Management", subtitle: "Rx, Investigations, Follow-up", value: soapPlan, set: setSoapPlan, box: "border-emerald-300 bg-emerald-50", active: "ring-emerald-400" },
-                ]).map((box) => {
-                  const open = openSoapBoxes[box.id];
-                  return (
-                    <div
-                      key={box.id}
-                      className={`rounded-xl border-2 ${box.box} ${open ? `ring-2 ${box.active}` : ""} overflow-hidden`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setOpenSoapBoxes((prev) => ({ ...prev, [box.id]: !prev[box.id] }))}
-                        className="w-full text-left px-3 py-2 flex items-center justify-between gap-2 shrink-0"
-                      >
-                        <span>
-                          <span className="block font-extrabold text-slate-900 text-[11px]">{box.title}</span>
-                          <span className="block text-[10px] text-slate-600">({box.subtitle})</span>
-                        </span>
-                        <span className="text-[10px] font-bold text-slate-500">{open ? "Hide" : "Open"}</span>
-                      </button>
-                      {open && (
-                        <div className="px-3 pb-3">
-                          <textarea
-                            rows={8}
-                            value={box.value}
-                            onChange={(e) => box.set(e.target.value)}
-                            className="w-full h-48 overflow-y-auto p-2 bg-white border border-slate-200 rounded-lg text-xs resize-none"
-                            placeholder={`Enter ${box.title.toLowerCase()} notes…`}
-                            readOnly={viewingPastEncounter}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
               <div className="flex justify-between items-center pt-3 border-t">
                 <div className="flex items-center gap-2 text-slate-500 text-[11px]">
                   <ShieldCheck className="w-4 h-4 text-emerald-600" />
@@ -1205,13 +1109,13 @@ export default function DoctorClinicalRecordModal({
                       date: new Date().toISOString().split("T")[0],
                       reason: soapReason || "Clinical consultation",
                       doctor: issuedDoctor,
-                      notes: `S: ${soapSubjective}\nDiagnoses: ${diagnosisLine || "—"}\nP: ${soapPlan}`,
+                      notes: doctorNote.trim() || soapReason || "Consultation completed",
                       clinicName: issuedClinic,
                       appointmentId: selectedAppointmentId || undefined,
-                      soapSubjective,
+                      soapSubjective: doctorNote,
                       soapObjective: diagnosisLine,
                       soapAssessment: diagnosisLine,
-                      soapPlan,
+                      soapPlan: doctorNote,
                     };
 
                     const targetAptId = selectedAppointmentId || patientAppointments[0]?.id || `apt-${Date.now()}`;
@@ -1239,10 +1143,10 @@ export default function DoctorClinicalRecordModal({
                       },
                       chiefComplaints: soapReason,
                       soapNotes: {
-                        subjective: soapSubjective,
+                        subjective: doctorNote,
                         objective: diagnosisLine,
                         assessment: diagnosisLine,
-                        plan: soapPlan
+                        plan: doctorNote
                       },
                       primaryDiagnosis: (patient.diagnosesList || [])[0]?.condition || "Routine Medical Review",
                       icd10Code: (patient.diagnosesList || [])[0]?.icd10Code || newIcd10 || "Z00.0",
@@ -1285,7 +1189,7 @@ export default function DoctorClinicalRecordModal({
                       lastDiastolicBp: obsDiastolic,
                       history: [newHistItem, ...(patient.history || [])],
                       medicalHistory: [
-                        `[${newHistItem.date}] ${issuedDoctor} · ${issuedClinic} · ${soapReason || "Consultation"} | S: ${soapSubjective || "—"} | Dx: ${diagnosisLine || "—"} | P: ${soapPlan || "—"}`,
+                        `[${newHistItem.date}] ${issuedDoctor} · ${issuedClinic} · ${soapReason || "Consultation"} | ${doctorNote || "—"}`,
                         ...(patient.medicalHistory || []),
                       ],
                       observationsHistory: alreadyTodayObs
@@ -1306,8 +1210,8 @@ export default function DoctorClinicalRecordModal({
                       patientName: patient.name,
                       doctor: issuedDoctor,
                       clinicName: issuedClinic,
-                      title: "Consultation notes",
-                      body: newHistItem.notes,
+                      title: "Doctor notes",
+                      body: doctorNote.trim() || soapReason || "Consultation completed",
                       appointmentId: targetAptId,
                     });
 
@@ -1334,98 +1238,6 @@ export default function DoctorClinicalRecordModal({
                   <span>Completed</span>
                 </button>
                 )}
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-xl border border-amber-200 shadow-xs space-y-3 text-xs">
-              <div>
-                <h3 className="font-bold text-sm text-slate-900">Medical History</h3>
-                <p className="text-slate-500 text-[11px]">Pick a date and time. Consultation then shows only that day’s issued diagnoses, notes, and medicines.</p>
-              </div>
-              <div className="relative">
-                <label className="block font-bold text-sky-950 text-[11px] mb-1">Appointment link</label>
-                <button
-                  type="button"
-                  onClick={() => setHistoryLinkOpen((open) => !open)}
-                  className="w-full p-2.5 bg-white border-2 border-sky-300 rounded-lg font-bold text-sky-900 text-xs flex items-center justify-between gap-2 text-left"
-                >
-                  <span className="truncate">
-                    {viewingApt ? encounterLabel(viewingApt) : "Select a previous appointment"}
-                  </span>
-                  <ChevronDown className={`w-4 h-4 shrink-0 text-sky-700 ${historyLinkOpen ? "rotate-180" : ""}`} />
-                </button>
-                {historyLinkOpen && (
-                  <div className="absolute z-30 mt-1 w-full max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg">
-                    {pastAppointments.length === 0 ? (
-                      <p className="p-3 text-slate-400 italic">No previous appointments on this file.</p>
-                    ) : pastAppointments.map((apt) => {
-                      const selected = apt.id === selectedAppointmentId;
-                      return (
-                        <button
-                          key={apt.id}
-                          type="button"
-                          onClick={() => loadEncounter(apt)}
-                          className={`w-full text-left px-3 py-2 text-xs font-bold border-b border-slate-100 last:border-0 ${
-                            selected ? "bg-sky-700 text-white" : "text-slate-800 hover:bg-sky-50"
-                          }`}
-                        >
-                          {encounterLabel(apt)}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              <div className="overflow-auto border border-amber-100 rounded-xl max-h-56">
-                <table className="w-full text-left">
-                  <thead className="bg-amber-50 text-[10px] uppercase tracking-wide text-amber-950 sticky top-0">
-                    <tr>
-                      <th className="p-2.5">Date</th>
-                      <th className="p-2.5">Issued doctor</th>
-                      <th className="p-2.5">Medical clinic</th>
-                      <th className="p-2.5">Reason</th>
-                      <th className="p-2.5">Appointment link</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-amber-50">
-                    {visitHistory.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="p-4 text-slate-400 italic">
-                          {viewingApt
-                            ? `No issued details for ${viewingApt.date}. Save the consultation, add a diagnosis, or issue medicines on that visit.`
-                            : "No history yet. Save the consultation, add a diagnosis, or update clinical calculators."}
-                        </td>
-                      </tr>
-                    ) : visitHistory.map((h, i) => {
-                      const linkedApt = appointments.find((a) => a.id === h.appointmentId) ||
-                        patientAppointments.find((a) => a.date === h.date);
-                      return (
-                        <tr key={`${h.date}-${i}`} className="align-top">
-                          <td className="p-2.5 font-mono font-bold text-slate-800 whitespace-nowrap">{h.date}</td>
-                          <td className="p-2.5 font-semibold text-slate-800">{h.doctor}</td>
-                          <td className="p-2.5 text-slate-700">{h.clinicName || issuedClinic}</td>
-                          <td className="p-2.5">
-                            <p className="font-bold text-slate-900">{h.reason}</p>
-                            <p className="text-slate-500 whitespace-pre-line mt-0.5 max-w-md">{h.notes}</p>
-                          </td>
-                          <td className="p-2.5">
-                            {linkedApt ? (
-                              <button
-                                type="button"
-                                onClick={() => loadEncounter(linkedApt)}
-                                className="text-sky-800 font-extrabold hover:underline text-left"
-                              >
-                                {encounterLabel(linkedApt)}
-                              </button>
-                            ) : (
-                              <span className="text-slate-400">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
               </div>
             </div>
             {consultationFooter}
@@ -1593,36 +1405,102 @@ export default function DoctorClinicalRecordModal({
                 <h3 className="font-bold text-sm text-slate-900">Patient Allergies & Adverse Drug Reactions</h3>
               </div>
 
-              <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-2">
+              <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-3">
                 <div className="flex items-center gap-2 text-red-800 font-bold">
                   <ShieldAlert className="w-4 h-4" />
-                  <span>Declared Severe Allergies:</span>
+                  <span>Declared allergies</span>
                 </div>
-                <p className="text-red-900 font-extrabold text-sm">{patient.allergies || "No Known Allergies"}</p>
+                {allergyItems.length === 0 ? (
+                  <p className="text-red-900 font-extrabold text-sm">No Known Allergies</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {allergyItems.map((item, index) => (
+                      <li key={`${item}-${index}`} className="flex items-center gap-2">
+                        {editingAllergyIndex === index ? (
+                          <>
+                            <input
+                              autoFocus
+                              value={newAllergyInput}
+                              onChange={(e) => setNewAllergyInput(e.target.value)}
+                              className="flex-1 p-2 bg-white border border-red-200 rounded-lg font-semibold"
+                            />
+                            <button
+                              type="button"
+                              className="px-3 py-1.5 bg-red-700 text-white font-bold rounded-lg"
+                              onClick={() => {
+                                const next = newAllergyInput.trim();
+                                if (!next) return;
+                                const items = allergyItems.map((a, i) => (i === index ? next : a));
+                                persistAllergies(items);
+                                setEditingAllergyIndex(null);
+                                setNewAllergyInput("");
+                                showToast("Allergy updated on this file and Suwasiri Profile");
+                              }}
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              className="px-3 py-1.5 bg-white border font-bold rounded-lg"
+                              onClick={() => {
+                                setEditingAllergyIndex(null);
+                                setNewAllergyInput("");
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="flex-1 text-red-900 font-extrabold text-sm">{item}</span>
+                            <button
+                              type="button"
+                              className="px-2 py-1 bg-white border border-red-200 text-red-800 font-bold rounded"
+                              onClick={() => {
+                                setEditingAllergyIndex(index);
+                                setNewAllergyInput(item);
+                              }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="px-2 py-1 bg-white border border-red-200 text-red-800 font-bold rounded"
+                              onClick={() => {
+                                persistAllergies(allergyItems.filter((_, i) => i !== index));
+                                showToast(`Removed ${item}`);
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                <label className="block font-bold text-slate-700">Update / Add Allergy:</label>
+                <label className="block font-bold text-slate-700">Add allergy:</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    value={newAllergyInput}
-                    onChange={e => setNewAllergyInput(e.target.value)}
+                    value={editingAllergyIndex === null ? newAllergyInput : ""}
+                    onChange={e => {
+                      if (editingAllergyIndex !== null) return;
+                      setNewAllergyInput(e.target.value);
+                    }}
                     placeholder="e.g. Penicillin, Aspirin, Sulfa drugs..."
                     className="flex-1 p-2 bg-white border border-slate-300 rounded-lg font-semibold"
+                    disabled={editingAllergyIndex !== null}
                   />
                   <button
                     onClick={() => {
-                      if (!newAllergyInput.trim()) return;
-                      const updatedAllergies = patient.allergies ? `${patient.allergies}, ${newAllergyInput.trim()}` : newAllergyInput.trim();
-                      const updated = { ...patient, allergies: updatedAllergies };
-                      onUpdatePatient(updated);
+                      if (editingAllergyIndex !== null || !newAllergyInput.trim()) return;
+                      persistAllergies([...allergyItems, newAllergyInput.trim()]);
                       setNewAllergyInput("");
                       showToast(`Added allergy — shown under ${patient.name} on Suwasiri Profile`);
-                      void syncPatientAllergiesToSuwasiri({
-                        patientId: patient.id,
-                        allergies: updatedAllergies,
-                      });
                     }}
                     className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white font-bold rounded-lg cursor-pointer"
                   >
@@ -2062,7 +1940,7 @@ export default function DoctorClinicalRecordModal({
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-5 text-xs">
               <div>
                 <h3 className="font-bold text-sm text-slate-900">Specialist eReferrals</h3>
-                <p className="text-slate-500 text-[11px]">Use a sample template, then print or email the letter to the related specialist.</p>
+                <p className="text-slate-500 text-[11px]">Refer a specialist. The Suwasiri patient is notified in the app.</p>
               </div>
 
               <div className="flex flex-wrap gap-1.5">
@@ -2712,8 +2590,8 @@ export default function DoctorClinicalRecordModal({
           calculatedBy={issuedDoctor}
           onClose={() => setShowCalculatorModal(false)}
           onSaveToConsultation={(text) => {
-            setSoapPlan(prev => `${prev}\n${text}`.trim());
-            showToast("Calculated score inserted into Plan notes.");
+            setDoctorNote(prev => `${prev}\n${text}`.trim());
+            showToast("Calculated score inserted into doctor notes.");
           }}
           onPersistPatient={(updated) => {
             onUpdatePatient({

@@ -143,7 +143,9 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Security & RBAC: Super Admin can edit MFA / password / session / backup / retention; light colourful tabs
 - [x] Reports & Analytics: month calendar; This Month / Last Quarter / YTD 2026 filters the results panel; export Excel, Notepad, PDF; click a date for collected, outstanding, invoices, and completed consults
 - [x] Patient file from Patient Clinical Records: Reception and Super Admin do not see encounter / modality / fee or Active Clinical Consultation e-Rx
-- [x] GP Exam Room patient file syncs to that patient’s Suwasiri app: **Completed** SOAP → Vault doctor notes & treatment; immunisations → Vault vaccine history; allergies under the Unique Health ID **name** on Profile; pathology + imaging → Vault lab reports; issued medical certificates → Vault certificates; exam-room medicines → Vault E-Prescription; Telehealth medicines → Call E-Prescription
+- [x] GP Exam Room patient file syncs to that patient’s Suwasiri app: **Completed** doctor notes → Vault; immunisations → Vault vaccine history; allergies under the Unique Health ID **name** on Profile (edit/delete); pathology + imaging → Vault lab reports; issued medical certificates → Vault certificates; exam-room medicines → Vault E-Prescription; Telehealth medicines → Call E-Prescription; specialist referral → Suwasiri notification
+- [x] GP Exam Room Consultation is one **Doctor notes** field (Subjective, medical issues this visit, and Plan & Management removed)
+- [x] Reception Recalls & Reminders In person / Video book writes Firestore `appointments` for that Suwasiri patient (Home **blue** / **purple**) and shows on the GP Care calendar that date
 
 ## In progress / next
 

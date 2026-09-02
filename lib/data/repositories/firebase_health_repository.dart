@@ -702,11 +702,28 @@ class FirebaseHealthRepository implements HealthRepository {
   }
 
   @override
-  Future<List<AppNotification>> getNotifications() async {
+  Future<List<AppNotification>> getNotifications({String? patientId}) async {
     final snap = await _notifications.orderBy('timestamp', descending: true).get();
-    return snap.docs
+    final list = snap.docs
         .map((d) => AppNotification.fromMap(d.id, d.data()))
         .toList();
+    if (patientId == null || patientId.isEmpty) return list;
+    return list
+        .where((n) => n.patientId.isEmpty || n.patientId == patientId)
+        .toList();
+  }
+
+  @override
+  Stream<List<AppNotification>> watchNotifications(String patientId) {
+    return _notifications.snapshots().map((snap) {
+      final list = snap.docs
+          .map((d) => AppNotification.fromMap(d.id, d.data()))
+          .toList()
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      return list
+          .where((n) => n.patientId.isEmpty || n.patientId == patientId)
+          .toList();
+    });
   }
 
   @override

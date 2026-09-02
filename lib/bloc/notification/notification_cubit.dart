@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -38,10 +40,21 @@ class NotificationCubit extends Cubit<NotificationState> {
   NotificationCubit(this._health) : super(const NotificationState());
 
   final HealthRepository _health;
+  StreamSubscription<List<AppNotification>>? _sub;
+  String? _patientId;
+
+  Future<void> watch(String patientId) async {
+    _patientId = patientId;
+    await _sub?.cancel();
+    _sub = _health.watchNotifications(patientId).listen((items) {
+      if (isClosed) return;
+      emit(state.copyWith(items: items, loading: false));
+    });
+  }
 
   Future<void> load() async {
     emit(state.copyWith(loading: true));
-    final items = await _health.getNotifications();
+    final items = await _health.getNotifications(patientId: _patientId);
     emit(state.copyWith(items: items, loading: false));
   }
 
@@ -59,9 +72,15 @@ class NotificationCubit extends Cubit<NotificationState> {
 
   Future<void> showToast(AppNotification notification) async {
     await _health.pushNotification(notification);
-    final items = await _health.getNotifications();
+    final items = await _health.getNotifications(patientId: _patientId);
     emit(state.copyWith(items: items, toast: notification));
   }
 
   void clearToast() => emit(state.copyWith(clearToast: true));
+
+  @override
+  Future<void> close() {
+    _sub?.cancel();
+    return super.close();
+  }
 }

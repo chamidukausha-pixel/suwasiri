@@ -8,8 +8,8 @@ export async function syncPatientAllergiesToSuwasiri(opts: {
 }): Promise<boolean> {
   if (!isFirebaseConfigured()) return false;
   const patientId = (opts.patientId || "").trim();
+  if (!patientId) return false;
   const allergies = (opts.allergies || "").trim();
-  if (!patientId || !allergies) return false;
 
   const db = getFirebaseDb();
   await setDoc(
@@ -17,7 +17,7 @@ export async function syncPatientAllergiesToSuwasiri(opts: {
     {
       clinicAllergies: allergies,
       allergiesUpdatedAt: new Date().toISOString(),
-      healthIntake: { importantAllergies: allergies },
+      ...(allergies ? { healthIntake: { importantAllergies: allergies } } : {}),
     },
     { merge: true }
   );

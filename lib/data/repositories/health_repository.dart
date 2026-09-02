@@ -62,6 +62,7 @@ abstract class HealthRepository {
   Future<List<Doctor>> getDoctors({String query = ''});
   Future<List<Appointment>> getAppointments(String patientId);
   Stream<List<Appointment>> watchAppointments(String patientId);
+  Stream<List<AppNotification>> watchNotifications(String patientId);
 
   /// Booked consult minutes for [doctorId] (upcoming only), synced from Firestore.
   Future<List<DateTime>> getDoctorBookedSlots(String doctorId);
@@ -81,7 +82,7 @@ abstract class HealthRepository {
     String? suwasiriReceiptUrl,
   });
 
-  Future<List<AppNotification>> getNotifications();
+  Future<List<AppNotification>> getNotifications({String? patientId});
   Future<void> markNotificationRead(String id);
   Future<void> pushNotification(AppNotification notification);
 

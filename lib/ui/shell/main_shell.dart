@@ -65,6 +65,7 @@ class _MainShellState extends State<MainShell> {
     final user = authState.user;
     if (user != null) {
       schedule.watch(user.id);
+      context.read<NotificationCubit>().watch(user.id);
     }
   }
 
@@ -72,6 +73,7 @@ class _MainShellState extends State<MainShell> {
     final user = authState.user;
     if (user == null) return;
     context.read<ScheduleCubit>().watch(user.id);
+    context.read<NotificationCubit>().watch(user.id);
     context.read<VaccineCubit>().bootstrap(
           user.id,
           dateOfBirth: user.effectiveDateOfBirth,

@@ -17,6 +17,7 @@ class AppNotification extends Equatable {
     required this.timestamp,
     required this.type,
     this.read = false,
+    this.patientId = '',
   });
 
   final String id;
@@ -25,6 +26,7 @@ class AppNotification extends Equatable {
   final DateTime timestamp;
   final NotificationPayloadType type;
   final bool read;
+  final String patientId;
 
   AppNotification copyWith({bool? read}) => AppNotification(
         id: id,
@@ -33,6 +35,7 @@ class AppNotification extends Equatable {
         timestamp: timestamp,
         type: type,
         read: read ?? this.read,
+        patientId: patientId,
       );
 
   Map<String, dynamic> toMap() => {
@@ -41,6 +44,7 @@ class AppNotification extends Equatable {
         'timestamp': timestamp.toIso8601String(),
         'type': type.name,
         'read': read,
+        if (patientId.isNotEmpty) 'patientId': patientId,
       };
 
   factory AppNotification.fromMap(String id, Map<String, dynamic> map) {
@@ -55,9 +59,10 @@ class AppNotification extends Equatable {
         orElse: () => NotificationPayloadType.system,
       ),
       read: map['read'] as bool? ?? false,
+      patientId: map['patientId'] as String? ?? map['userId'] as String? ?? '',
     );
   }
 
   @override
-  List<Object?> get props => [id, title, body, timestamp, type, read];
+  List<Object?> get props => [id, title, body, timestamp, type, read, patientId];
 }

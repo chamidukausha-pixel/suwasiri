@@ -119,6 +119,7 @@ import {
   type SuwasiriChartPatch,
 } from "./sync/suwasiriPatientChart";
 import { subscribeSuwasiriVaccinePatients } from "./sync/suwasiriVaccinations";
+import { pushSuwasiriNotification } from "./sync/suwasiriNotifications";
 import { sampleCategoryForTest } from "./catalogs/pathologyInvestigations";
 import {
   publishClinicCenterToSuwasiri,
@@ -1343,9 +1344,9 @@ export default function App() {
       reason: opts.reason,
       doctorId,
       doctorName,
-      hospitalId: patient?.hospitalId,
+      hospitalId: patient?.hospitalId || sessionHospitalId,
       branchId: patient?.branchId,
-      clinicName: patient?.medicalCenter,
+      clinicName: patient?.medicalCenter || activeHospital?.name,
       specialty: opts.specialty,
       consultMode: opts.consultMode || "clinic",
       isTelehealth: video,
@@ -1354,27 +1355,16 @@ export default function App() {
       throw new Error(slotResult.reason);
     }
 
-    const res = await fetch("/api/appointments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        patientId: opts.patientId,
-        time: opts.time,
-        reason: opts.reason,
-        status: opts.status || "SCHEDULED",
-        date: opts.date,
-        doctorName,
-        type: video ? "Telehealth Video" : "Standard GP Consult",
-        isTelehealth: video,
-        consultMode: video ? "video" : "clinic",
-        patientName: patient?.name,
-        source: "gp_care",
-        paymentMethod: opts.paymentMethod,
-      })
+    const when = `${opts.date} at ${opts.time}`;
+    void pushSuwasiriNotification({
+      patientId: opts.patientId,
+      title: video ? "Video consult booked" : "Clinic visit booked",
+      body: video
+        ? `${doctorName} — video consult on ${when}. It appears on your Suwasiri Home purple card and Call tab.`
+        : `${doctorName} — in-person visit on ${when}. It appears on your Suwasiri Home blue card.`,
+      type: "appointment",
     });
-    const data = await res.json();
-    if (data.state?.appointments) setAppointments(data.state.appointments);
-    if (data.state?.billing) setBilling(data.state.billing);
+
     return slotResult;
   };
 
@@ -1388,9 +1378,13 @@ export default function App() {
         time: newAptTime,
         reason: newAptReason,
         status: newAptStatus,
+        consultMode: bookingConsultMode,
       });
       setShowAptModal(false);
-      alert("Appointment registered — synced to Suwasiri App slot calendar.");
+      const [y, m] = newAptDate.split("-").map(Number);
+      if (y && m) setCalendarMonth({ year: y, month: m - 1 });
+      selectClinicDate(newAptDate);
+      alert("Appointment registered — synced to the Suwasiri App and this clinic calendar.");
     } catch (err: any) {
       console.error(err);
       alert(err?.message || "Could not book slot. It may already be taken.");
@@ -1409,15 +1403,19 @@ export default function App() {
       status: payload.isWalkInOverflow ? "CHECKED IN" : "SCHEDULED",
     });
     if (bookingRecallId) {
-      setRecalls((prev) => prev.map((r) => r.id === bookingRecallId ? {
+      const next = recalls.map((r) => r.id === bookingRecallId ? {
         ...r,
-        status: "BOOKED",
+        status: "BOOKED" as const,
         assignedDoctor: payload.doctorName,
-      } : r));
+      } : r);
+      void persistRecalls(next);
       setBookingRecallId(null);
     }
     setShowAptModal(false);
     setBookingMode("book");
+    const [y, m] = payload.date.split("-").map(Number);
+    if (y && m) setCalendarMonth({ year: y, month: m - 1 });
+    selectClinicDate(payload.date);
     const when = `${payload.date} at ${payload.time}`;
     if (payload.isWalkInOverflow) {
       alert(`${when}: walk-in added at the end of this session. Change their queue place in Lobby if needed.`);

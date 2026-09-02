@@ -624,7 +624,18 @@ class DemoHealthRepository implements HealthRepository {
   }
 
   @override
-  Future<List<AppNotification>> getNotifications() => _loadNotifs();
+  Future<List<AppNotification>> getNotifications({String? patientId}) async {
+    final list = await _loadNotifs();
+    if (patientId == null || patientId.isEmpty) return list;
+    return list
+        .where((n) => n.patientId.isEmpty || n.patientId == patientId)
+        .toList();
+  }
+
+  @override
+  Stream<List<AppNotification>> watchNotifications(String patientId) async* {
+    yield await getNotifications(patientId: patientId);
+  }
 
   @override
   Future<void> markNotificationRead(String id) async {
