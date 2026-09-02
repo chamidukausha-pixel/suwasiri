@@ -143,7 +143,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Security & RBAC: Super Admin can edit MFA / password / session / backup / retention; light colourful tabs
 - [x] Reports & Analytics: month calendar; This Month / Last Quarter / YTD 2026 filters the results panel; export Excel, Notepad, PDF; click a date for collected, outstanding, invoices, and completed consults
 - [x] Patient file from Patient Clinical Records: Reception and Super Admin do not see encounter / modality / fee or Active Clinical Consultation e-Rx
-- [x] Doctor Dashboard name click opens GP Exam Room SOAP with Active Clinical Consultation e-Rx (search medication / add to Rx) at the bottom of the Consultation record
+- [x] GP Exam Room patient file syncs to that patient’s Suwasiri app: **Completed** SOAP → Vault doctor notes & treatment; immunisations → Vault vaccine history; allergies under the Unique Health ID **name** on Profile; pathology + imaging → Vault lab reports; issued medical certificates → Vault certificates; exam-room medicines → Vault E-Prescription; Telehealth medicines → Call E-Prescription
 
 ## In progress / next
 
@@ -155,9 +155,9 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [ ] FCM push (`firebase_messaging` is in pubspec, not wired in UI yet)
 - [ ] Firebase Storage for vault file uploads (`fileUrl`)
 - [ ] Tighten `notifications` rules to owner-scoped (`userId == auth.uid`)
-- [ ] Deploy updated `firestore.rules` (`clinic_centers`) if not already: `firebase deploy --only firestore:rules`
+- [ ] Deploy updated `firestore.rules` (GP Care immunisations + allergy merge + `clinic_centers`) if not already: `firebase deploy --only firestore:rules`
 - [ ] Telehealth/Call: live WebRTC to GP Care is wired (STUN); a TURN server may be needed on some mobile networks
-- [ ] Web + mobile sync: appointments (including receptionist Book scheduler and walk-ins), Unique Health ID lookup, telehealth notes/chat, e-Rx, medical certificates, clinical calculator snapshots, and GP Care–published `clinic_doctors` are on Firestore; Vault → GP Care sync is **vaccine history only**. Remaining GP EMR charts still use the web JSON store. Tenancy/RBAC is in the web JSON store; tenancy collections are documented, not deployed.
+- [ ] Web + mobile sync: appointments, Unique Health ID lookup, telehealth notes/chat, e-Rx, medical certificates, clinical calculator snapshots, GP Care–published `clinic_doctors`, **exam-room consult notes / immunisations / allergies / pathology / imaging / certificates**, and GP Care–issued e-Rx (Vault vs Call by session) are on Firestore; Vault → GP Care sync is **vaccine history only**. Remaining GP EMR charts still use the web JSON store. Tenancy/RBAC is in the web JSON store; tenancy collections are documented, not deployed.
 
 ## Known caveats
 

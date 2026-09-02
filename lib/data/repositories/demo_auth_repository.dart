@@ -132,6 +132,12 @@ class DemoAuthRepository implements AuthRepository {
   }
 
   @override
+  Stream<UserProfile?> watchUserDoc(String userId) async* {
+    final u = await currentUser();
+    if (u != null && u.id == userId) yield u;
+  }
+
+  @override
   Future<bool> authenticateBiometrics() async {
     try {
       final can = await _localAuth.canCheckBiometrics ||

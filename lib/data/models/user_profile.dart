@@ -16,6 +16,7 @@ class UserProfile extends Equatable {
     this.ceylonHealthId,
     this.barcodeNumber,
     this.healthIntake,
+    this.clinicAllergies,
   });
 
   final String id;
@@ -31,6 +32,8 @@ class UserProfile extends Equatable {
   /// Unique barcode number (stable). Displayed on Profile ID card.
   final String? barcodeNumber;
   final PatientHealthIntake? healthIntake;
+  /// GP Care–recorded allergies (shown under the name on the Unique Health ID card).
+  final String? clinicAllergies;
 
   DateTime? get effectiveDateOfBirth =>
       dateOfBirth ?? healthIntake?.dateOfBirth;
@@ -63,6 +66,22 @@ class UserProfile extends Equatable {
     return n.isNotEmpty ? n : 'Patient';
   }
 
+  /// Allergies under the Unique Health ID name: GP Care first, then intake.
+  String get allergyLabel {
+    final clinic = clinicAllergies?.trim();
+    if (clinic != null && clinic.isNotEmpty) return clinic;
+    final intake = healthIntake;
+    final parts = <String>[
+      if ((intake?.importantAllergies ?? '').trim().isNotEmpty)
+        intake!.importantAllergies.trim(),
+      if ((intake?.medicationAllergies ?? '').trim().isNotEmpty)
+        intake!.medicationAllergies.trim(),
+      if ((intake?.otherAllergies ?? '').trim().isNotEmpty)
+        intake!.otherAllergies.trim(),
+    ];
+    return parts.toSet().join(', ');
+  }
+
   bool get isProfileComplete {
     final intake = healthIntake;
     final nicOk = nic != null && nic!.isNotEmpty;
@@ -85,6 +104,7 @@ class UserProfile extends Equatable {
     String? ceylonHealthId,
     String? barcodeNumber,
     PatientHealthIntake? healthIntake,
+    String? clinicAllergies,
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -99,6 +119,7 @@ class UserProfile extends Equatable {
       ceylonHealthId: ceylonHealthId ?? this.ceylonHealthId,
       barcodeNumber: barcodeNumber ?? this.barcodeNumber,
       healthIntake: healthIntake ?? this.healthIntake,
+      clinicAllergies: clinicAllergies ?? this.clinicAllergies,
     );
   }
 
@@ -127,6 +148,8 @@ class UserProfile extends Equatable {
         'ceylonHealthId': ceylonHealthId,
         'barcodeNumber': barcodeNumber,
         if (healthIntake != null) 'healthIntake': healthIntake!.toMap(),
+        if (clinicAllergies != null && clinicAllergies!.isNotEmpty)
+          'clinicAllergies': clinicAllergies,
       };
 
   factory UserProfile.fromMap(String id, Map<String, dynamic> map) {
@@ -151,6 +174,7 @@ class UserProfile extends Equatable {
       healthIntake: intakeRaw is Map<String, dynamic>
           ? PatientHealthIntake.fromMap(intakeRaw)
           : null,
+      clinicAllergies: map['clinicAllergies'] as String?,
     );
   }
 
@@ -168,5 +192,6 @@ class UserProfile extends Equatable {
         ceylonHealthId,
         barcodeNumber,
         healthIntake,
+        clinicAllergies,
       ];
 }

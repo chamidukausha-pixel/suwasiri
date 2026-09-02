@@ -75,3 +75,11 @@ export async function issuePrescriptionsToSuwasiri(opts: {
 
   return { count: lines.length, code };
 }
+
+/** Clinic / exam-room e-Rx stay on Vault only (Call matches the video appointment id). */
+export function clinicExamSessionId(appointmentId?: string): string {
+  const id = (appointmentId || "").trim();
+  if (!id) return `exam-${Date.now()}`;
+  if (id.startsWith("exam-")) return id;
+  return `exam-${id}`;
+}

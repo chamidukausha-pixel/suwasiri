@@ -210,6 +210,18 @@ class DemoHealthRepository implements HealthRepository {
   }
 
   @override
+  Stream<List<VaultReport>> watchVaultReports(String patientId) async* {
+    yield await getVaultReports(patientId);
+  }
+
+  @override
+  Stream<List<VaccineHistoryEntry>> watchVaccineHistory(String patientId) async* {
+    yield List<VaccineHistoryEntry>.from(
+      PatientHealthSamples.vaccineHistory(patientId: patientId),
+    );
+  }
+
+  @override
   Future<List<Prescription>> issueTelehealthPrescription({
     required String patientId,
     required String doctorName,

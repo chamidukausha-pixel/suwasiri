@@ -590,4 +590,28 @@ class VaccineHistoryEntry {
   final String facility;
   final DateTime date;
   final String doseLabel;
+
+  factory VaccineHistoryEntry.fromMap(String id, Map<String, dynamic> map) {
+    return VaccineHistoryEntry(
+      id: id,
+      patientId: map['patientId'] as String? ?? '',
+      vaccineName: map['vaccineName'] as String? ??
+          map['name'] as String? ??
+          '',
+      batchCode: map['batchNumber'] as String? ??
+          map['batchCode'] as String? ??
+          '',
+      issuer: map['issuer'] as String? ??
+          map['doctor'] as String? ??
+          'Sri Lankan GP Care',
+      facility: map['facilityName'] as String? ??
+          map['facility'] as String? ??
+          '',
+      date: DateTime.tryParse(
+            map['date'] as String? ?? map['slot'] as String? ?? '',
+          ) ??
+          DateTime.now(),
+      doseLabel: map['doseLabel'] as String? ?? map['dose'] as String? ?? '',
+    );
+  }
 }

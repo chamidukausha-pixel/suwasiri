@@ -109,7 +109,7 @@ import {
   suwasiriDoctorCatalogId,
   updateSuwasiriAppointmentStatus,
 } from "./sync/suwasiriAppointments";
-import { issuePrescriptionsToSuwasiri } from "./sync/suwasiriPrescriptions";
+import { clinicExamSessionId, issuePrescriptionsToSuwasiri } from "./sync/suwasiriPrescriptions";
 import { issueLabReportToSuwasiri } from "./sync/suwasiriLabs";
 import { lookupSuwasiriHealthId, patientVisibleAtHospital } from "./sync/suwasiriHealthId";
 import { saveConsultationNote } from "./sync/suwasiriConsultSync";
@@ -1781,7 +1781,7 @@ export default function App() {
           selectedConsultPatient.medicalCenter ||
           "PrimeCare Medical Centre - Colombo Central",
         medicines: consultMedsList,
-        sessionId: matchApt?.id,
+        sessionId: clinicExamSessionId(matchApt?.id),
         rxNumber: rxNum,
         prescriberNumber: "12908",
       });
@@ -1833,7 +1833,7 @@ export default function App() {
           doctorName: sessionUser?.name || "Dr. Priyantha Silva",
           clinicName: activeHospital?.name || selectedConsultPatient.medicalCenter || "PrimeCare Medical Centre - Colombo Central",
           medicines: consultMedsList,
-          sessionId: matchApt?.id,
+          sessionId: clinicExamSessionId(matchApt?.id),
           rxNumber: rxNum,
           prescriberNumber: "12908",
         });

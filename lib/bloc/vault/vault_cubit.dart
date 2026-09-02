@@ -143,6 +143,8 @@ class VaultCubit extends Cubit<VaultState> {
   StreamSubscription<List<Prescription>>? _rxSub;
   StreamSubscription<List<DoctorCertificate>>? _certSub;
   StreamSubscription<List<TreatmentNote>>? _notesSub;
+  StreamSubscription<List<VaultReport>>? _vaultSub;
+  StreamSubscription<List<VaccineHistoryEntry>>? _vaxSub;
   String? _patientId;
 
   Future<void> unlock(Future<bool> Function() biometric) async {
@@ -168,6 +170,16 @@ class VaultCubit extends Cubit<VaultState> {
     _notesSub = _health.watchTreatmentNotes(patientId).listen((notes) {
       if (isClosed) return;
       emit(state.copyWith(treatmentNotes: notes));
+    });
+    await _vaultSub?.cancel();
+    _vaultSub = _health.watchVaultReports(patientId).listen((reports) {
+      if (isClosed) return;
+      emit(state.copyWith(reports: reports));
+    });
+    await _vaxSub?.cancel();
+    _vaxSub = _health.watchVaccineHistory(patientId).listen((history) {
+      if (isClosed) return;
+      emit(state.copyWith(vaccineHistory: history));
     });
   }
 
@@ -206,17 +218,6 @@ class VaultCubit extends Cubit<VaultState> {
     emit(state.copyWith(
       reports: mergedReports,
       prescriptions: rx,
-      treatmentNotes:
-          List<TreatmentNote>.from(
-            PatientHealthSamples.treatmentNotes(patientId: patientId),
-          ),
-      vaccineHistory: List<VaccineHistoryEntry>.from(
-        PatientHealthSamples.vaccineHistory(patientId: patientId),
-      ),
-      certificates: PatientHealthSamples.mergeCertificatesWithSamples(
-        patientId: patientId,
-        stored: const [],
-      ),
       previousMedical: previous,
       loading: false,
     ));
@@ -302,9 +303,13 @@ class VaultCubit extends Cubit<VaultState> {
     unawaited(_rxSub?.cancel());
     unawaited(_certSub?.cancel());
     unawaited(_notesSub?.cancel());
+    unawaited(_vaultSub?.cancel());
+    unawaited(_vaxSub?.cancel());
     _rxSub = null;
     _certSub = null;
     _notesSub = null;
+    _vaultSub = null;
+    _vaxSub = null;
     _patientId = null;
     emit(VaultState(unlocked: state.unlocked));
   }
@@ -314,6 +319,8 @@ class VaultCubit extends Cubit<VaultState> {
     _rxSub?.cancel();
     _certSub?.cancel();
     _notesSub?.cancel();
+    _vaultSub?.cancel();
+    _vaxSub?.cancel();
     return super.close();
   }
 

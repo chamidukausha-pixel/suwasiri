@@ -122,6 +122,60 @@ class FirebaseHealthRepository implements HealthRepository {
     });
   }
 
+  List<VaultReport> _mergeLabReports(String patientId, List<VaultReport> live) {
+    final samples = PatientHealthSamples.sampleLabReports(patientId: patientId);
+    if (live.isEmpty) return samples;
+    final ids = {for (final r in live) r.id};
+    return [
+      ...live,
+      ...samples.where((s) => !ids.contains(s.id)),
+    ]..sort((a, b) => b.date.compareTo(a.date));
+  }
+
+  List<VaccineHistoryEntry> _mergeVaccineHistory(
+    String patientId,
+    List<VaccineHistoryEntry> live,
+  ) {
+    final samples = PatientHealthSamples.vaccineHistory(patientId: patientId);
+    if (live.isEmpty) return samples;
+    final ids = {for (final e in live) e.id};
+    return [
+      ...live,
+      ...samples.where((s) => !ids.contains(s.id)),
+    ]..sort((a, b) => b.date.compareTo(a.date));
+  }
+
+  @override
+  Stream<List<VaultReport>> watchVaultReports(String patientId) {
+    return _vault.where('patientId', isEqualTo: patientId).snapshots().map((snap) {
+      final live = snap.docs
+          .map((d) => VaultReport.fromMap(d.id, d.data()))
+          .toList()
+        ..sort((a, b) => b.date.compareTo(a.date));
+      return _mergeLabReports(patientId, live);
+    });
+  }
+
+  @override
+  Stream<List<VaccineHistoryEntry>> watchVaccineHistory(String patientId) {
+    return _vaccinations
+        .where('patientId', isEqualTo: patientId)
+        .snapshots()
+        .map((snap) {
+      final live = <VaccineHistoryEntry>[];
+      for (final d in snap.docs) {
+        final data = d.data();
+        final type = data['recordType'] as String? ?? '';
+        final source = data['source'] as String? ?? '';
+        if (type == 'booking') continue;
+        if (type != 'history' && source != 'gp_care') continue;
+        live.add(VaccineHistoryEntry.fromMap(d.id, data));
+      }
+      live.sort((a, b) => b.date.compareTo(a.date));
+      return _mergeVaccineHistory(patientId, live);
+    });
+  }
+
   @override
   Future<List<Prescription>> issueTelehealthPrescription({
     required String patientId,

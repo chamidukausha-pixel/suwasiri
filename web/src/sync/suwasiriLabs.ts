@@ -1,6 +1,6 @@
 import { collection, doc, setDoc } from "firebase/firestore";
 import { getFirebaseDb, isFirebaseConfigured } from "../firebase";
-import type { LabResult } from "../types";
+import type { ImagingRecord, LabResult } from "../types";
 
 /** Writes a reviewed GP Care pathology report into Suwasiri Vault (Lab reports). */
 export async function issueLabReportToSuwasiri(opts: {
@@ -45,4 +45,34 @@ export async function issueLabReportToSuwasiri(opts: {
     ],
   });
   return true;
+}
+
+/** Imaging studies file into the same Suwasiri Vault Lab reports list. */
+export async function issueImagingReportToSuwasiri(opts: {
+  patientId: string;
+  doctorName: string;
+  clinicName?: string;
+  imaging: ImagingRecord;
+}): Promise<boolean> {
+  const img = opts.imaging;
+  const ready = img.status === "COMPLETED" || img.status === "REPORT_READY";
+  return issueLabReportToSuwasiri({
+    patientId: opts.patientId,
+    doctorName: opts.doctorName,
+    clinicName: img.imagingCenter || opts.clinicName,
+    lab: {
+      id: img.id,
+      testName: `${img.modality} — ${img.bodyPart}`,
+      date: img.dateCompleted || img.dateOrdered,
+      status: ready ? "COMPLETED" : "PENDING",
+      result:
+        img.radiologistReport ||
+        img.findings ||
+        img.clinicalIndication ||
+        "Imaging requested",
+      remarks: img.clinicalIndication,
+      category: "Imaging",
+      labName: img.imagingCenter || opts.clinicName || "Sri Lankan GP Care",
+    },
+  });
 }

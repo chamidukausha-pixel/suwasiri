@@ -425,7 +425,7 @@ export default function TelehealthRoom({
     setSelectedDrugName("");
     setShowDrugDropdown(false);
     if (selectedPat?.id) {
-      const sessionId = callTargetApt?.id || focusAppointmentId;
+      const sessionId = callTargetApt?.id || selectedVideoApt?.id || focusAppointmentId;
       void issuePrescriptionsToSuwasiri({
         patientId: selectedPat.id,
         doctorName: sessionDoctorName,
@@ -470,8 +470,9 @@ export default function TelehealthRoom({
         doctorName: sessionDoctorName,
         clinicName: selectedPat.medicalCenter || "PrimeCare Medical Centre - Colombo Central",
         medicines: formattedMedsStrings,
-        sessionId: focusAppointmentId
+        sessionId: callTargetApt?.id
           || selectedVideoApt?.id
+          || focusAppointmentId
           || appointments.find((a) => a.patientId === selectedPat.id && isVideoBooking(a))?.id,
         rxNumber: inviteToken ? `EP-${inviteToken}` : undefined,
         prescriberNumber: "12908",

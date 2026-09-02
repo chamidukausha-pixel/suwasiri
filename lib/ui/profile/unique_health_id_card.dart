@@ -77,6 +77,17 @@ class UniqueHealthIdCard extends StatelessWidget {
                         : const Color(0xFF065F46),
                   ),
                 ),
+                if (user.allergyLabel.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '${t(context, 'importantAllergies')}: ${user.allergyLabel}',
+                    style: const TextStyle(
+                      color: Color(0xFFB91C1C),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,

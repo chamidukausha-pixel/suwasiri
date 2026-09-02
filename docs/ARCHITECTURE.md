@@ -7,7 +7,7 @@ This repo holds **two apps** developed in parallel:
 | **Mobile (Suwasiri)** | repo root (`lib/`, `android/`, `ios/`) | Flutter + Cubit/BLoC |
 | **Web (Sri Lankan GP Care)** | [`web/`](../web/) | React 19 + Vite + Express + Tailwind — **do not change this stack** |
 
-Appointments, e-prescriptions, vaccinations, telehealth signaling, **clinic doctors / centres**, and booking receipts now use the same Firebase project (`suwasiri-91824`).
+Appointments, e-prescriptions, vaccinations, telehealth signaling, **clinic doctors / centres**, consult notes, vault labs/imaging, medical certificates, and booking receipts now use the same Firebase project (`suwasiri-91824`).
 
 Do not change Flutter/mobile code unless explicitly asked.
 

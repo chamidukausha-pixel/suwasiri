@@ -1,6 +1,8 @@
 import {
   collection,
+  doc,
   onSnapshot,
+  setDoc,
   type Unsubscribe,
 } from "firebase/firestore";
 import { getFirebaseDb, isFirebaseConfigured } from "../firebase";
@@ -32,6 +34,44 @@ function mapRow(
     slot: String(data.slot || data.bookedAt || "").trim(),
     status: String(data.status || "confirmed"),
   };
+}
+
+/** Clinic-recorded immunisation → Suwasiri Vault → Vaccine history. */
+export async function issueVaccineHistoryToSuwasiri(opts: {
+  patientId: string;
+  patientName: string;
+  vaccineName: string;
+  date: string;
+  doseLabel?: string;
+  batchNumber?: string;
+  doctorName?: string;
+  clinicName?: string;
+}): Promise<boolean> {
+  if (!isFirebaseConfigured()) return false;
+  const patientId = (opts.patientId || "").trim();
+  const vaccineName = (opts.vaccineName || "").trim();
+  if (!patientId || !vaccineName) return false;
+
+  const id = `gpcare-vax-${patientId}-${Date.now()}`;
+  const dateIso = opts.date ? new Date(opts.date).toISOString() : new Date().toISOString();
+  await setDoc(doc(getFirebaseDb(), "vaccinations", id), {
+    patientId,
+    patientName: opts.patientName,
+    vaccineName,
+    date: dateIso,
+    slot: dateIso,
+    doseLabel: opts.doseLabel || "Clinic dose",
+    dose: opts.doseLabel || "Clinic dose",
+    batchNumber: opts.batchNumber || "",
+    facilityName: opts.clinicName || "Sri Lankan GP Care",
+    issuer: opts.doctorName || "Sri Lankan GP Care",
+    doctor: opts.doctorName || "Sri Lankan GP Care",
+    status: "completed",
+    recordType: "history",
+    source: "gp_care",
+    syncedAt: new Date().toISOString(),
+  });
+  return true;
 }
 
 /** Build a roster patient so vaccine-only Suwasiri members appear under their own name. */

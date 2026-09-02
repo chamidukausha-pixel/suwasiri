@@ -12,6 +12,8 @@ abstract class HealthRepository {
   Stream<List<Prescription>> watchPrescriptions(String patientId);
   Stream<List<DoctorCertificate>> watchCertificates(String patientId);
   Stream<List<TreatmentNote>> watchTreatmentNotes(String patientId);
+  Stream<List<VaultReport>> watchVaultReports(String patientId);
+  Stream<List<VaccineHistoryEntry>> watchVaccineHistory(String patientId);
   Future<void> syncLankaLab(String patientId);
   Future<void> syncGpCare(String patientId);
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:equatable/equatable.dart';
@@ -69,6 +70,8 @@ class AuthCubit extends Cubit<AuthState> {
   AuthCubit(this._auth, this._prefs) : super(const AuthState()) {
     _auth.authStateChanges().listen((user) async {
       if (user == null) {
+        await _userDocSub?.cancel();
+        _userDocSub = null;
         emit(const AuthState(status: AuthStatus.unauthenticated));
         return;
       }
@@ -79,6 +82,7 @@ class AuthCubit extends Cubit<AuthState> {
 
   final AuthRepository _auth;
   final SharedPreferences _prefs;
+  StreamSubscription<UserProfile?>? _userDocSub;
 
   // Prototype keys for in-app family member selection.
   static const String _kOwner = 'owner';
@@ -182,6 +186,8 @@ class AuthCubit extends Cubit<AuthState> {
       loading: false,
     ));
 
+    _listenUserDoc(owner.id);
+
     // Publish household Unique Health IDs so GP Care can look them up.
     for (final m in members) {
       try {
@@ -218,6 +224,7 @@ class AuthCubit extends Cubit<AuthState> {
       ownerUid: state.ownerUid,
       clearError: true,
     ));
+    _listenUserDoc(member.profile.id);
   }
 
   /// Prototype: adds/updates family member inside in-memory list.
@@ -248,6 +255,7 @@ class AuthCubit extends Cubit<AuthState> {
       user: selectAfter ? ensured : state.user,
       activeFamilyKey: selectAfter ? key : state.activeFamilyKey,
     ));
+    if (selectAfter) _listenUserDoc(ensured.id);
     final oid = ownerUid;
     if (oid != null) {
       await _persistMembers(oid, updated);
@@ -353,4 +361,35 @@ class AuthCubit extends Cubit<AuthState> {
   Future<bool> unlockVault() => _auth.authenticateBiometrics();
 
   Future<void> signOut() => _auth.signOut();
+
+  void _listenUserDoc(String userId) {
+    unawaited(_userDocSub?.cancel());
+    _userDocSub = _auth.watchUserDoc(userId).listen((updated) {
+      if (isClosed || updated == null) return;
+      final current = state.user;
+      if (current == null || current.id != updated.id) return;
+      final merged = current.copyWith(
+        clinicAllergies: updated.clinicAllergies ?? current.clinicAllergies,
+        healthIntake: updated.healthIntake ?? current.healthIntake,
+      );
+      final members = [
+        for (final m in state.familyMembers)
+          if (m.profile.id == merged.id)
+            FamilyMember(
+              key: m.key,
+              relationLabel: m.relationLabel,
+              profile: merged,
+            )
+          else
+            m,
+      ];
+      emit(state.copyWith(user: merged, familyMembers: members));
+    });
+  }
+
+  @override
+  Future<void> close() {
+    _userDocSub?.cancel();
+    return super.close();
+  }
 }

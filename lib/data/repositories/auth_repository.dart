@@ -27,5 +27,8 @@ abstract class AuthRepository {
 
   Future<void> signOut();
 
+  /// Live `users/{userId}` snapshot (GP Care allergy merges, intake edits).
+  Stream<UserProfile?> watchUserDoc(String userId);
+
   Future<bool> authenticateBiometrics();
 }

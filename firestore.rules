@@ -20,7 +20,16 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow write: if isOwner(userId) || isHouseholdPatient(userId);
+      allow delete: if isOwner(userId) || isHouseholdPatient(userId);
+      allow create: if isOwner(userId) || isHouseholdPatient(userId)
+        || (isSignedIn()
+            && request.resource.data.keys().hasOnly(['clinicAllergies', 'healthIntake', 'allergiesUpdatedAt']));
+      // Patients own the full profile. GP Care staff may merge allergy fields
+      // so they appear under the name on the Suwasiri Unique Health ID card.
+      allow update: if isOwner(userId) || isHouseholdPatient(userId)
+        || (isSignedIn()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['clinicAllergies', 'healthIntake', 'allergiesUpdatedAt']));
     }
 
     match /vault/{reportId} {
@@ -35,8 +44,11 @@ service cloud.firestore {
 
     match /vaccinations/{vaccineId} {
       allow read: if isSignedIn();
+      // App household writes bookings/history. GP Care staff record immunisations
+      // with source == 'gp_care' so they appear in Vault → Vaccine history.
       allow create, update: if isSignedIn()
-        && isHouseholdPatient(request.resource.data.patientId);
+        && (isHouseholdPatient(request.resource.data.patientId)
+            || request.resource.data.source == 'gp_care');
       allow delete: if isSignedIn()
         && isHouseholdPatient(resource.data.patientId);
     }

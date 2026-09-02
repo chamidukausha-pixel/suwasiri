@@ -165,6 +165,16 @@ class FirebaseAuthRepository implements AuthRepository {
   }
 
   @override
+  Stream<UserProfile?> watchUserDoc(String userId) {
+    if (userId.isEmpty) return Stream.value(null);
+    return _users.doc(userId).snapshots().map((snap) {
+      final data = snap.data();
+      if (!snap.exists || data == null) return null;
+      return UserProfile.fromMap(snap.id, data);
+    });
+  }
+
+  @override
   Future<bool> authenticateBiometrics() async {
     try {
       final can = await _localAuth.canCheckBiometrics ||

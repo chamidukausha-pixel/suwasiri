@@ -329,7 +329,6 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
       if (!mounted) return;
       final pending = list.where((p) {
         if (p.sentToPharmacare) return false;
-        if (p.source == 'gp_care') return true;
         return p.sessionId != null && p.sessionId == appt.id;
       }).toList();
       setState(() {

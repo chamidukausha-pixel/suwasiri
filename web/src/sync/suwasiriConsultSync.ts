@@ -36,6 +36,7 @@ export async function saveConsultationNote(opts: {
   clinicName?: string;
   body: string;
   appointmentId?: string;
+  title?: string;
 }): Promise<void> {
   if (!isFirebaseConfigured() || !opts.patientId || !opts.body.trim()) return;
   await addDoc(collection(getFirebaseDb(), "consultation_notes"), {
@@ -43,7 +44,7 @@ export async function saveConsultationNote(opts: {
     patientName: opts.patientName,
     doctor: opts.doctor,
     clinicName: opts.clinicName || "Sri Lankan GP Care",
-    title: "Live consultation notes",
+    title: opts.title?.trim() || "Live consultation notes",
     body: opts.body.trim(),
     date: new Date().toISOString(),
     appointmentId: opts.appointmentId || "",

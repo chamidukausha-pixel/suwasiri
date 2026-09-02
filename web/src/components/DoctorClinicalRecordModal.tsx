@@ -10,7 +10,7 @@ import {
   Patient, VaccineRecord, LabResult, PrescriptionRecord, LabOrder, 
   ImagingRecord, ReferralRecord, CarePlanRecord, MyHealthRecordDoc, 
   ObservationRecord, Appointment, Billing, DoctorConsultationActivity,
-  ClinicalDocument
+  ClinicalDocument, MedicalCertificateRecord
 } from "../types";
 import { 
   calculateBmi, calculateAustralianCvdRisk, calculateAusdrisk, 
@@ -21,7 +21,12 @@ import { PATHOLOGY_INVESTIGATIONS } from "../catalogs/pathologyInvestigations";
 import ClinicalCalculatorsModal from "./ClinicalCalculatorsModal";
 import PatientSexAgeBadge from "./PatientSexAgeBadge";
 import PatientCriticalAlertBadge from "./PatientCriticalAlertBadge";
-import { issuePrescriptionsToSuwasiri } from "../sync/suwasiriPrescriptions";
+import { clinicExamSessionId, issuePrescriptionsToSuwasiri } from "../sync/suwasiriPrescriptions";
+import { saveConsultationNote } from "../sync/suwasiriConsultSync";
+import { issueLabReportToSuwasiri, issueImagingReportToSuwasiri } from "../sync/suwasiriLabs";
+import { issueVaccineHistoryToSuwasiri } from "../sync/suwasiriVaccinations";
+import { syncPatientAllergiesToSuwasiri } from "../sync/suwasiriAllergies";
+import { issueMedicalCertificateToSuwasiri } from "../sync/suwasiriCertificates";
 
 export type ClinicalTab = 
   | "summary"
@@ -265,6 +270,28 @@ export default function DoctorClinicalRecordModal({
   const [imagingModality, setImagingModality] = useState<ImagingRecord["modality"]>("X-ray");
   const [imagingBodyPart, setImagingBodyPart] = useState("Chest PA & Lateral");
   const [imagingIndication, setImagingIndication] = useState("Persistent cough > 2 weeks, exclude focal consolidation");
+
+  const [vaxName, setVaxName] = useState("");
+  const [vaxDate, setVaxDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [vaxDose, setVaxDose] = useState("1st Dose");
+  const [vaxBatch, setVaxBatch] = useState("");
+  const [vaxSaving, setVaxSaving] = useState(false);
+
+  const [mcDiagnosis, setMcDiagnosis] = useState("");
+  const [mcStartDate, setMcStartDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [mcEndDate, setMcEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [mcNumDays, setMcNumDays] = useState(1);
+  const [mcStatus, setMcStatus] = useState<MedicalCertificateRecord["status"]>("UNFIT_FOR_WORK");
+  const [mcRemarks, setMcRemarks] = useState("");
+  const [mcSaving, setMcSaving] = useState(false);
+
+  useEffect(() => {
+    if (!mcStartDate || !mcEndDate) return;
+    const start = new Date(mcStartDate);
+    const end = new Date(mcEndDate);
+    const diff = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+    setMcNumDays(diff > 0 ? diff : 1);
+  }, [mcStartDate, mcEndDate]);
 
   // Referral State
   const [refSpecialist, setRefSpecialist] = useState("Dr. Lalith Fernando (Cardiologist)");
@@ -521,14 +548,28 @@ export default function DoctorClinicalRecordModal({
     };
     onUpdatePatient(updated);
     setNewMedName("");
-    showToast(`Issued e-Rx for ${newMedName} — synced to Suwasiri Vault → E-Prescription`);
+    const videoConsult =
+      consultModality === "Telehealth Video" ||
+      Boolean(
+        viewingApt?.isTelehealth ||
+        viewingApt?.type === "Telehealth Video" ||
+        String(viewingApt?.consultMode || "").toLowerCase().includes("video")
+      );
+    const sessionId = videoConsult
+      ? (linkedAppointmentId || selectedAppointmentId || viewingApt?.id)
+      : clinicExamSessionId(selectedAppointmentId || linkedAppointmentId);
+    showToast(
+      videoConsult
+        ? `Issued e-Rx for ${newMedName} — synced to Suwasiri Call → E-Prescription`
+        : `Issued e-Rx for ${newMedName} — synced to Suwasiri Vault → E-Prescription`
+    );
     void issuePrescriptionsToSuwasiri({
       patientId: patient.id,
-      doctorName: "Dr. Priyantha Silva",
-      clinicName: patient.medicalCenter || "PrimeCare Medical Centre - Colombo Central",
+      doctorName: issuedDoctor,
+      clinicName: issuedClinic,
       medicines: [`${newMedName} [${newMedDose}]`],
       rxNumber: newRx.rxNumber,
-      sessionId: appointments.find((a) => a.patientId === patient.id && a.status !== "COMPLETED")?.id,
+      sessionId,
       prescriberNumber: "12908",
     });
   };
@@ -582,7 +623,17 @@ export default function DoctorClinicalRecordModal({
     );
     onUpdatePatient({ ...patient, labResults: nextLabs });
     setSavingPathNoteId(labId);
-    showToast("Pathology note saved on this report.");
+    const lab = nextLabs.find((lr) => lr.id === labId);
+    if (lab) {
+      void issueLabReportToSuwasiri({
+        patientId: patient.id,
+        doctorName: issuedDoctor,
+        clinicName: issuedClinic,
+        lab: { ...lab, remarks: note || lab.remarks, category: lab.category || "Pathology" },
+        comment: note,
+      });
+    }
+    showToast("Pathology note saved and synced to Suwasiri Vault → Lab reports.");
     window.setTimeout(() => setSavingPathNoteId(null), 1200);
   };
 
@@ -606,7 +657,13 @@ export default function DoctorClinicalRecordModal({
       imagingRecords: [newImg, ...(patient.imagingRecords || [])]
     };
     onUpdatePatient(updated);
-    showToast(`Imaging eRequest generated: ${imagingModality} - ${imagingBodyPart}`);
+    showToast(`Imaging synced to Suwasiri Vault → Lab reports: ${imagingModality} — ${imagingBodyPart}`);
+    void issueImagingReportToSuwasiri({
+      patientId: patient.id,
+      doctorName: issuedDoctor,
+      clinicName: issuedClinic,
+      imaging: newImg,
+    });
   };
 
   // Add Referral
@@ -1237,6 +1294,23 @@ export default function DoctorClinicalRecordModal({
                     };
                     onUpdatePatient(updatedPatient);
 
+                    if ((updatedPatient.allergies || "").trim()) {
+                      void syncPatientAllergiesToSuwasiri({
+                        patientId: patient.id,
+                        allergies: String(updatedPatient.allergies),
+                      });
+                    }
+
+                    void saveConsultationNote({
+                      patientId: patient.id,
+                      patientName: patient.name,
+                      doctor: issuedDoctor,
+                      clinicName: issuedClinic,
+                      title: "Consultation notes",
+                      body: newHistItem.notes,
+                      appointmentId: targetAptId,
+                    });
+
                     // Update corresponding appointment
                     if (onUpdateAppointment) {
                       const existingApt =
@@ -1252,7 +1326,7 @@ export default function DoctorClinicalRecordModal({
                       }
                     }
 
-                    showToast("Consultation completed. Notes are on this patient’s profile and in Completed Consultations.");
+                    showToast("Consultation completed. Notes synced to Suwasiri Vault → Doctor notes & treatment.");
                   }}
                   className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-md cursor-pointer flex items-center gap-2"
                 >
@@ -1544,7 +1618,11 @@ export default function DoctorClinicalRecordModal({
                       const updated = { ...patient, allergies: updatedAllergies };
                       onUpdatePatient(updated);
                       setNewAllergyInput("");
-                      showToast(`Added Allergy: ${newAllergyInput}`);
+                      showToast(`Added allergy — shown under ${patient.name} on Suwasiri Profile`);
+                      void syncPatientAllergiesToSuwasiri({
+                        patientId: patient.id,
+                        allergies: updatedAllergies,
+                      });
                     }}
                     className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white font-bold rounded-lg cursor-pointer"
                   >
@@ -1674,10 +1752,77 @@ export default function DoctorClinicalRecordModal({
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-4 text-xs">
               <div className="flex justify-between items-center">
                 <div>
-                  <h3 className="font-bold text-sm text-slate-900">Australian Immunisation Register (AIR) Records</h3>
-                  <p className="text-slate-500">Childhood schedule, COVID-19, seasonal influenza, and travel vaccines</p>
+                  <h3 className="font-bold text-sm text-slate-900">Immunisation records</h3>
+                  <p className="text-slate-500">Record a clinic dose to sync it to Suwasiri Vault → Vaccine history.</p>
                 </div>
               </div>
+
+              <form
+                className="p-4 bg-lime-50 rounded-xl border border-lime-200 space-y-3"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!vaxName.trim() || vaxSaving) return;
+                  setVaxSaving(true);
+                  const record: VaccineRecord = {
+                    vaccineName: vaxName.trim(),
+                    date: vaxDate,
+                    dose: vaxDose,
+                    batchNumber: vaxBatch.trim() || `GP-${Date.now()}`,
+                    status: "completed",
+                    site: issuedClinic,
+                    providerNumber: issuedDoctor,
+                    airSyncStatus: "SYNCED_TO_AIR",
+                  };
+                  onUpdatePatient({
+                    ...patient,
+                    vaccineRecords: [record, ...(patient.vaccineRecords || [])],
+                  });
+                  try {
+                    await issueVaccineHistoryToSuwasiri({
+                      patientId: patient.id,
+                      patientName: patient.name,
+                      vaccineName: record.vaccineName,
+                      date: record.date,
+                      doseLabel: record.dose,
+                      batchNumber: record.batchNumber,
+                      doctorName: issuedDoctor,
+                      clinicName: issuedClinic,
+                    });
+                    showToast(`${record.vaccineName} synced to Suwasiri Vault → Vaccine history`);
+                    setVaxName("");
+                    setVaxBatch("");
+                  } catch {
+                    showToast("Could not sync immunisation to Suwasiri. Check Firebase.");
+                  } finally {
+                    setVaxSaving(false);
+                  }
+                }}
+              >
+                <h4 className="font-extrabold text-lime-950 text-xs uppercase tracking-wide">Record immunisation</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Vaccine</label>
+                    <input value={vaxName} onChange={(e) => setVaxName(e.target.value)} placeholder="e.g. Influenza 2026, Tdap" className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold" required />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Date</label>
+                    <input type="date" value={vaxDate} onChange={(e) => setVaxDate(e.target.value)} className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold" />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Dose</label>
+                    <input value={vaxDose} onChange={(e) => setVaxDose(e.target.value)} className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold" />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Batch</label>
+                    <input value={vaxBatch} onChange={(e) => setVaxBatch(e.target.value)} placeholder="Optional batch number" className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold" />
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <button type="submit" disabled={vaxSaving} className="px-4 py-2 bg-[#00334f] text-white font-bold rounded-lg disabled:opacity-60">
+                    {vaxSaving ? "Syncing…" : "Record & sync to Suwasiri"}
+                  </button>
+                </div>
+              </form>
 
               <div className="divide-y divide-slate-100">
                 {(patient.vaccineRecords || []).map((v, i) => (
@@ -2057,7 +2202,7 @@ export default function DoctorClinicalRecordModal({
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                 <div>
                   <h3 className="font-bold text-sm text-slate-900">Documents history</h3>
-                  <p className="text-slate-500 text-[11px]">Scan or drop files onto this patient’s chart from here.</p>
+                  <p className="text-slate-500 text-[11px]">Scan or drop files onto this patient’s chart, or issue a medical certificate to Suwasiri Vault.</p>
                 </div>
                 {examAddDocMode !== "chooser" && (
                 <button
@@ -2069,6 +2214,82 @@ export default function DoctorClinicalRecordModal({
                 </button>
                 )}
               </div>
+
+              <form
+                className="p-4 bg-amber-50 rounded-xl border border-amber-200 space-y-3"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!mcDiagnosis.trim() || mcSaving) return;
+                  setMcSaving(true);
+                  const newMC: MedicalCertificateRecord = {
+                    id: `MC-${patient.id}-${Date.now()}`,
+                    date: new Date().toISOString().split("T")[0],
+                    diagnosis: mcDiagnosis.trim(),
+                    startDate: mcStartDate,
+                    endDate: mcEndDate,
+                    numDays: mcNumDays,
+                    status: mcStatus,
+                    doctorName: issuedDoctor,
+                    doctorRegNo: "SLMC-48291",
+                    additionalRemarks: mcRemarks,
+                    emailStatus: "NOT_SENT",
+                    recipientEmail: patient.email || "",
+                    suwasiriSyncStatus: "SYNCING",
+                    lankalabSyncStatus: "NOT_SYNCED",
+                  };
+                  try {
+                    const synced = await issueMedicalCertificateToSuwasiri({
+                      patientId: patient.id,
+                      patientName: patient.name,
+                      certificate: newMC,
+                      clinicName: issuedClinic,
+                    });
+                    newMC.suwasiriSyncStatus = synced ? "SYNCED" : "FAILED";
+                    if (synced) newMC.suwasiriSyncTime = new Date().toISOString();
+                    onUpdatePatient({
+                      ...patient,
+                      medicalCertificatesList: [newMC, ...(patient.medicalCertificatesList || [])],
+                    });
+                    showToast(
+                      synced
+                        ? "Medical certificate issued to Suwasiri Vault → Medical certificates"
+                        : "Saved on the file. Could not reach Suwasiri Vault."
+                    );
+                    setMcDiagnosis("");
+                    setMcRemarks("");
+                  } catch {
+                    showToast("Could not issue the medical certificate.");
+                  } finally {
+                    setMcSaving(false);
+                  }
+                }}
+              >
+                <h4 className="font-extrabold text-amber-950 text-xs uppercase tracking-wide">Issue medical certificate</h4>
+                <p className="text-[11px] text-slate-600">Writes to this patient’s Suwasiri Vault → Medical certificates.</p>
+                <input
+                  required
+                  value={mcDiagnosis}
+                  onChange={(e) => setMcDiagnosis(e.target.value)}
+                  placeholder="Diagnosis / leave reason"
+                  className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold"
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input type="date" value={mcStartDate} onChange={(e) => setMcStartDate(e.target.value)} className="p-2 bg-white border rounded-lg" />
+                  <input type="date" value={mcEndDate} onChange={(e) => setMcEndDate(e.target.value)} className="p-2 bg-white border rounded-lg" />
+                  <select value={mcStatus} onChange={(e) => setMcStatus(e.target.value as MedicalCertificateRecord["status"])} className="p-2 bg-white border rounded-lg font-semibold">
+                    <option value="UNFIT_FOR_WORK">Unfit for work</option>
+                    <option value="FIT_FOR_LIGHT_DUTY">Fit for light duty</option>
+                    <option value="FIT_FOR_DUTY">Fit for duty</option>
+                  </select>
+                </div>
+                <p className="text-[11px] font-bold text-[#00334f]">{mcNumDays} day(s)</p>
+                <textarea value={mcRemarks} onChange={(e) => setMcRemarks(e.target.value)} rows={2} placeholder="Additional instructions (optional)" className="w-full p-2 bg-white border rounded-lg" />
+                <div className="flex justify-end">
+                  <button type="submit" disabled={mcSaving} className="px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-lg disabled:opacity-60">
+                    {mcSaving ? "Issuing…" : "Issue certificate"}
+                  </button>
+                </div>
+              </form>
 
               {examAddDocMode && (
                 <div className="bg-white rounded-xl border border-slate-200 shadow-md overflow-hidden">

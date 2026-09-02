@@ -39,7 +39,7 @@ Keep `web/` as the exact React/Vite/Express clinic portal. Do not change Flutter
 
 1. Document mapping of web models → Firestore collections ([WEB.md](WEB.md)) — tenancy collections listed in [FIREBASE.md](FIREBASE.md)
 2. Wire web `server.ts` / client to Firebase Auth + Firestore (`suwasiri-91824`) without changing the UI framework
-3. Shared appointments (live), GP Care e-Rx → Vault, and Suwasiri vaccine history → GP Care. Receptionist Book scheduler writes clinic/video slots to the same `appointments` collection (Home blue/purple). Remaining vault/labs notes stay JSON until tenancy Firestore.
+3. Shared appointments (live), GP Care e-Rx → Vault (exam room) / Call (telehealth), consult notes, immunisations, allergies, pathology/imaging, certificates, and Suwasiri vaccine history → GP Care. Receptionist Book scheduler writes clinic/video slots to the same `appointments` collection (Home blue/purple). Remaining GP EMR charts still use the web JSON store.
 4. Role-aware access: Platform Super Admin can open every web module; Hospital Super Admin same within a tenant; committed RBAC hides staff nav. Mobile stays patient-only.
 
 ## Do not regress
