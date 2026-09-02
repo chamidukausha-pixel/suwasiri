@@ -1,7 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Check, GripVertical, Phone, Video, X } from "lucide-react";
 import type { Appointment, Patient, StaffProvider } from "../types";
-import { parseClock, suwasiriDoctorCatalogId } from "../sync/suwasiriAppointments";
+import {
+  appointmentPatientName,
+  bookingOnSlot,
+  bookingsForDoctorOnDate,
+  formatAmPm,
+  parseClock,
+} from "../sync/suwasiriAppointments";
 
 const SLOT_TIMES = [
   "09:00", "09:30", "10:00", "10:30", "11:15", "11:45",
@@ -34,6 +40,10 @@ function monthName(d: Date) {
   return d.toLocaleDateString("en-GB", { month: "long" });
 }
 
+function longDate(d: Date) {
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
+
 function initials(name: string) {
   const clean = name.replace(/^Dr\.?\s*/i, "").trim();
   const parts = clean.split(/\s+/).filter(Boolean);
@@ -42,18 +52,21 @@ function initials(name: string) {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-function slotTaken(appointments: Appointment[], doctorName: string, dateKey: string, time24: string) {
-  const doctorId = suwasiriDoctorCatalogId({ doctorName });
-  const { hours, minutes } = parseClock(time24);
-  return appointments.some((a) => {
-    if (a.status === "CANCELLED" || a.status === "COMPLETED") return false;
-    const sameDoctor =
-      (a.doctorName || "").toLowerCase() === doctorName.toLowerCase() ||
-      suwasiriDoctorCatalogId({ doctorName: a.doctorName }) === doctorId;
-    if (!sameDoctor || a.date !== dateKey) return false;
-    const t = parseClock(a.time || "");
-    return t.hours === hours && t.minutes === minutes;
-  });
+function slotTaken(
+  appointments: Appointment[],
+  doctor: StaffProvider | undefined,
+  dateKey: string,
+  time24: string
+) {
+  if (!doctor) return false;
+  return Boolean(
+    bookingOnSlot(appointments, {
+      doctorName: doctor.name,
+      doctorStaffId: doctor.id,
+      dateKey,
+      time: time24,
+    })
+  );
 }
 
 export interface ReceptionBookPayload {
@@ -62,6 +75,7 @@ export interface ReceptionBookPayload {
   time: string;
   reason: string;
   doctorName: string;
+  doctorStaffId?: string;
   specialty: string;
   consultMode: "clinic" | "video";
   isWalkInOverflow?: boolean;
@@ -78,6 +92,7 @@ interface Props {
   walkInMode?: boolean;
   walkInOverflowUsed?: number;
   initialConsultMode?: "clinic" | "video";
+  lockPatient?: boolean;
   onClose: () => void;
   onConfirm: (payload: ReceptionBookPayload) => Promise<void> | void;
 }
@@ -93,6 +108,7 @@ export default function ReceptionBookingScheduler({
   includeToday = false,
   walkInMode = false,
   walkInOverflowUsed = 0,
+  lockPatient = false,
   onClose,
   onConfirm,
 }: Props) {
@@ -128,8 +144,16 @@ export default function ReceptionBookingScheduler({
 
   const freeCount = (key: string) => {
     if (!doctor) return 0;
-    return SLOT_TIMES.filter((t) => !slotTaken(appointments, doctor.name, key, t)).length;
+    return SLOT_TIMES.filter((t) => !slotTaken(appointments, doctor, key, t)).length;
   };
+
+  const bookedToday = doctor
+    ? bookingsForDoctorOnDate(appointments, {
+        doctorName: doctor.name,
+        doctorStaffId: doctor.id,
+        dateKey,
+      })
+    : [];
 
   const openSlots = doctor ? freeCount(dateKey) : 0;
   const overflowLeft = Math.max(0, 5 - walkInOverflowUsed);
@@ -150,6 +174,7 @@ export default function ReceptionBookingScheduler({
         time: overflowTimes[Math.min(walkInOverflowUsed, overflowTimes.length - 1)],
         reason: "Walk-in overflow — end of session",
         doctorName: doctor.name,
+        doctorStaffId: doctor.id,
         specialty: doctor.specialty || "General Practice",
         consultMode: "clinic",
         isWalkInOverflow: true,
@@ -176,7 +201,7 @@ export default function ReceptionBookingScheduler({
       setError("Select a patient, doctor, date, and time.");
       return;
     }
-    if (slotTaken(appointments, doctor.name, dateKey, time24)) {
+    if (slotTaken(appointments, doctor, dateKey, time24)) {
       setError("That slot is already booked. Choose another time.");
       return;
     }
@@ -189,6 +214,7 @@ export default function ReceptionBookingScheduler({
         time: time24,
         reason: consultMode === "video" ? `Video consultation · ${reason}` : reason,
         doctorName: doctor.name,
+        doctorStaffId: doctor.id,
         specialty: doctor.specialty || "General Practice",
         consultMode,
       });
@@ -217,7 +243,7 @@ export default function ReceptionBookingScheduler({
         <div className="p-4 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-1 space-y-2">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A]">Working doctors — drag to reorder</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A]">Registered doctors — drag to reorder</p>
               <div className="space-y-1.5">
                 {roster.map((d, i) => (
                   <div
@@ -247,7 +273,7 @@ export default function ReceptionBookingScheduler({
                   </div>
                 ))}
                 {roster.length === 0 && (
-                  <p className="text-xs text-slate-500">No working doctors on this roster.</p>
+                  <p className="text-xs text-slate-500">No doctors registered at this medical centre.</p>
                 )}
               </div>
             </div>
@@ -275,6 +301,11 @@ export default function ReceptionBookingScheduler({
 
           <div>
             <label className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A] block mb-1">Patient</label>
+            {lockPatient ? (
+              <div className="w-full p-2.5 bg-white border border-[#E4E2DE] rounded-xl text-sm font-semibold text-slate-800">
+                {patient?.name || "Patient"}
+              </div>
+            ) : (
             <select
               value={patientId}
               onChange={(e) => setPatientId(e.target.value)}
@@ -286,6 +317,7 @@ export default function ReceptionBookingScheduler({
                 </option>
               ))}
             </select>
+            )}
             {patient && (
               <p className="text-[11px] text-slate-500 mt-1">
                 {patient.age}y · {patient.gender} · {patient.phone} · {patient.email}
@@ -348,10 +380,21 @@ export default function ReceptionBookingScheduler({
           </div>
 
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A] mb-2">Available Times</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A] mb-2">
+              Available times — {doctor?.name || "select a doctor"}
+              {selectedDate ? ` · ${longDate(selectedDate)}` : ""}
+            </p>
             <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
               {SLOT_TIMES.map((t) => {
-                const taken = doctor ? slotTaken(appointments, doctor.name, dateKey, t) : false;
+                const booked = doctor
+                  ? bookingOnSlot(appointments, {
+                      doctorName: doctor.name,
+                      doctorStaffId: doctor.id,
+                      dateKey,
+                      time: t,
+                    })
+                  : undefined;
+                const taken = Boolean(booked);
                 const selected = t === time24 && !taken;
                 return (
                   <button
@@ -359,20 +402,62 @@ export default function ReceptionBookingScheduler({
                     type="button"
                     disabled={taken}
                     onClick={() => setTime24(t)}
-                    className="py-2 rounded-xl text-xs font-bold border"
+                    title={taken ? `Booked: ${appointmentPatientName(booked!)}` : "Available"}
+                    className="py-2 rounded-xl text-xs font-bold border leading-tight"
                     style={
                       taken
-                        ? { background: "#F0EFED", color: "#8A8A8A", textDecoration: "line-through", borderColor: "#E4E2DE" }
+                        ? { background: "#F0EFED", color: "#8A8A8A", borderColor: "#E4E2DE" }
                         : selected
                           ? { background: CORAL, color: "#fff", borderColor: CORAL }
                           : { background: "#fff", color: "#1A1A1A", borderColor: "#E4E2DE" }
                     }
                   >
-                    {t}
+                    <span className={taken ? "line-through" : undefined}>{t}</span>
+                    {taken && (
+                      <span className="block text-[8px] font-bold uppercase tracking-wide mt-0.5 text-rose-700">
+                        Booked
+                      </span>
+                    )}
                   </button>
                 );
               })}
             </div>
+          </div>
+
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A] mb-2">
+              Booked times under {doctor?.name || "this doctor"}
+              {selectedDate ? ` · ${longDate(selectedDate)}` : ""}
+            </p>
+            {bookedToday.length > 0 ? (
+              <div className="bg-white rounded-2xl border border-[#E4E2DE] divide-y divide-[#E4E2DE] overflow-hidden">
+                {bookedToday.map((apt) => {
+                  const { hours, minutes } = parseClock(apt.time || "");
+                  const who = appointmentPatientName(apt);
+                  const via = apt.source === "suwasiri_app" ? "Suwasiri App" : "GP Care";
+                  return (
+                    <div key={apt.id} className="px-3 py-2.5 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-black text-slate-900">{formatAmPm(hours, minutes)}</p>
+                        <p className="text-xs font-semibold text-slate-800 truncate">{who}</p>
+                        <p className="text-[10px] text-slate-500">
+                          {via}
+                          {apt.consultMode === "video" || apt.isTelehealth ? " · Video" : " · In person"}
+                          {apt.reason ? ` · ${apt.reason}` : ""}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-[10px] font-extrabold uppercase tracking-wide px-2 py-1 rounded-full bg-rose-50 text-rose-800 border border-rose-200">
+                        Booked
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500 bg-white border border-dashed border-[#E4E2DE] rounded-2xl px-3 py-3">
+                No bookings on this date for this doctor. All listed times are available.
+              </p>
+            )}
           </div>
 
           <div>

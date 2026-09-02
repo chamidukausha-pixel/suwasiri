@@ -36,7 +36,6 @@ import {
   FlaskConical,
   ShieldCheck,
   Share2,
-  Globe,
   Barcode,
   Upload,
   Eye,
@@ -108,6 +107,7 @@ import {
   subscribeSuwasiriAppointments,
   suwasiriDoctorCatalogId,
   updateSuwasiriAppointmentStatus,
+  normalizeDoctorName,
 } from "./sync/suwasiriAppointments";
 import { clinicExamSessionId, issuePrescriptionsToSuwasiri } from "./sync/suwasiriPrescriptions";
 import { issueLabReportToSuwasiri } from "./sync/suwasiriLabs";
@@ -125,6 +125,8 @@ import {
   publishClinicCenterToSuwasiri,
   publishClinicDoctorToSuwasiri,
   republishStaffDoctorsToSuwasiri,
+  staffDoctorStub,
+  subscribeClinicDoctors,
 } from "./sync/suwasiriClinicDoctors";
 
 export interface DrugFormularyItem {
@@ -468,6 +470,7 @@ export default function App() {
   const [criticalLabKeys, setCriticalLabKeys] = useState<Record<string, true>>({});
   const [clinicAppointments, setAppointments] = useState<Appointment[]>([]);
   const [suwasiriAppointments, setSuwasiriAppointments] = useState<Appointment[]>([]);
+  const [publishedClinicDoctors, setPublishedClinicDoctors] = useState<StaffProvider[]>([]);
   const [suwasiriPatients, setSuwasiriPatients] = useState<Patient[]>([]);
   const [suwasiriVaccinePatients, setSuwasiriVaccinePatients] = useState<Patient[]>([]);
   const [suwasiriCharts, setSuwasiriCharts] = useState<Record<string, SuwasiriChartPatch>>({});
@@ -538,7 +541,7 @@ export default function App() {
   const activeBranch = branches.find((b) => b.id === sessionBranchId);
   const canEditRbac = isGovernanceEditor(activeRole, isPlatformSA);
   const canOpen = (tab: string) => {
-    if (isPatientOnly) return tab === "patientPortal" || tab === "publicBooking";
+    if (isPatientOnly) return tab === "patientPortal";
     return tabAllowed(tab, activeRole, isPlatformSA);
   };
 
@@ -572,7 +575,7 @@ export default function App() {
   };
 
   const requestTab = (tab: string) => {
-    if (isPatientOnly && tab !== "patientPortal" && tab !== "publicBooking") {
+    if (isPatientOnly && tab !== "patientPortal") {
       alert("This Firebase account has no staff membership. Use the Patient Portal, or ask a Hospital Super Admin to assign a role.");
       return;
     }
@@ -605,7 +608,6 @@ export default function App() {
   const [activeHubInitialTab, setActiveHubInitialTab] = useState<"history" | "vaccines" | "labs" | "prescriptions" | "mc" | "samples" | "documents">("history");
   const [hubDispatchProfile, setHubDispatchProfile] = useState(false);
   const [hubFocusSampleId, setHubFocusSampleId] = useState<string | null>(null);
-  const [lastOnlineBookingResult, setLastOnlineBookingResult] = useState<any | null>(null);
   const [barcodeSearchText, setBarcodeSearchText] = useState<string>("");
   const [barcodeLoading, setBarcodeLoading] = useState<boolean>(false);
   const [selectedReceiptUrl, setSelectedReceiptUrl] = useState<string | null>(null);
@@ -747,6 +749,7 @@ export default function App() {
   const [bookingRecallId, setBookingRecallId] = useState<string | null>(null);
   const [bookingMode, setBookingMode] = useState<"book" | "walkin">("book");
   const [bookingConsultMode, setBookingConsultMode] = useState<"clinic" | "video">("clinic");
+  const [bookingLockPatient, setBookingLockPatient] = useState(false);
 
   // Consultation active desk states
   const [consultNotes, setConsultNotes] = useState<string>("");
@@ -865,6 +868,7 @@ export default function App() {
       setSuwasiriAppointments([]);
       setSuwasiriPatients([]);
       setSuwasiriVaccinePatients([]);
+      setPublishedClinicDoctors([]);
       return;
     }
     const unsubAppt = subscribeSuwasiriAppointments((apts, pats) => {
@@ -874,9 +878,13 @@ export default function App() {
     const unsubVax = subscribeSuwasiriVaccinePatients((pats) => {
       setSuwasiriVaccinePatients(pats);
     });
+    const unsubDocs = subscribeClinicDoctors((docs) => {
+      setPublishedClinicDoctors(docs);
+    });
     return () => {
       unsubAppt?.();
       unsubVax?.();
+      unsubDocs?.();
     };
   }, [authUser?.uid]);
 
@@ -941,7 +949,7 @@ export default function App() {
   useEffect(() => {
     if (!authUser || loading) return;
     if (isPatientOnly) {
-      if (activeTab !== "patientPortal" && activeTab !== "publicBooking") {
+      if (activeTab !== "patientPortal") {
         setActiveTab("patientPortal");
       }
       return;
@@ -958,7 +966,7 @@ export default function App() {
   const hospitalRoles = roleDefs.filter((r) => r.hospitalId === sessionHospitalId);
   const hospitalStaff = staffDirectory.filter((s) => s.hospitalId === sessionHospitalId && s.active !== false);
   const workingDoctors = hospitalStaff.filter(
-    (s) => s.active && /doctor|medical officer/i.test(s.role || "")
+    (s) => s.active !== false && /doctor|medical officer/i.test(s.role || "")
   );
   const activeRecallCount = recalls.filter(
     (r) => r.status !== "COMPLETED" && r.status !== "CANCELLED"
@@ -974,6 +982,37 @@ export default function App() {
     const p = patients.find((pt) => pt.id === a.patientId);
     return !p || (p.hospitalId || HOSPITAL_PRIMECARE) === sessionHospitalId;
   });
+  const registeredDoctors = (() => {
+    const list: StaffProvider[] = [];
+    const seen = new Set<string>();
+    const add = (d: StaffProvider) => {
+      if (!d?.name) return;
+      const cat = suwasiriDoctorCatalogId({ staffUserId: d.id, doctorName: d.name });
+      const nameKey = normalizeDoctorName(d.name);
+      if (seen.has(cat) || seen.has(d.id) || (nameKey && seen.has(`n:${nameKey}`))) return;
+      seen.add(cat);
+      seen.add(d.id);
+      if (nameKey) seen.add(`n:${nameKey}`);
+      list.push(d);
+    };
+    publishedClinicDoctors
+      .filter((d) => d.active !== false && (!d.hospitalId || d.hospitalId === sessionHospitalId))
+      .forEach(add);
+    workingDoctors.forEach(add);
+    tenantAppointments.forEach((a) => {
+      if (!a.doctorName) return;
+      const id = a.doctorId || suwasiriDoctorCatalogId({ doctorName: a.doctorName });
+      add(
+        staffDoctorStub({
+          id,
+          name: a.doctorName,
+          specialty: a.specialty,
+          hospitalId: a.hospitalId || sessionHospitalId,
+        })
+      );
+    });
+    return list;
+  })();
   const todayKey = formatDateKey(new Date());
   const dayAppointments = tenantAppointments
     .filter((a) => a.date === selectedClinicDate)
@@ -1322,6 +1361,7 @@ export default function App() {
     time: string;
     reason: string;
     doctorName?: string;
+    doctorStaffId?: string;
     consultMode?: "clinic" | "video";
     specialty?: string;
     status?: Appointment["status"];
@@ -1330,7 +1370,7 @@ export default function App() {
     const patient = patients.find((p) => p.id === opts.patientId);
     const doctorName = opts.doctorName || sessionUser?.name || "Dr. Priyantha Silva";
     const doctorId = suwasiriDoctorCatalogId({
-      staffUserId: sessionUser?.id,
+      staffUserId: opts.doctorStaffId,
       doctorName,
     });
     const video = opts.consultMode === "video";
@@ -1398,6 +1438,7 @@ export default function App() {
       time: payload.time,
       reason: payload.reason,
       doctorName: payload.doctorName,
+      doctorStaffId: payload.doctorStaffId,
       consultMode: payload.consultMode,
       specialty: payload.specialty,
       status: payload.isWalkInOverflow ? "CHECKED IN" : "SCHEDULED",
@@ -2993,7 +3034,7 @@ export default function App() {
           </>
           )}
 
-          {(canOpen("patientPortal") || canOpen("publicBooking")) && (
+          {canOpen("patientPortal") && (
           <div className="pt-2 pb-1 border-t border-slate-100">
             <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider px-2">Patient Facing Portal</span>
           </div>
@@ -3012,20 +3053,6 @@ export default function App() {
             <span className="text-[13px] font-bold">Patient Portal</span>
           </button>
           )}
-
-          {canOpen("publicBooking") && (
-          <button
-            onClick={() => requestTab("publicBooking")}
-            className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
-              activeTab === "publicBooking"
-                ? "text-sky-900 bg-sky-100 font-bold shadow-xs"
-                : "text-slate-600 hover:text-sky-700 hover:bg-sky-50"
-            }`}
-          >
-            <Globe className="w-4 h-4 mr-3 text-sky-600" />
-            <span className="text-[13px] font-medium">Online Public Booking</span>
-          </button>
-          )}
         </nav>
 
         {/* Sidebar bottom */}
@@ -3038,6 +3065,7 @@ export default function App() {
               }
               setNewAptDate(selectedClinicDate);
               setBookingMode("book");
+              setBookingLockPatient(false);
               setShowAptModal(true);
             }}
             className="w-full bg-[#00334f] text-white py-2.5 px-3 font-bold text-xs rounded shadow hover:bg-[#0c4a6e] transition-all flex items-center justify-center cursor-pointer active:scale-95"
@@ -3559,6 +3587,7 @@ export default function App() {
                           if (patients.length > 0) setNewAptPatientId(patients[0].id);
                           setNewAptDate(selectedClinicDate);
                           setBookingMode("book");
+                          setBookingLockPatient(false);
                           setShowAptModal(true);
                         }}
                         className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3.5 py-2 text-xs font-bold rounded flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
@@ -3572,6 +3601,7 @@ export default function App() {
                           if (patients.length > 0) setNewAptPatientId(patients[0].id);
                           setNewAptDate(selectedClinicDate);
                           setBookingMode("walkin");
+                          setBookingLockPatient(false);
                           setShowAptModal(true);
                         }}
                         className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 px-3 py-2 text-xs font-bold rounded flex items-center gap-1.5 transition-all cursor-pointer"
@@ -4085,6 +4115,7 @@ export default function App() {
                             setNewAptPatientId(pat.id);
                             setNewAptDate(formatDateKey(new Date()));
                             setBookingMode("walkin");
+                            setBookingLockPatient(false);
                             setShowAptModal(true);
                           }}
                           className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2 py-1 rounded transition-colors flex items-center gap-1 active:scale-95 cursor-pointer"
@@ -5556,294 +5587,6 @@ export default function App() {
               </div>
             )}
 
-            {/* TAB: PUBLIC ONLINE BOOKING GATEWAY */}
-            {activeTab === "publicBooking" && (
-              <div className="space-y-6 animate-in fade-in duration-200">
-                <div className="bg-[#00334f] text-white p-6 rounded-lg shadow-sm border border-[#002235]">
-                  <h2 className="font-serif font-bold text-xl flex items-center gap-2">
-                    <span className="p-1 px-2 bg-sky-600 rounded text-xs">ONLINE</span>
-                    Sri Lankan GP Care – Public Online Booking & Auto-Registration Portal
-                  </h2>
-                  <p className="text-xs text-sky-200 mt-1 max-w-2xl leading-relaxed">
-                    This public-facing portal connects citizens directly to our clinics. Completing a reservation automatically registers your electronic health profile, raises an initial invoice, and posts an instant notification to the clinical team.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                  {/* Booking Form */}
-                  <div className="lg:col-span-7 bg-white p-6 border rounded shadow-sm space-y-4">
-                    <h3 className="font-serif font-bold text-[#00334f] text-base border-b pb-2 flex items-center gap-2">
-                      <CalendarIcon className="w-5 h-5 text-sky-600" />
-                      Patient Demographics & Appointment Slot Details
-                    </h3>
-
-                    <form
-                      onSubmit={async (e) => {
-                        e.preventDefault();
-                        const formData = new FormData(e.currentTarget);
-                        const payload = {
-                          name: formData.get("name"),
-                          age: formData.get("age"),
-                          gender: formData.get("gender"),
-                          phone: formData.get("phone"),
-                          email: formData.get("email"),
-                          medicalCenter: formData.get("medicalCenter"),
-                          date: formData.get("date"),
-                          time: formData.get("time"),
-                          reason: formData.get("reason"),
-                        };
-
-                        if (!payload.name || !payload.age || !payload.phone || !payload.email) {
-                          alert("Please fill in all required fields.");
-                          return;
-                        }
-
-                        try {
-                          const res = await fetch("/api/online-booking", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify(payload),
-                          });
-                          if (!res.ok) throw new Error("Could not register online booking.");
-                          const data = await res.json();
-                          
-                          // Sync main states
-                          if (data.state.patients) setPatients(data.state.patients);
-                          if (data.state.appointments) setAppointments(data.state.appointments);
-                          if (data.state.billing) setBilling(data.state.billing);
-                          if (data.state.clinicMessages) setClinicMessages(data.state.clinicMessages);
-
-                          // Set successful booking result states to show receipt
-                          setLastOnlineBookingResult({
-                            patient: data.patient,
-                            appointment: data.appointment,
-                            invoiceAmount: 1500,
-                          });
-                          
-                          e.currentTarget.reset();
-                        } catch (err: any) {
-                          alert("Error processing booking: " + err.message);
-                        }
-                      }}
-                      className="space-y-4 text-xs font-semibold text-slate-600"
-                    >
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="block text-slate-500 uppercase">Patient Full Name *</label>
-                          <input
-                            type="text"
-                            required
-                            name="name"
-                            placeholder="e.g. Nimani Rajasinghe"
-                            className="w-full p-2.5 border bg-white rounded outline-none text-xs font-medium focus:border-sky-600 text-slate-800"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="block text-slate-500 uppercase">Age *</label>
-                          <input
-                            type="number"
-                            required
-                            name="age"
-                            placeholder="e.g. 29"
-                            min="1"
-                            max="120"
-                            className="w-full p-2.5 border bg-white rounded outline-none text-xs font-medium focus:border-sky-600 text-slate-800"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="block text-slate-500 uppercase">Biological Gender *</label>
-                          <select
-                            required
-                            name="gender"
-                            className="w-full p-2.5 border bg-white rounded outline-none text-xs text-slate-800"
-                          >
-                            <option value="Female">Female</option>
-                            <option value="Male">Male</option>
-                            <option value="Other">Other</option>
-                          </select>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="block text-slate-500 uppercase">Sri Lankan Phone Number *</label>
-                          <input
-                            type="text"
-                            required
-                            name="phone"
-                            placeholder="e.g. +94 77 111 2222"
-                            className="w-full p-2.5 border bg-white rounded outline-none text-xs font-medium focus:border-sky-600 text-slate-800"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="block text-slate-500 uppercase">Email Address (for MC dispatch) *</label>
-                          <input
-                            type="email"
-                            required
-                            name="email"
-                            placeholder="e.g. nimani.r@gmail.com"
-                            className="w-full p-2.5 border bg-white rounded outline-none text-xs font-medium focus:border-sky-600 text-slate-800"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="block text-slate-500 uppercase">Target Medical Center *</label>
-                          <select
-                            required
-                            name="medicalCenter"
-                            className="w-full p-2.5 border bg-white rounded outline-none text-xs text-emerald-800 font-bold"
-                          >
-                            <option value="Colombo Central Clinic">Colombo Central Clinic</option>
-                            <option value="Kandy Wellness Center">Kandy Wellness Center</option>
-                            <option value="Galle GP Care">Galle GP Care</option>
-                            <option value="Jaffna Medical Hub">Jaffna Medical Hub</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="block text-slate-500 uppercase">Preferred Booking Date *</label>
-                          <input
-                            type="date"
-                            required
-                            name="date"
-                            defaultValue={new Date().toISOString().split("T")[0]}
-                            className="w-full p-2.5 border bg-white rounded outline-none text-xs font-medium text-slate-800"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="block text-slate-500 uppercase">Preferred Time Slot *</label>
-                          <select
-                            required
-                            name="time"
-                            className="w-full p-2.5 border bg-white rounded outline-none text-xs text-slate-800"
-                          >
-                            <option value="08:30 AM">08:30 AM (Early session)</option>
-                            <option value="10:00 AM">10:00 AM</option>
-                            <option value="11:30 AM">11:30 AM</option>
-                            <option value="01:30 PM">01:30 PM (Midday)</option>
-                            <option value="03:00 PM">03:00 PM</option>
-                            <option value="04:30 PM">04:30 PM (Evening slot)</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="block text-slate-500 uppercase">Brief Consultation Reason *</label>
-                        <input
-                          type="text"
-                          required
-                          name="reason"
-                          placeholder="e.g. Acute chest congestion, viral symptoms, GP rest certificate request"
-                          className="w-full p-2.5 border bg-white rounded outline-none text-xs font-medium focus:border-sky-600 text-slate-800"
-                        />
-                      </div>
-
-                      <button
-                        type="submit"
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-3 rounded shadow transition duration-150 flex items-center justify-center gap-2 text-sm"
-                      >
-                        <ShieldCheck className="w-5 h-5 text-emerald-100" />
-                        Confirm Slot & Auto-Register Health File
-                      </button>
-                    </form>
-                  </div>
-
-                  {/* Booking Receipt / Feedback Box */}
-                  <div className="lg:col-span-5 bg-slate-50 border rounded-lg p-6 space-y-4">
-                    <h4 className="font-serif font-bold text-sm text-[#00334f] flex items-center gap-1.5 border-b pb-2">
-                      <CheckCircle className="w-4 h-4 text-emerald-600" />
-                      Live Gate Registration Tracker
-                    </h4>
-
-                    {lastOnlineBookingResult ? (
-                      <div className="space-y-4 animate-in fade-in transition duration-300 font-sans">
-                        <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 p-4 rounded text-xs space-y-2">
-                          <p className="font-bold flex items-center gap-1 text-emerald-800">
-                            <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping"></span>
-                            REGISTRATION SUCCESSFUL!
-                          </p>
-                          <p>
-                            Patient slot secured inside <strong>Sri Lankan GP Care</strong> under medical registry files.
-                          </p>
-                        </div>
-
-                        <div className="bg-white border rounded p-4 text-xs space-y-3">
-                          <div className="flex justify-between items-center border-b pb-2">
-                            <span className="text-slate-400">Assigned ID No:</span>
-                            <span className="font-mono font-bold text-[#00334f] text-sm bg-[#e7eeff] px-2 py-0.5 rounded">
-                              {lastOnlineBookingResult.patient.id}
-                            </span>
-                          </div>
-
-                          <div className="space-y-1 border-b pb-2">
-                            <span className="text-slate-400 block text-[10px] uppercase font-bold">Registered Name</span>
-                            <strong className="text-slate-800">{lastOnlineBookingResult.patient.name} ({lastOnlineBookingResult.patient.age} yrs, {lastOnlineBookingResult.patient.gender})</strong>
-                          </div>
-
-                          <div className="space-y-1 border-b pb-2">
-                            <span className="text-slate-400 block text-[10px] uppercase font-bold">Registered Medical Center Branch</span>
-                            <span className="text-emerald-800 font-bold flex items-center gap-1">
-                              ⚕ {lastOnlineBookingResult.patient.medicalCenter}
-                            </span>
-                          </div>
-
-                          <div className="space-y-1 border-b pb-2">
-                            <span className="text-slate-400 block text-[10px] uppercase font-bold">Consultation Slot secured</span>
-                            <strong className="text-slate-700">
-                              {lastOnlineBookingResult.appointment.date} at {lastOnlineBookingResult.appointment.time}
-                            </strong>
-                            <p className="text-[10px] text-slate-400">Reason: {lastOnlineBookingResult.appointment.reason}</p>
-                          </div>
-
-                          <div className="pt-1 flex justify-between items-center text-[11px]">
-                            <span className="text-slate-500">Government GP Consultation Fee:</span>
-                            <strong className="text-[#00334f]">Rs. {lastOnlineBookingResult.invoiceAmount}.00 (Pending)</strong>
-                          </div>
-                        </div>
-
-                        <p className="text-[10px] text-slate-400 italic text-center">
-                          * Patient can now be checked, edited, and rest certificate / medical leave can be filled by switching to clinical views.
-                        </p>
-                        
-                        <div className="flex gap-2">
-                          {!isFrontDeskStaff && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveHubPatient(lastOnlineBookingResult.patient);
-                            }}
-                            className="flex-1 bg-[#00334f] text-white hover:bg-[#0c4a6e] font-bold p-2 rounded text-xs text-center transition"
-                          >
-                            Open Details & Enter Rest / MC
-                          </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setLastOnlineBookingResult(null)}
-                            className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold p-2 px-3 rounded text-xs transition"
-                          >
-                            Reset
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-center py-12 text-slate-400 italic text-xs space-y-2">
-                        <Globe className="w-8 h-8 text-slate-300 mx-auto animate-pulse" />
-                        <p>Waiting for consumer registration form submission...</p>
-                        <p className="text-[10px] max-w-xs mx-auto">
-                          Once a citizen registers their appointment, their live medical record and Sri Lankan GP clinical file displays here interactively.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* TAB: RECALLS & PREVENTIVE HEALTH REMINDERS */}
             {activeTab === "recalls" && (
               <div className="space-y-6">
@@ -5870,6 +5613,7 @@ export default function App() {
                     setBookingRecallId(recall.id);
                     setBookingMode("book");
                     setBookingConsultMode(consultMode || "clinic");
+                    setBookingLockPatient(false);
                     setShowAptModal(true);
                   }}
                   onCreateRecall={(newRecall) => {
@@ -6153,13 +5897,14 @@ export default function App() {
                       { id: "lab-2", testName: "eGFR (CKD-EPI)", resultValue: "88 mL/min/1.73m2", referenceRange: "> 60 mL/min", flag: "NORMAL", date: "2026-07-10", notes: "Normal renal function" }
                     ]
                   }}
-                  patientsList={patients}
-                  appointments={appointments}
+                  patientsList={hospitalPatients.length > 0 ? hospitalPatients : patients}
+                  appointments={tenantAppointments}
                   recalls={recalls}
                   onBookAppointment={(apt) => {
                     if (apt.patientId) setNewAptPatientId(apt.patientId);
                     if (apt.date) setNewAptDate(apt.date);
                     if (apt.reason) setNewAptReason(String(apt.reason));
+                    setBookingLockPatient(true);
                     setBookingMode("book");
                     setShowAptModal(true);
                   }}
@@ -6200,25 +5945,27 @@ export default function App() {
       {/* MODAL: SCHEDULER BOOKER */}
       {showAptModal && (
         <ReceptionBookingScheduler
-          patients={patients}
-          doctors={workingDoctors.length > 0 ? workingDoctors : DEFAULT_STAFF_DIRECTORY.filter((s) => /doctor|medical officer/i.test(s.role))}
-          appointments={appointments}
+          patients={hospitalPatients.length > 0 ? hospitalPatients : patients}
+          doctors={registeredDoctors.length > 0 ? registeredDoctors : DEFAULT_STAFF_DIRECTORY.filter((s) => /doctor|medical officer/i.test(s.role))}
+          appointments={tenantAppointments}
           initialPatientId={newAptPatientId}
           initialDate={newAptDate}
           initialReason={newAptReason}
           initialConsultMode={bookingConsultMode}
-          includeToday={bookingMode === "walkin"}
+          includeToday
           walkInMode={bookingMode === "walkin"}
-          walkInOverflowUsed={appointments.filter((a) =>
+          walkInOverflowUsed={tenantAppointments.filter((a) =>
             a.date === newAptDate &&
             a.status !== "CANCELLED" &&
             /walk-in overflow/i.test(a.reason || "")
           ).length}
+          lockPatient={bookingLockPatient}
           onClose={() => {
             setShowAptModal(false);
             setBookingRecallId(null);
             setBookingMode("book");
             setBookingConsultMode("clinic");
+            setBookingLockPatient(false);
           }}
           onConfirm={handleSchedulerConfirm}
         />

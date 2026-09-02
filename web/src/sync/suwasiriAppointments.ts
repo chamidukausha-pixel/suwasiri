@@ -122,6 +122,7 @@ export function mapFirestoreAppointment(
     date,
     type: video ? "Telehealth Video" : (data.type as Appointment["type"]) || "Standard GP Consult",
     doctorName: String(data.doctorName || ""),
+    doctorId: data.doctorId ? String(data.doctorId) : undefined,
     isTelehealth: video,
     feeAmount: typeof data.feeAmount === "number" ? data.feeAmount : undefined,
     medicareClaimStatus: "PRIVATE_PAID",
@@ -320,6 +321,94 @@ export function suwasiriDoctorCatalogId(opts: {
     staffId: opts.staffUserId,
     doctorName: opts.doctorName,
   });
+}
+
+export function normalizeDoctorName(name: string): string {
+  return (name || "")
+    .toLowerCase()
+    .replace(/^dr\.?\s*/, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * True when a Firestore / JSON appointment belongs to the selected clinic doctor.
+ * Matches catalog id, staff id, exact name, or overlapping first+last names
+ * (e.g. Dr. Chamidu Rathnayake vs Dr. Chamidu Kaushal Rathnayake).
+ */
+export function isSameDoctor(opts: {
+  doctorName: string;
+  doctorStaffId?: string;
+  appointment: Appointment;
+}): boolean {
+  const apt = opts.appointment;
+  const selectedIds = new Set(
+    [
+      opts.doctorStaffId,
+      suwasiriDoctorCatalogId({
+        staffUserId: opts.doctorStaffId,
+        doctorName: opts.doctorName,
+      }),
+    ].filter(Boolean) as string[]
+  );
+  const aptIds = [
+    apt.doctorId,
+    suwasiriDoctorCatalogId({
+      staffUserId: apt.doctorId,
+      doctorName: apt.doctorName,
+    }),
+  ].filter(Boolean) as string[];
+  if (aptIds.some((id) => selectedIds.has(id))) return true;
+
+  const na = normalizeDoctorName(opts.doctorName);
+  const nb = normalizeDoctorName(apt.doctorName || "");
+  if (na && nb && na === nb) return true;
+  const ta = na.split(" ").filter(Boolean);
+  const tb = nb.split(" ").filter(Boolean);
+  if (ta.length === 0 || tb.length === 0) return false;
+  if (ta[ta.length - 1] !== tb[tb.length - 1]) return false;
+  const firstA = new Set(ta.slice(0, -1));
+  const firstB = tb.slice(0, -1);
+  if (firstA.size === 0 || firstB.length === 0) return true;
+  return firstB.some((t) => firstA.has(t));
+}
+
+export function isActiveBooking(apt: Appointment): boolean {
+  return apt.status !== "CANCELLED" && apt.status !== "COMPLETED";
+}
+
+export function bookingOnSlot(
+  appointments: Appointment[],
+  opts: { doctorName: string; doctorStaffId?: string; dateKey: string; time: string }
+): Appointment | undefined {
+  const { hours, minutes } = parseClock(opts.time);
+  return appointments.find((a) => {
+    if (!isActiveBooking(a) || a.date !== opts.dateKey) return false;
+    if (!isSameDoctor({ doctorName: opts.doctorName, doctorStaffId: opts.doctorStaffId, appointment: a })) {
+      return false;
+    }
+    const t = parseClock(a.time || "");
+    return t.hours === hours && t.minutes === minutes;
+  });
+}
+
+export function bookingsForDoctorOnDate(
+  appointments: Appointment[],
+  opts: { doctorName: string; doctorStaffId?: string; dateKey: string }
+): Appointment[] {
+  return appointments
+    .filter(
+      (a) =>
+        isActiveBooking(a) &&
+        a.date === opts.dateKey &&
+        isSameDoctor({
+          doctorName: opts.doctorName,
+          doctorStaffId: opts.doctorStaffId,
+          appointment: a,
+        })
+    )
+    .slice()
+    .sort(compareAppointmentTime);
 }
 
 /** Accepts "10:00 AM", "03:00 PM", or 24-hour "15:00" / "09:00". */

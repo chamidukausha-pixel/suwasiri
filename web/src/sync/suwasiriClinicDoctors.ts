@@ -1,6 +1,86 @@
-import { doc, setDoc } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  onSnapshot,
+  setDoc,
+  type Unsubscribe,
+} from "firebase/firestore";
 import { getFirebaseDb, isFirebaseConfigured } from "../firebase";
 import type { Branch, StaffProvider } from "../types";
+
+const EMPTY_ROSTER: StaffProvider["roster"] = {
+  monday: true,
+  tuesday: true,
+  wednesday: true,
+  thursday: true,
+  friday: true,
+  saturday: true,
+  sunday: true,
+};
+
+export function mapClinicDoctorDoc(id: string, data: Record<string, unknown>): StaffProvider {
+  const hours =
+    data.rosterHours && typeof data.rosterHours === "object"
+      ? (data.rosterHours as StaffProvider["rosterHours"])
+      : undefined;
+  return {
+    id,
+    hospitalId: String(data.hospitalId || ""),
+    branchIds: data.branchId ? [String(data.branchId)] : [],
+    name: String(data.name || "Doctor"),
+    role: "Doctor",
+    specialty: String(data.specialty || "General Practice"),
+    providerNumber: "",
+    email: String(data.email || ""),
+    phone: String(data.phone || ""),
+    assignedRoom: String(data.address || data.hospital || "Clinic"),
+    roster: EMPTY_ROSTER,
+    rosterHours: hours,
+    active: data.active !== false,
+  };
+}
+
+export function subscribeClinicDoctors(
+  onChange: (doctors: StaffProvider[]) => void
+): Unsubscribe | undefined {
+  if (!isFirebaseConfigured()) return undefined;
+  try {
+    const db = getFirebaseDb();
+    return onSnapshot(
+      collection(db, "clinic_doctors"),
+      (snap) => {
+        onChange(snap.docs.map((d) => mapClinicDoctorDoc(d.id, d.data() as Record<string, unknown>)));
+      },
+      (err) => {
+        console.warn("Clinic doctor sync:", err.message);
+      }
+    );
+  } catch (err) {
+    console.warn("Clinic doctor sync unavailable", err);
+    return undefined;
+  }
+}
+
+export function staffDoctorStub(opts: {
+  id: string;
+  name: string;
+  specialty?: string;
+  hospitalId?: string;
+}): StaffProvider {
+  return {
+    id: opts.id,
+    hospitalId: opts.hospitalId,
+    name: opts.name,
+    role: "Doctor",
+    specialty: opts.specialty || "General Practice",
+    providerNumber: "",
+    email: "",
+    phone: "",
+    assignedRoom: "Clinic",
+    roster: EMPTY_ROSTER,
+    active: true,
+  };
+}
 
 export function clinicDoctorDocId(staffId: string) {
   const slug = staffId.replace(/[^a-zA-Z0-9_-]/g, "-").toLowerCase();
@@ -9,6 +89,8 @@ export function clinicDoctorDocId(staffId: string) {
 
 /** Stable Suwasiri doctor id so app + GP Care share the same appointment_slots lock. */
 export function suwasiriDoctorDocId(opts: { staffId?: string; doctorName?: string }): string {
+  const staff = (opts.staffId || "").trim();
+  if (/^(d-|clinic-)/i.test(staff)) return staff;
   const name = (opts.doctorName || "")
     .toLowerCase()
     .replace(/^dr\.?\s*/, "")

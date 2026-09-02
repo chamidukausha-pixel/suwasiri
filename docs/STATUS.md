@@ -146,6 +146,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] GP Exam Room patient file syncs to that patient’s Suwasiri app: **Completed** doctor notes → Vault; immunisations → Vault vaccine history; allergies under the Unique Health ID **name** on Profile (edit/delete); pathology + imaging → Vault lab reports; issued medical certificates → Vault certificates; exam-room medicines → Vault E-Prescription; Telehealth medicines → Call E-Prescription; specialist referral → Suwasiri notification
 - [x] GP Exam Room Consultation is one **Doctor notes** field (Subjective, medical issues this visit, and Plan & Management removed)
 - [x] Reception Recalls & Reminders In person / Video book writes Firestore `appointments` for that Suwasiri patient (Home **blue** / **purple**) and shows on the GP Care calendar that date
+- [x] Book Active Appointment and Patient Portal show each registered doctor's **available** vs **booked** times (Suwasiri App slots e.g. 04 Sep 2026 09:30 / 11:15 appear booked under that doctor). Online Public Booking removed.
 
 ## In progress / next
 

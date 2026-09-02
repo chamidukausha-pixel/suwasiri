@@ -539,7 +539,6 @@ export function tabAllowed(tab: string, role: RoleDefinition | undefined, isPlat
     case "admin":
       return role.canManageUsers;
     case "patientPortal":
-    case "publicBooking":
       return role.canAccessDoctorDashboard || role.canManageCashierAndInvoicing || role.name === "Patient";
     default:
       return false;

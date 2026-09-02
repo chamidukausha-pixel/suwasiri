@@ -43,20 +43,6 @@ export default function PatientPortalView({
   // Live Patient Search Overlay State
   const [portalSearchQuery, setPortalSearchQuery] = useState("");
   const [showSearchOverlay, setShowSearchOverlay] = useState(false);
-
-  // Booking Modal
-  const [showBookingModal, setShowBookingModal] = useState(false);
-  const [bookingDoctor, setBookingDoctor] = useState("Dr. Priyantha Silva (FRACGP, MBBS)");
-  const [bookingDate, setBookingDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split("T")[0];
-  });
-  const [bookingTime, setBookingTime] = useState("10:30 AM");
-  const [bookingType, setBookingType] = useState<Appointment["type"]>("Standard GP Consult");
-  const [bookingReason, setBookingReason] = useState("Regular follow-up & prescription renewal");
-  const [isTelehealthBooking, setIsTelehealthBooking] = useState(false);
-  const [requestWaitlist, setRequestWaitlist] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Message compose state
@@ -84,22 +70,11 @@ export default function PatientPortalView({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleCreateBooking = (e: React.FormEvent) => {
-    e.preventDefault();
+  const openScheduler = (reason?: string) => {
     onBookAppointment({
       patientId: patient.id,
-      date: bookingDate,
-      time: bookingTime,
-      reason: bookingReason,
-      type: bookingType,
-      status: "SCHEDULED",
-      doctorName: bookingDoctor,
-      isTelehealth: isTelehealthBooking,
-      waitingListRequested: requestWaitlist
+      reason: reason || "Follow up",
     });
-
-    setShowBookingModal(false);
-    showToast(`Appointment confirmed with ${bookingDoctor} on ${bookingDate} at ${bookingTime}`);
   };
 
   const handleSendMessageSubmit = (e: React.FormEvent) => {
@@ -183,7 +158,7 @@ export default function PatientPortalView({
 
           <div className="flex flex-wrap items-center gap-2.5">
             <button
-              onClick={() => setShowBookingModal(true)}
+              onClick={() => openScheduler()}
               className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 shadow-md cursor-pointer transition-all active:scale-95"
             >
               <Plus className="w-4 h-4" />
@@ -519,7 +494,7 @@ export default function PatientPortalView({
                   )}
 
                   <button
-                    onClick={() => setShowBookingModal(true)}
+                    onClick={() => openScheduler()}
                     className="px-3 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-bold cursor-pointer"
                   >
                     Reschedule
@@ -620,10 +595,10 @@ export default function PatientPortalView({
           <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200">
             <div>
               <h2 className="font-bold text-sm text-slate-900">Your Appointment History</h2>
-              <p className="text-xs text-slate-500">Manage bookings, telehealth appointments, and cancellation list requests</p>
+              <p className="text-xs text-slate-500">Live availability for each registered doctor — Suwasiri App bookings appear as booked times</p>
             </div>
             <button
-              onClick={() => setShowBookingModal(true)}
+              onClick={() => openScheduler()}
               className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
             >
               <Plus className="w-4 h-4" />
@@ -841,10 +816,7 @@ export default function PatientPortalView({
                     <p className="text-[11px] font-bold text-red-700 mt-1">Due Date: {r.dueDate}</p>
                   </div>
                   <button
-                    onClick={() => {
-                      setShowBookingModal(true);
-                      setBookingReason(`Recall Follow-up: ${r.category}`);
-                    }}
+                    onClick={() => openScheduler(`Recall Follow-up: ${r.category}`)}
                     className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3.5 py-2 rounded-lg text-xs font-bold cursor-pointer"
                   >
                     Book Now
@@ -1025,133 +997,6 @@ export default function PatientPortalView({
               </button>
             </div>
           </form>
-        </div>
-      )}
-
-      {/* BOOK APPOINTMENT MODAL */}
-      {showBookingModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-300 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-150">
-            <div className="bg-[#00334f] text-white px-5 py-3.5 flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-sky-300" />
-                <h3 className="font-bold text-sm">Book General Practice Appointment</h3>
-              </div>
-              <button onClick={() => setShowBookingModal(false)} className="text-slate-300 hover:text-white">✕</button>
-            </div>
-
-            <form onSubmit={handleCreateBooking} className="p-5 space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Select General Practitioner:</label>
-                <select
-                  value={bookingDoctor}
-                  onChange={e => setBookingDoctor(e.target.value)}
-                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg font-semibold"
-                >
-                  <option value="Dr. Priyantha Silva (FRACGP, MBBS)">Dr. Priyantha Silva (FRACGP, MBBS) — Preferred GP</option>
-                  <option value="Dr. Anoja Senanayake (MBBS, DCH)">Dr. Anoja Senanayake (MBBS, DCH) — Paediatrics & Women's Health</option>
-                  <option value="Dr. K. Jayasuriya (MBBS, FRACGP)">Dr. K. Jayasuriya (MBBS, FRACGP) — Chronic Disease & Skin</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Date:</label>
-                  <input
-                    type="date"
-                    value={bookingDate}
-                    onChange={e => setBookingDate(e.target.value)}
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg font-semibold"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Time Slot:</label>
-                  <select
-                    value={bookingTime}
-                    onChange={e => setBookingTime(e.target.value)}
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg font-semibold"
-                  >
-                    <option value="09:00 AM">09:00 AM</option>
-                    <option value="09:30 AM">09:30 AM</option>
-                    <option value="10:00 AM">10:00 AM</option>
-                    <option value="10:30 AM">10:30 AM</option>
-                    <option value="11:15 AM">11:15 AM</option>
-                    <option value="02:00 PM">02:00 PM</option>
-                    <option value="03:30 PM">03:30 PM</option>
-                    <option value="04:15 PM">04:15 PM</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Consultation Type:</label>
-                <select
-                  value={bookingType}
-                  onChange={e => setBookingType(e.target.value as any)}
-                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg font-semibold"
-                >
-                  <option value="Standard GP Consult">Standard GP Consult (15 min - MBS Item 23)</option>
-                  <option value="Long Consult (20+ min)">Long Consult (20+ min - MBS Item 36)</option>
-                  <option value="Telehealth Video">Telehealth Video Consult (MBS Item 91891)</option>
-                  <option value="Care Plan Review">Chronic Disease Management Plan (MBS Item 721)</option>
-                  <option value="Immunisation">Vaccination & Immunisation Clinic</option>
-                  <option value="Skin Check">Comprehensive Skin Check</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Reason for Visit:</label>
-                <input
-                  type="text"
-                  value={bookingReason}
-                  onChange={e => setBookingReason(e.target.value)}
-                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg font-medium"
-                  placeholder="e.g. Asthma check, sore throat, blood test results..."
-                  required
-                />
-              </div>
-
-              <div className="space-y-2 pt-1 border-t border-slate-200">
-                <label className="flex items-center gap-2 font-semibold text-slate-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isTelehealthBooking}
-                    onChange={e => setIsTelehealthBooking(e.target.checked)}
-                    className="rounded"
-                  />
-                  <span>Conduct this consultation via secure Telehealth Video</span>
-                </label>
-
-                <label className="flex items-center gap-2 font-semibold text-slate-700 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={requestWaitlist}
-                    onChange={e => setRequestWaitlist(e.target.checked)}
-                    className="rounded"
-                  />
-                  <span>Add to Cancellation / Earlier Slot Waiting-List</span>
-                </label>
-              </div>
-
-              <div className="pt-3 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowBookingModal(false)}
-                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-[#00334f] hover:bg-[#0c4a6e] text-white font-bold rounded-lg shadow-xs cursor-pointer"
-                >
-                  Confirm Booking
-                </button>
-              </div>
-            </form>
-          </div>
         </div>
       )}
 

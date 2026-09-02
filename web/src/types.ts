@@ -413,6 +413,8 @@ export interface Appointment {
   date: string;
   type?: "Standard GP Consult" | "Long Consult (20+ min)" | "Telehealth Video" | "Care Plan Review" | "Immunisation" | "Skin Check";
   doctorName?: string;
+  /** Suwasiri / clinic_doctors catalog id (e.g. d-chamidu-kaushal-rathnayake). */
+  doctorId?: string;
   doctorSlmcNo?: string;
   room?: string;
   isTelehealth?: boolean;
