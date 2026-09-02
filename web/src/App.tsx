@@ -36,7 +36,6 @@ import {
   FlaskConical,
   ShieldCheck,
   Share2,
-  Barcode,
   Upload,
   Eye,
   X,
@@ -74,6 +73,7 @@ import RecallsDashboard from "./components/RecallsDashboard";
 import ReceptionBookingScheduler from "./components/ReceptionBookingScheduler";
 import type { ReceptionBookPayload } from "./components/ReceptionBookingScheduler";
 import PatientPortalView from "./components/PatientPortalView";
+import UniqueHealthIdSyncPanel from "./components/UniqueHealthIdSyncPanel";
 import PracticeManagerView from "./components/PracticeManagerView";
 import SystemAdminView from "./components/SystemAdminView";
 import PathologyHub from "./components/PathologyHub";
@@ -83,7 +83,6 @@ import ReportsAnalyticsView from "./components/ReportsAnalyticsView";
 import { RecallRecord } from "./types";
 import {
   BRANCH_COLOMBO,
-  DEFAULT_STAFF_DIRECTORY,
   HOSPITAL_PRIMECARE,
   canViewHospitalWideCharts,
   defaultTabFor,
@@ -108,6 +107,8 @@ import {
   suwasiriDoctorCatalogId,
   updateSuwasiriAppointmentStatus,
   normalizeDoctorName,
+  matchSessionDoctor,
+  isSameDoctor,
 } from "./sync/suwasiriAppointments";
 import { clinicExamSessionId, issuePrescriptionsToSuwasiri } from "./sync/suwasiriPrescriptions";
 import { issueLabReportToSuwasiri } from "./sync/suwasiriLabs";
@@ -125,9 +126,10 @@ import {
   publishClinicCenterToSuwasiri,
   publishClinicDoctorToSuwasiri,
   republishStaffDoctorsToSuwasiri,
-  staffDoctorStub,
   subscribeClinicDoctors,
+  doctorWorksAtClinic,
 } from "./sync/suwasiriClinicDoctors";
+import DoctorDaySlotsPanel from "./components/DoctorDaySlotsPanel";
 
 export interface DrugFormularyItem {
   name: string;
@@ -610,6 +612,9 @@ export default function App() {
   const [hubFocusSampleId, setHubFocusSampleId] = useState<string | null>(null);
   const [barcodeSearchText, setBarcodeSearchText] = useState<string>("");
   const [barcodeLoading, setBarcodeLoading] = useState<boolean>(false);
+  const [healthIdPreview, setHealthIdPreview] = useState<Patient | null>(null);
+  const [healthIdLookupError, setHealthIdLookupError] = useState("");
+  const [healthIdSaving, setHealthIdSaving] = useState(false);
   const [selectedReceiptUrl, setSelectedReceiptUrl] = useState<string | null>(null);
   const [selectedReceiptPatientName, setSelectedReceiptPatientName] = useState<string>("");
 
@@ -750,6 +755,7 @@ export default function App() {
   const [bookingMode, setBookingMode] = useState<"book" | "walkin">("book");
   const [bookingConsultMode, setBookingConsultMode] = useState<"clinic" | "video">("clinic");
   const [bookingLockPatient, setBookingLockPatient] = useState(false);
+  const [calendarDoctorId, setCalendarDoctorId] = useState("");
 
   // Consultation active desk states
   const [consultNotes, setConsultNotes] = useState<string>("");
@@ -966,7 +972,10 @@ export default function App() {
   const hospitalRoles = roleDefs.filter((r) => r.hospitalId === sessionHospitalId);
   const hospitalStaff = staffDirectory.filter((s) => s.hospitalId === sessionHospitalId && s.active !== false);
   const workingDoctors = hospitalStaff.filter(
-    (s) => s.active !== false && /doctor|medical officer/i.test(s.role || "")
+    (s) =>
+      s.active !== false &&
+      /doctor|medical officer/i.test(s.role || "") &&
+      doctorWorksAtClinic(s, sessionHospitalId)
   );
   const activeRecallCount = recalls.filter(
     (r) => r.status !== "COMPLETED" && r.status !== "CANCELLED"
@@ -987,6 +996,7 @@ export default function App() {
     const seen = new Set<string>();
     const add = (d: StaffProvider) => {
       if (!d?.name) return;
+      if (!doctorWorksAtClinic(d, sessionHospitalId)) return;
       const cat = suwasiriDoctorCatalogId({ staffUserId: d.id, doctorName: d.name });
       const nameKey = normalizeDoctorName(d.name);
       if (seen.has(cat) || seen.has(d.id) || (nameKey && seen.has(`n:${nameKey}`))) return;
@@ -995,30 +1005,26 @@ export default function App() {
       if (nameKey) seen.add(`n:${nameKey}`);
       list.push(d);
     };
-    publishedClinicDoctors
-      .filter((d) => d.active !== false && (!d.hospitalId || d.hospitalId === sessionHospitalId))
-      .forEach(add);
+    publishedClinicDoctors.forEach(add);
     workingDoctors.forEach(add);
-    tenantAppointments.forEach((a) => {
-      if (!a.doctorName) return;
-      const id = a.doctorId || suwasiriDoctorCatalogId({ doctorName: a.doctorName });
-      add(
-        staffDoctorStub({
-          id,
-          name: a.doctorName,
-          specialty: a.specialty,
-          hospitalId: a.hospitalId || sessionHospitalId,
-        })
-      );
-    });
     return list;
   })();
+  const sessionDoctor = matchSessionDoctor(registeredDoctors, sessionUser);
+  const clinicBookings = sessionDoctor && !isFrontDeskStaff
+    ? tenantAppointments.filter((a) =>
+        isSameDoctor({
+          doctorName: sessionDoctor.name,
+          doctorStaffId: sessionDoctor.id,
+          appointment: a,
+        })
+      )
+    : tenantAppointments;
   const todayKey = formatDateKey(new Date());
-  const dayAppointments = tenantAppointments
+  const dayAppointments = clinicBookings
     .filter((a) => a.date === selectedClinicDate)
     .slice()
     .sort(compareLobbyPlace);
-  const appointmentCountsByDate = tenantAppointments.reduce((acc, a) => {
+  const appointmentCountsByDate = clinicBookings.reduce((acc, a) => {
     if (!a.date) return acc;
     acc[a.date] = (acc[a.date] || 0) + 1;
     return acc;
@@ -1099,17 +1105,49 @@ export default function App() {
     setSelectedClinicDate(dateKey);
     setNewAptDate(dateKey);
   };
+  const calendarSlotDoctor =
+    sessionDoctor && !isFrontDeskStaff
+      ? sessionDoctor
+      : registeredDoctors.find((d) => d.id === calendarDoctorId) || registeredDoctors[0];
   const clinicCalendar = (
-    <ClinicMonthCalendar
-      year={calendarMonth.year}
-      month={calendarMonth.month}
-      selectedDate={selectedClinicDate}
-      todayKey={todayKey}
-      countsByDate={appointmentCountsByDate}
-      onSelectDate={selectClinicDate}
-      onChangeMonth={(year, month) => setCalendarMonth({ year, month })}
-      onJumpToToday={jumpToToday}
-    />
+    <div className="space-y-3">
+      <ClinicMonthCalendar
+        year={calendarMonth.year}
+        month={calendarMonth.month}
+        selectedDate={selectedClinicDate}
+        todayKey={todayKey}
+        countsByDate={appointmentCountsByDate}
+        onSelectDate={selectClinicDate}
+        onChangeMonth={(year, month) => setCalendarMonth({ year, month })}
+        onJumpToToday={jumpToToday}
+      />
+      {calendarSlotDoctor && (
+        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-xs space-y-2">
+          {!(sessionDoctor && !isFrontDeskStaff) && registeredDoctors.length > 1 && (
+            <select
+              value={calendarSlotDoctor.id}
+              onChange={(e) => setCalendarDoctorId(e.target.value)}
+              className="w-full p-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
+            >
+              {registeredDoctors.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <p className="text-[10px] text-slate-500 font-semibold">
+            Click a date to see available and booked times (Suwasiri App + GP Care).
+          </p>
+          <DoctorDaySlotsPanel
+            doctor={calendarSlotDoctor}
+            dateKey={selectedClinicDate}
+            appointments={tenantAppointments}
+            selectable={false}
+          />
+        </div>
+      )}
+    </div>
   );
 
   const persistRoles = async (roles: RoleDefinition[]) => {
@@ -1469,59 +1507,96 @@ export default function App() {
     );
   };
 
-  const handleSyncUniqueHealthId = async (raw: string) => {
+  const suwasiriPatientPayload = (patient: Patient, barcode: string) => ({
+    id: patient.id,
+    name: patient.name,
+    age: patient.age,
+    gender: patient.gender,
+    bloodType: patient.bloodType,
+    allergies: patient.allergies,
+    phone: patient.phone,
+    email: patient.email,
+    dateOfBirth: patient.dateOfBirth,
+    nic: patient.nic,
+    address: patient.address,
+    emergencyContactName: patient.emergencyContactName,
+    emergencyContactPhone: patient.emergencyContactPhone,
+    vaccineRecords: patient.vaccineRecords || [],
+    labResults: patient.labResults || [],
+    notes: patient.notes,
+    medicalHistory: patient.medicalHistory,
+    activeMedications: patient.activeMedications,
+    heightCm: patient.heightCm,
+    weightKg: patient.weightKg,
+    medicareNumber: patient.medicareNumber,
+    ihiNumber: patient.ihiNumber,
+    medicalCenter: activeHospital?.name || patient.medicalCenter,
+    hospitalId: sessionHospitalId || HOSPITAL_PRIMECARE,
+    branchId: sessionBranchId || BRANCH_COLOMBO,
+    suwasiriBarcode: patient.suwasiriBarcode || barcode.toUpperCase(),
+  });
+
+  const handleLookupUniqueHealthId = async (raw: string) => {
     const input = raw.trim();
     if (!input) return;
     setBarcodeLoading(true);
+    setHealthIdLookupError("");
+    setHealthIdPreview(null);
     try {
-      let patient = await lookupSuwasiriHealthId(input);
-      if (patient) {
-        const res = await fetch("/api/patients", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: patient.id,
-            name: patient.name,
-            age: patient.age,
-            gender: patient.gender,
-            bloodType: patient.bloodType,
-            allergies: patient.allergies,
-            phone: patient.phone,
-            email: patient.email,
-            notes: patient.notes,
-            medicalHistory: patient.medicalHistory,
-            medicalCenter: activeHospital?.name || patient.medicalCenter,
-            hospitalId: sessionHospitalId || HOSPITAL_PRIMECARE,
-            branchId: sessionBranchId || BRANCH_COLOMBO,
-            suwasiriBarcode: patient.suwasiriBarcode || input.toUpperCase(),
-          }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.state?.patients) setPatients(data.state.patients);
-          patient = data.patient || patient;
-        } else {
-          setPatients((prev) => prev.some((p) => p.id === patient!.id) ? prev : [patient!, ...prev]);
-        }
-        setBarcodeSearchText("");
-        if (!isFrontDeskStaff) {
-          setActiveHubInitialTab("history");
-          setActiveHubPatient(patient);
-        }
-        alert(`Synced ${patient.name} from Unique Health ID ${input} into ${activeHospital?.name || "this clinic"} only.`);
+      const patient = await lookupSuwasiriHealthId(input);
+      if (!patient) {
+        setHealthIdLookupError(
+          `No Suwasiri patient found for Unique Health ID ${input.toUpperCase()}. Check the number on the patient’s Unique Health ID card.`
+        );
         return;
       }
-      const res = await fetch(`/api/suwasiri/barcode/${encodeURIComponent(input)}`);
-      if (!res.ok) throw new Error("Health ID not found on Suwasiri.");
-      const data = await res.json();
-      if (data.state?.patients) setPatients(data.state.patients);
-      setBarcodeSearchText("");
-      alert(`Loaded patient "${data.patient.name}" into the clinic registry.`);
-      if (!isFrontDeskStaff) setActiveHubPatient(data.patient);
+      setHealthIdPreview({
+        ...patient,
+        suwasiriBarcode: patient.suwasiriBarcode || input.toUpperCase(),
+      });
     } catch (err: any) {
-      alert("Could not sync Unique Health ID: " + err.message);
+      const message = String(err?.message || err);
+      setHealthIdLookupError(
+        message.toLowerCase().includes("permission")
+          ? "Could not read this Unique Health ID. Sign in to GP Care with a Firebase account that can access Suwasiri patient files."
+          : `Could not look up Unique Health ID: ${message}`
+      );
     } finally {
       setBarcodeLoading(false);
+    }
+  };
+
+  const handleSaveUniqueHealthId = async () => {
+    const patient = healthIdPreview;
+    if (!patient) return;
+    setHealthIdSaving(true);
+    setHealthIdLookupError("");
+    try {
+      const barcode = patient.suwasiriBarcode || barcodeSearchText.trim().toUpperCase();
+      const res = await fetch("/api/patients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(suwasiriPatientPayload(patient, barcode)),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || `Save failed (${res.status})`);
+      }
+      const data = await res.json();
+      if (data.state?.patients) setPatients(data.state.patients);
+      else {
+        const saved = data.patient || patient;
+        setPatients((prev) => prev.some((p) => p.id === saved.id)
+          ? prev.map((p) => (p.id === saved.id ? { ...p, ...saved } : p))
+          : [saved, ...prev]);
+      }
+      setBarcodeSearchText("");
+      setHealthIdPreview(null);
+      alert(`${patient.name} is now on Patient Clinical Records at ${activeHospital?.name || "this clinic"}.`);
+    } catch (err: any) {
+      setHealthIdLookupError("Could not save this Unique Health ID file: " + (err.message || err));
+    } finally {
+      setHealthIdSaving(false);
     }
   };
 
@@ -1616,7 +1691,11 @@ export default function App() {
     consultMode?: "clinic" | "video";
     paymentMethod?: string;
   }) => {
-    await bookClinicSlot(payload);
+    await bookClinicSlot({
+      ...payload,
+      doctorName: sessionDoctor?.name || sessionUser?.name,
+      doctorStaffId: sessionDoctor?.id,
+    });
     const [y, m] = payload.date.split("-").map(Number);
     if (y && m) setCalendarMonth({ year: y, month: m - 1 });
     selectClinicDate(payload.date);
@@ -2510,6 +2589,7 @@ export default function App() {
       { name: "Medicare Ref", val: p.medicareRefNumber },
       { name: "IHI Identifier", val: p.ihiNumber },
       { name: "Suwasiri Barcode", val: p.suwasiriBarcode },
+      { name: "NIC", val: p.nic },
       { name: "DVA Card", val: p.dvaNumber },
       { name: "Pensioner Card", val: p.pensionerCardNumber },
       { name: "Mobile Phone", val: p.phone }
@@ -3972,72 +4052,20 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* SUWASIRI MOBILE APP BARCODE INTEGRATION */}
-                <div className="bg-emerald-50 border border-emerald-200/80 rounded-lg p-4 space-y-3">
-                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                    <div className="flex items-center gap-2">
-                      <div className="bg-emerald-600 text-white font-black p-1 px-1.5 rounded text-[9px] tracking-wider animate-pulse font-mono">
-                        SUWASIRI LIVE
-                      </div>
-                      <h3 className="font-serif font-extrabold text-xs text-emerald-800">
-                        Suwasiri Unique Health ID sync
-                      </h3>
-                    </div>
-                    <span className="text-[10px] text-slate-500 font-medium">Enter the number from the patient’s Unique Health ID card, then Sync to Portal</span>
-                  </div>
-
-                  <form onSubmit={async (e) => {
-                    e.preventDefault();
-                    await handleSyncUniqueHealthId(barcodeSearchText);
-                  }} className="flex flex-col sm:flex-row gap-2">
-                    <div className="relative flex-1">
-                      <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600 w-4.5 h-4.5" />
-                      <input
-                        type="text"
-                        required
-                        placeholder="Unique Health ID (e.g. SW3C6F5B5A27 for Chamidu, SW6CF9340271 for Sakuni)"
-                        className="w-full pl-10 pr-4 py-2 border border-emerald-300 rounded text-xs bg-white text-emerald-900 placeholder-emerald-600/40 font-bold tracking-wider uppercase focus:ring-1 focus:ring-emerald-500 outline-none"
-                        value={barcodeSearchText}
-                        onChange={(e) => setBarcodeSearchText(e.target.value)}
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={barcodeLoading}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2 rounded text-xs flex items-center justify-center gap-1.5 shrink-0 transition-colors disabled:opacity-50 shadow-sm"
-                    >
-                      {barcodeLoading ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          Synchronizing...
-                        </>
-                      ) : (
-                        <>
-                          <Barcode className="w-3.5 h-3.5" />
-                          Sync to Portal
-                        </>
-                      )}
-                    </button>
-                  </form>
-
-                  {/* Sample suggestions */}
-                  <div className="flex items-center gap-2 flex-wrap text-[10px]">
-                    <span className="text-emerald-800 font-bold uppercase tracking-wider text-[8px]">Try a Unique Health ID:</span>
-                    {[
-                      { code: "SW3C6F5B5A27", name: "Chamidu" },
-                      { code: "SW6CF9340271", name: "Sakuni" },
-                    ].map((item) => (
-                      <button
-                        key={item.code}
-                        type="button"
-                        onClick={() => setBarcodeSearchText(item.code)}
-                        className="bg-emerald-100 hover:bg-emerald-200 text-emerald-850 border border-emerald-200/60 p-1 px-1.5 rounded transition text-[9px] font-mono font-semibold"
-                      >
-                        {item.code} ({item.name})
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <UniqueHealthIdSyncPanel
+                  barcodeSearchText={barcodeSearchText}
+                  onBarcodeChange={setBarcodeSearchText}
+                  loading={barcodeLoading}
+                  saving={healthIdSaving}
+                  preview={healthIdPreview}
+                  error={healthIdLookupError}
+                  onLookup={handleLookupUniqueHealthId}
+                  onSave={handleSaveUniqueHealthId}
+                  onClear={() => {
+                    setHealthIdPreview(null);
+                    setHealthIdLookupError("");
+                  }}
+                />
 
                 {/* Grids list */}
                 {(isPlatformSA || Boolean(activeRole?.canManageUsers)) && patientAccessRequests.filter((r) => r.status === "PENDING" && r.hospitalId === sessionHospitalId).length > 0 && (
@@ -4104,7 +4132,19 @@ export default function App() {
                       <div className="bg-white border rounded p-2 text-[10px] space-y-1 font-semibold text-slate-600">
                         <p><span className="text-slate-400">Clinical Allergies:</span> <span className="font-bold text-red-600">{pat.allergies}</span></p>
                         <p><span className="text-slate-400">Biological Blood:</span> {pat.bloodType}</p>
+                        <p><span className="text-slate-400">Date of birth:</span> {pat.dateOfBirth || "—"}</p>
+                        {pat.nic && <p><span className="text-slate-400">NIC:</span> {pat.nic}</p>}
+                        {pat.phone && <p><span className="text-slate-400">Phone:</span> {pat.phone}</p>}
+                        {pat.email && <p><span className="text-slate-400">Email:</span> {pat.email}</p>}
+                        {pat.address && <p><span className="text-slate-400">Address:</span> {pat.address}</p>}
+                        {(pat.emergencyContactName || pat.emergencyContactPhone) && (
+                          <p>
+                            <span className="text-slate-400">Emergency:</span>{" "}
+                            {[pat.emergencyContactName, pat.emergencyContactPhone].filter(Boolean).join(" · ")}
+                          </p>
+                        )}
                         <p><span className="text-slate-400">Immunization Sequence:</span> {pat.vaccineRecords?.length || 0} Dose(s) logged</p>
+                        <p><span className="text-slate-400">Lab reports:</span> {pat.labResults?.length || 0} on file</p>
                       </div>
 
                       <div className="flex justify-between items-center text-[10px] text-slate-500 pt-2 border-t gap-2">
@@ -4176,11 +4216,12 @@ export default function App() {
                           || appointments.find((a) => a.patientId === selectedConsultPatient.id && a.status !== "COMPLETED"));
                         return apt ? overlayBookingIdentity(apt, named) : named;
                       })()}
-                      appointments={appointments}
+                      appointments={tenantAppointments}
                       billingList={billing}
                       currentRole={currentRole}
                       clinicName={activeHospital?.name || selectedConsultPatient.medicalCenter}
                       sessionDoctorName={sessionUser?.name || "GP"}
+                      sessionDoctor={sessionDoctor}
                       linkedAppointmentId={examFileOnlyView ? undefined : (examAppointmentId || undefined)}
                       hideActiveConsultDetails={examFileOnlyView}
                       heightMode="natural"
@@ -4647,6 +4688,7 @@ export default function App() {
                 focusPatientId={telehealthFocus?.patientId}
                 focusAppointmentId={telehealthFocus?.appointmentId}
                 sessionDoctorName={sessionUser?.name || "Dr. Priyantha Silva"}
+                sessionDoctor={sessionDoctor}
                 drugsDatabase={drugs}
                 onSelectVideoPatient={(pat, appointmentId) => {
                   setTelehealthFocus({ patientId: pat.id, appointmentId });
@@ -5946,7 +5988,7 @@ export default function App() {
       {showAptModal && (
         <ReceptionBookingScheduler
           patients={hospitalPatients.length > 0 ? hospitalPatients : patients}
-          doctors={registeredDoctors.length > 0 ? registeredDoctors : DEFAULT_STAFF_DIRECTORY.filter((s) => /doctor|medical officer/i.test(s.role))}
+          doctors={registeredDoctors}
           appointments={tenantAppointments}
           initialPatientId={newAptPatientId}
           initialDate={newAptDate}
@@ -6692,11 +6734,12 @@ export default function App() {
             patients.find((p) => p.id === activeDoctorRecordPatient.id) || activeDoctorRecordPatient,
             suwasiriCharts[activeDoctorRecordPatient.id]
           ))}
-          appointments={appointments}
+          appointments={tenantAppointments}
           billingList={billing}
           currentRole={currentRole}
           clinicName={activeHospital?.name}
           sessionDoctorName={sessionUser?.name || "GP"}
+          sessionDoctor={sessionDoctor}
           onClose={() => setActiveDoctorRecordPatient(null)}
           onUpdatePatient={persistClinicalFile}
           onBookAppointment={bookFromClinicalRecord}

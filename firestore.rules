@@ -33,9 +33,8 @@ service cloud.firestore {
     }
 
     match /vault/{reportId} {
-      // Patients read household lab reports. GP Care staff create after reviewing pathology.
-      allow read: if isSignedIn()
-        && isHouseholdPatient(resource.data.patientId);
+      // Any signed-in user (patient household + GP Care staff Unique Health ID sync).
+      allow read: if isSignedIn();
       allow create: if isSignedIn();
       allow update, delete: if isSignedIn()
         && (isHouseholdPatient(resource.data.patientId)

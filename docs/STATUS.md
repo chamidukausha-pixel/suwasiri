@@ -89,11 +89,11 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] GP Care Clinical Calculators: search registered patient, click name for current details, edit/save; history reloads in the suite
 - [x] Recalls & Reminders live on Receptionist / Front Desk; SMS/email via registered phone/email; completing a recall drops the active count (e.g. 5 → 4)
 - [x] Reception **Book scheduler appointment slot**: drag working doctors, sage dates, coral times, 6‑month window; in-person → Suwasiri Home **blue** card, video → **purple** card; doctor + receptionist calendars show the name on that date
-- [x] Patient Clinical Records lives on Receptionist & Front Desk; Unique Health ID → **Sync to Portal** loads the Suwasiri `users` file (name, phone, details)
+- [x] Patient Clinical Records lives on Receptionist & Front Desk; Unique Health ID → **Sync to Portal** loads the live Suwasiri file (name, age, gender, DOB, blood, NIC, phone, email, address, allergies, emergency contact, vaccine history, previous lab reports) into the Unique Health ID box; **Save to Patient Clinical Records** registers that file at this clinic
 - [x] **Check walk-in availability** uses the same sage/coral 6‑month scheduler; if the session is full, reception can add up to 5 walk-ins at the end of the list; Lobby ⬆️⬇️ reorders the queue
 - [x] Telehealth right rail is the clinical consultation room (not Active GP room); View Clinical Hub opens history and syncs to that patient’s Suwasiri file
 - [x] Telehealth e-Rx: view, download, and print after medicines are issued; still writes Suwasiri Call E-Prescription
-- [x] Unique Health ID Sync to Portal is clinic-scoped (PrimeCare vs other hospitals); Chamidu `SW3C6F5B5A27` / Sakuni `SW6CF9340271`
+- [x] Unique Health ID Sync to Portal is clinic-scoped (PrimeCare vs other hospitals); Chamidu `SW3C6F5B5A27` / Sakuni `SW6CF9340271`; lookup no longer falls back to dummy barcode patients
 - [x] Reception delete/block patient requires a comment and admin approval
 - [x] Receipts: Paid by Suwasiri vs paid by manual via Suwasiri (view/download slip)
 - [x] Sample Dispatch Hub delete with yes/no confirm; Team Secure Chat is shared by all clinic staff
@@ -146,7 +146,8 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] GP Exam Room patient file syncs to that patient’s Suwasiri app: **Completed** doctor notes → Vault; immunisations → Vault vaccine history; allergies under the Unique Health ID **name** on Profile (edit/delete); pathology + imaging → Vault lab reports; issued medical certificates → Vault certificates; exam-room medicines → Vault E-Prescription; Telehealth medicines → Call E-Prescription; specialist referral → Suwasiri notification
 - [x] GP Exam Room Consultation is one **Doctor notes** field (Subjective, medical issues this visit, and Plan & Management removed)
 - [x] Reception Recalls & Reminders In person / Video book writes Firestore `appointments` for that Suwasiri patient (Home **blue** / **purple**) and shows on the GP Care calendar that date
-- [x] Book Active Appointment and Patient Portal show each registered doctor's **available** vs **booked** times (Suwasiri App slots e.g. 04 Sep 2026 09:30 / 11:15 appear booked under that doctor). Online Public Booking removed.
+- [x] Book Active Appointment and Patient Portal list **only doctors at this medical centre**. Booked vs available times (Suwasiri App + GP Care reception/doctor) stay in sync on the scheduler and when clicking a clinic calendar date. Patient profile **Appointments** books using the **logged-in doctor only**.
+- [x] Unique Health ID: receptionist **Sync to Portal** previews the live Suwasiri demographics + labs + vaccines in the Unique Health ID box; **Save** writes the file into Patient Clinical Records (no dummy barcode fallback)
 
 ## In progress / next
 
@@ -158,7 +159,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [ ] FCM push (`firebase_messaging` is in pubspec, not wired in UI yet)
 - [ ] Firebase Storage for vault file uploads (`fileUrl`)
 - [ ] Tighten `notifications` rules to owner-scoped (`userId == auth.uid`)
-- [ ] Deploy updated `firestore.rules` (GP Care immunisations + allergy merge + `clinic_centers`) if not already: `firebase deploy --only firestore:rules`
+- [ ] Deploy updated `firestore.rules` (vault **read** for Unique Health ID lab sync + GP Care immunisations + allergy merge + `clinic_centers`) if not already: `firebase deploy --only firestore:rules`
 - [ ] Telehealth/Call: live WebRTC to GP Care is wired (STUN); a TURN server may be needed on some mobile networks
 - [ ] Web + mobile sync: appointments, Unique Health ID lookup, telehealth notes/chat, e-Rx, medical certificates, clinical calculator snapshots, GP Care–published `clinic_doctors`, **exam-room consult notes / immunisations / allergies / pathology / imaging / certificates**, and GP Care–issued e-Rx (Vault vs Call by session) are on Firestore; Vault → GP Care sync is **vaccine history only**. Remaining GP EMR charts still use the web JSON store. Tenancy/RBAC is in the web JSON store; tenancy collections are documented, not deployed.
 

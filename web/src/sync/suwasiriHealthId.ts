@@ -7,55 +7,275 @@ import {
   getDoc,
 } from "firebase/firestore";
 import { getFirebaseDb, isFirebaseConfigured } from "../firebase";
-import type { Patient } from "../types";
+import type { LabResult, Patient, VaccineRecord } from "../types";
+import { mapVaccinations } from "./suwasiriPatientChart";
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function str(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return String(value).trim();
+}
+
+function toDate(raw: unknown): Date | null {
+  if (raw == null || raw === "") return null;
+  if (typeof raw === "string" || typeof raw === "number") {
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  if (typeof raw === "object") {
+    const obj = raw as { toDate?: () => Date; seconds?: number };
+    if (typeof obj.toDate === "function") return obj.toDate();
+    if (typeof obj.seconds === "number") return new Date(obj.seconds * 1000);
+  }
+  return null;
+}
+
+function isoDate(raw: unknown): string {
+  const parsed = toDate(raw);
+  if (!parsed) return str(raw);
+  return parsed.toISOString().slice(0, 10);
+}
 
 function ageFromDob(raw?: string): number {
-  if (!raw) return 35;
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return 35;
+  const parsed = toDate(raw);
+  if (!parsed) return 0;
   const now = new Date();
-  let age = now.getFullYear() - d.getFullYear();
-  const m = now.getMonth() - d.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age -= 1;
+  let age = now.getFullYear() - parsed.getFullYear();
+  const m = now.getMonth() - parsed.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < parsed.getDate())) age -= 1;
   return Math.max(0, age);
 }
 
-function genderFromIntake(data: Record<string, unknown>): string {
-  const intake = (data.healthIntake || {}) as Record<string, unknown>;
-  const g = String(intake.gender || data.gender || "").toLowerCase();
-  if (g.startsWith("f")) return "Female";
-  if (g.startsWith("m")) return "Male";
-  return "Female";
+function displayName(data: Record<string, unknown>, intake: Record<string, unknown>): string {
+  const fromIntake = str(intake.fullName);
+  if (fromIntake) return fromIntake;
+  const n = str(data.name);
+  if (n && n.toLowerCase() !== "patient") return n;
+  const email = str(data.email);
+  const local = email.split("@")[0].replace(/[._]+/g, " ").trim();
+  if (local) {
+    return local
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  }
+  return n || "Suwasiri patient";
+}
+
+function genderFromIntake(data: Record<string, unknown>, intake: Record<string, unknown>): string {
+  const raw = str(intake.sex || intake.gender || data.gender);
+  if (!raw) return "Not recorded";
+  const g = raw.toLowerCase();
+  if (g.startsWith("f") || g.includes("female")) return "Female";
+  if (g.startsWith("m") || g.includes("male")) return "Male";
+  return raw;
+}
+
+function allergyLabel(data: Record<string, unknown>, intake: Record<string, unknown>): string {
+  const clinic = str(data.clinicAllergies);
+  if (clinic) return clinic;
+  const parts = [
+    intake.importantAllergies,
+    intake.medicationAllergies,
+    intake.otherAllergies,
+    intake.allergies,
+    data.allergies,
+  ]
+    .map((x) => str(x))
+    .filter(Boolean);
+  return [...new Set(parts)].join(", ") || "None declared";
+}
+
+function parseEmergency(raw: string): { name: string; phone: string } {
+  const text = raw.trim();
+  if (!text) return { name: "", phone: "" };
+  const phoneMatch = text.match(/(?:\+?94|0)?[\s-]?\d[\d\s-]{7,14}\d/);
+  const phone = phoneMatch ? phoneMatch[0].replace(/\s+/g, " ").trim() : "";
+  let name = text;
+  if (phone) {
+    name = text.replace(phone, "").replace(/[-–,|/]+/g, " ").replace(/\s+/g, " ").trim();
+  }
+  return { name: name || text, phone };
+}
+
+function emergencyFromProfile(
+  data: Record<string, unknown>,
+  intake: Record<string, unknown>
+): { name: string; phone: string } {
+  const list = Array.isArray(data.emergencyContacts) ? data.emergencyContacts : [];
+  for (const item of list) {
+    if (typeof item === "string" && item.trim()) return parseEmergency(item);
+    if (item && typeof item === "object") {
+      const row = item as Record<string, unknown>;
+      const name = str(row.name || row.contactName || row.fullName);
+      const phone = str(row.phone || row.mobile || row.mobileNo || row.number);
+      if (name || phone) return { name, phone };
+    }
+  }
+  const fromIntake = str(intake.emergencyContact || intake.safetyEmergencyContact);
+  if (fromIntake) return parseEmergency(fromIntake);
+  return { name: "", phone: "" };
+}
+
+function medicalHistoryFromIntake(intake: Record<string, unknown>): string[] {
+  if (Array.isArray(intake.conditions)) {
+    return (intake.conditions as unknown[]).map((x) => str(x)).filter(Boolean);
+  }
+  const parts = [
+    intake.existingConditions,
+    intake.previousSurgeries,
+    intake.previousSeriousIllnesses,
+    intake.familyHistory,
+    intake.currentMedications,
+  ]
+    .map((x) => str(x))
+    .filter(Boolean);
+  return parts.length ? parts : [];
+}
+
+function intakeVaccines(intake: Record<string, unknown>): VaccineRecord[] {
+  const date = isoDate(intake.mostRecentVaccinationDate) || "—";
+  const rows: VaccineRecord[] = [];
+  const add = (vaccineName: string, detail: unknown) => {
+    const dose = str(detail);
+    if (!dose) return;
+    rows.push({
+      vaccineName,
+      date,
+      dose,
+      batchNumber: "",
+      status: "Completed",
+    });
+  };
+  add("COVID-19", intake.covidVaccination);
+  add("Influenza", intake.influenzaVaccination);
+  add("Other immunisations", intake.otherImmunisations);
+  return rows;
+}
+
+function mergeVaccines(primary: VaccineRecord[], extra: VaccineRecord[]): VaccineRecord[] {
+  const byKey = new Map<string, VaccineRecord>();
+  for (const row of [...extra, ...primary]) {
+    byKey.set(`${row.vaccineName}|${row.date}|${row.dose}`.toLowerCase(), row);
+  }
+  return [...byKey.values()];
+}
+
+function mapVaultToLab(id: string, data: Record<string, unknown>): LabResult | null {
+  const kind = str(data.kind || "lab").toLowerCase();
+  if (kind === "vaccine") return null;
+  const metrics = Array.isArray(data.metrics) ? data.metrics : [];
+  const result = metrics
+    .map((m) => {
+      const row = asRecord(m);
+      const name = str(row.name);
+      const value = str(row.value);
+      return name && value ? `${name}: ${value}` : value || name;
+    })
+    .filter(Boolean)
+    .join("; ")
+    || str(data.clinicalComments || data.result);
+  const metricStatuses = metrics.map((m) => str(asRecord(m).status).toLowerCase());
+  const critical = data.critical === true || metricStatuses.includes("critical");
+  const abnormal = critical || metricStatuses.includes("attention") || metricStatuses.includes("abnormal");
+  return {
+    id,
+    testName: str(data.title) || "Lab report",
+    date: isoDate(data.date) || "—",
+    status: critical ? "CRITICAL" : abnormal ? "ABNORMAL" : "COMPLETED",
+    result: result || "See report",
+    remarks: str(data.clinicalComments || data.issuedBy),
+    category: str(data.category) || "Pathology",
+    labName: str(data.facility || data.issuedBy),
+    abnormalFlag: abnormal,
+    criticalAlert: critical,
+    suwasiriSyncedAt: isoDate(data.syncedAt || data.date) || undefined,
+  };
+}
+
+async function fetchLabs(patientId: string): Promise<LabResult[]> {
+  const snap = await getDocs(
+    query(collection(getFirebaseDb(), "vault"), where("patientId", "==", patientId))
+  );
+  return snap.docs
+    .map((d) => mapVaultToLab(d.id, d.data() as Record<string, unknown>))
+    .filter((row): row is LabResult => Boolean(row))
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
+
+async function fetchVaccines(patientId: string): Promise<VaccineRecord[]> {
+  const snap = await getDocs(
+    query(collection(getFirebaseDb(), "vaccinations"), where("patientId", "==", patientId))
+  );
+  return mapVaccinations(
+    snap.docs.map((d) => ({ id: d.id, data: d.data() as Record<string, unknown> }))
+  );
 }
 
 export function mapUserDocToPatient(id: string, data: Record<string, unknown>): Patient {
-  const intake = (data.healthIntake || {}) as Record<string, unknown>;
-  const name = String(data.name || "Suwasiri patient");
-  const barcode = String(data.barcodeNumber || data.ceylonHealthId || "");
-  const dob = String(data.dateOfBirth || intake.dateOfBirth || "");
-  const conditions = Array.isArray(intake.conditions)
-    ? (intake.conditions as string[])
-    : [];
+  const intake = asRecord(data.healthIntake);
+  const dob = isoDate(data.dateOfBirth || intake.dateOfBirth);
+  const barcode = str(data.barcodeNumber || data.ceylonHealthId);
+  const nic = str(data.NIC || data.nic || intake.medicareDetails);
+  const emergency = emergencyFromProfile(data, intake);
+  const phone = str(data.mobileNo || data.phone || intake.contactDetails);
+  const address = str(intake.address || data.region);
+  const height = Number(str(intake.heightCm));
+  const weight = Number(str(intake.weightKg));
   return {
     id,
-    name,
+    name: displayName(data, intake),
     age: ageFromDob(dob),
-    gender: genderFromIntake(data),
+    gender: genderFromIntake(data, intake),
     dateOfBirth: dob || undefined,
-    bloodType: String(data.bloodGroup || intake.bloodGroup || "O+"),
-    allergies: String(intake.allergies || data.allergies || "None declared"),
-    phone: String(data.mobileNo || data.phone || ""),
-    email: String(data.email || ""),
+    nic: nic || undefined,
+    address: address || undefined,
+    bloodType: str(data.bloodGroup || intake.bloodGroup) || "Not recorded",
+    allergies: allergyLabel(data, intake),
+    phone,
+    email: str(data.email),
     image: "",
     notes: "Synced from Suwasiri Unique Health ID",
     history: [],
-    activeMedications: [],
-    medicalHistory: conditions,
-    vaccineRecords: [],
+    activeMedications: str(intake.currentMedications)
+      ? [str(intake.currentMedications)]
+      : [],
+    medicalHistory: medicalHistoryFromIntake(intake),
+    vaccineRecords: intakeVaccines(intake),
     labResults: [],
     prescriptionsList: [],
     suwasiriBarcode: barcode || undefined,
-    medicareNumber: barcode || undefined,
+    medicareNumber: nic || barcode || undefined,
+    ihiNumber: nic || undefined,
+    emergencyContactName: emergency.name || undefined,
+    emergencyContactPhone: emergency.phone || undefined,
+    heightCm: Number.isFinite(height) && height > 0 ? height : undefined,
+    weightKg: Number.isFinite(weight) && weight > 0 ? weight : undefined,
+  };
+}
+
+async function enrichPatient(id: string, data: Record<string, unknown>): Promise<Patient> {
+  const base = mapUserDocToPatient(id, data);
+  const [labs, vaccines] = await Promise.all([
+    fetchLabs(id).catch((err) => {
+      console.warn("Unique Health ID labs:", err);
+      return [] as LabResult[];
+    }),
+    fetchVaccines(id).catch((err) => {
+      console.warn("Unique Health ID vaccines:", err);
+      return [] as VaccineRecord[];
+    }),
+  ]);
+  return {
+    ...base,
+    labResults: labs,
+    vaccineRecords: mergeVaccines(vaccines, base.vaccineRecords || []),
   };
 }
 
@@ -72,31 +292,27 @@ async function queryByField(field: string, value: string): Promise<Patient | nul
   const snap = await getDocs(query(collection(db, "users"), where(field, "==", value)));
   if (snap.empty) return null;
   const first = snap.docs[0];
-  return mapUserDocToPatient(first.id, first.data() as Record<string, unknown>);
+  return enrichPatient(first.id, first.data() as Record<string, unknown>);
 }
 
-/** Look up a Suwasiri Unique Health ID / barcode on Firestore `users`. */
+/** Look up a Suwasiri Unique Health ID / barcode on Firestore `users`, plus vault labs and vaccinations. */
 export async function lookupSuwasiriHealthId(raw: string): Promise<Patient | null> {
   const code = raw.trim();
   if (!code || !isFirebaseConfigured()) return null;
   const upper = code.toUpperCase();
-  try {
-    const byBarcode = await queryByField("barcodeNumber", code);
-    if (byBarcode) return byBarcode;
-    const byBarcodeU = code === upper ? null : await queryByField("barcodeNumber", upper);
-    if (byBarcodeU) return byBarcodeU;
-    const byCeylon = await queryByField("ceylonHealthId", code);
-    if (byCeylon) return byCeylon;
-    const byCeylonU = await queryByField("ceylonHealthId", upper);
-    if (byCeylonU) return byCeylonU;
-    const scanned = await scanUsersForHealthId(upper);
-    if (scanned) return scanned;
-    const direct = await getDoc(doc(getFirebaseDb(), "users", code));
-    if (direct.exists()) {
-      return mapUserDocToPatient(direct.id, direct.data() as Record<string, unknown>);
-    }
-  } catch (err) {
-    console.warn("Unique Health ID lookup:", err);
+  const byBarcode = await queryByField("barcodeNumber", code);
+  if (byBarcode) return byBarcode;
+  const byBarcodeU = code === upper ? null : await queryByField("barcodeNumber", upper);
+  if (byBarcodeU) return byBarcodeU;
+  const byCeylon = await queryByField("ceylonHealthId", code);
+  if (byCeylon) return byCeylon;
+  const byCeylonU = await queryByField("ceylonHealthId", upper);
+  if (byCeylonU) return byCeylonU;
+  const scanned = await scanUsersForHealthId(upper);
+  if (scanned) return scanned;
+  const direct = await getDoc(doc(getFirebaseDb(), "users", code));
+  if (direct.exists()) {
+    return enrichPatient(direct.id, direct.data() as Record<string, unknown>);
   }
   return null;
 }
@@ -106,10 +322,10 @@ async function scanUsersForHealthId(upper: string): Promise<Patient | null> {
   const snap = await getDocs(collection(db, "users"));
   for (const d of snap.docs) {
     const data = d.data() as Record<string, unknown>;
-    const barcode = String(data.barcodeNumber || "").trim().toUpperCase();
-    const ceylon = String(data.ceylonHealthId || "").trim().toUpperCase();
+    const barcode = str(data.barcodeNumber).toUpperCase();
+    const ceylon = str(data.ceylonHealthId).toUpperCase();
     if (barcode === upper || ceylon === upper || d.id.toUpperCase() === upper) {
-      return mapUserDocToPatient(d.id, data);
+      return enrichPatient(d.id, data);
     }
   }
   return null;

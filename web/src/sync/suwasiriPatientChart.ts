@@ -12,19 +12,34 @@ export interface SuwasiriChartPatch {
   vaccineRecords: VaccineRecord[];
 }
 
-function formatChartDate(raw: unknown): string {
-  const value = String(raw || "").trim();
-  if (!value) return "—";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+function toDate(raw: unknown): Date | null {
+  if (raw == null || raw === "") return null;
+  if (typeof raw === "string" || typeof raw === "number") {
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  if (typeof raw === "object") {
+    const obj = raw as { toDate?: () => Date; seconds?: number };
+    if (typeof obj.toDate === "function") return obj.toDate();
+    if (typeof obj.seconds === "number") return new Date(obj.seconds * 1000);
+  }
+  return null;
 }
 
-function mapVaccinations(
+function formatChartDate(raw: unknown): string {
+  const parsed = toDate(raw);
+  if (parsed) {
+    return parsed.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }
+  const value = String(raw || "").trim();
+  return value || "—";
+}
+
+export function mapVaccinations(
   docs: Array<{ id: string; data: Record<string, unknown> }>
 ): VaccineRecord[] {
   return docs

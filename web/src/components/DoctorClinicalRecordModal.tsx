@@ -9,8 +9,8 @@ import {
 import { 
   Patient, VaccineRecord, LabResult, PrescriptionRecord, LabOrder, 
   ImagingRecord, ReferralRecord, CarePlanRecord, MyHealthRecordDoc, 
-  ObservationRecord, Appointment, Billing, DoctorConsultationActivity,
-  ClinicalDocument, MedicalCertificateRecord
+  ObservationRecord,   Appointment, Billing, DoctorConsultationActivity,
+  ClinicalDocument, MedicalCertificateRecord, StaffProvider
 } from "../types";
 import { 
   calculateBmi, calculateAustralianCvdRisk, calculateAusdrisk, 
@@ -28,6 +28,7 @@ import { issueVaccineHistoryToSuwasiri } from "../sync/suwasiriVaccinations";
 import { syncPatientAllergiesToSuwasiri } from "../sync/suwasiriAllergies";
 import { issueMedicalCertificateToSuwasiri } from "../sync/suwasiriCertificates";
 import { pushSuwasiriNotification } from "../sync/suwasiriNotifications";
+import ReceptionBookingScheduler from "./ReceptionBookingScheduler";
 
 export type ClinicalTab = 
   | "summary"
@@ -60,6 +61,7 @@ interface Props {
   embedded?: boolean;
   clinicName?: string;
   sessionDoctorName?: string;
+  sessionDoctor?: StaffProvider;
   linkedAppointmentId?: string;
   onBookAppointment?: (payload: {
     patientId: string;
@@ -68,6 +70,8 @@ interface Props {
     reason: string;
     consultMode?: "clinic" | "video";
     paymentMethod?: string;
+    doctorName?: string;
+    doctorStaffId?: string;
   }) => Promise<void> | void;
   onOrderPathology?: (testName: string, remarks: string) => void;
   initialTab?: ClinicalTab;
@@ -93,6 +97,7 @@ export default function DoctorClinicalRecordModal({
   embedded = false,
   clinicName,
   sessionDoctorName,
+  sessionDoctor,
   linkedAppointmentId,
   onBookAppointment,
   onOrderPathology,
@@ -225,12 +230,6 @@ export default function DoctorClinicalRecordModal({
   // Allergy add state
   const [newAllergyInput, setNewAllergyInput] = useState("");
   const [editingAllergyIndex, setEditingAllergyIndex] = useState<number | null>(null);
-  const [bookDate, setBookDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [bookTime, setBookTime] = useState("09:00 AM");
-  const [bookReason, setBookReason] = useState("GP Follow-up");
-  const [bookMode, setBookMode] = useState<"clinic" | "video">("clinic");
-  const [bookPayment, setBookPayment] = useState("Pay at clinic");
-  const [bookingSlot, setBookingSlot] = useState(false);
   const [doctorNote, setDoctorNote] = useState("");
   const [refEmail, setRefEmail] = useState("lalith.fernando@asiri.lk");
   const [docEmail, setDocEmail] = useState("");
@@ -781,11 +780,12 @@ export default function DoctorClinicalRecordModal({
                   ID: {patient.id}
                 </span>
                 <span className="text-[10px] bg-emerald-400/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full">
-                  Medicare: {patient.medicareNumber || "2847 9102 31"}
+                  {patient.nic ? `NIC: ${patient.nic}` : `ID: ${patient.medicareNumber || patient.suwasiriBarcode || patient.id}`}
                 </span>
               </div>
               <p className="text-xs text-sky-100 mt-1">
-                DOB: {patient.dateOfBirth || "1974-06-15"} • Blood: {patient.bloodType} • Allergies: <strong className="text-red-300">{patient.allergies || "None"}</strong>
+                DOB: {patient.dateOfBirth || "—"} • Blood: {patient.bloodType} • Allergies: <strong className="text-red-300">{patient.allergies || "None"}</strong>
+                {patient.phone ? ` • Phone: ${patient.phone}` : ""}
               </p>
             </div>
           </div>
@@ -2351,74 +2351,37 @@ export default function DoctorClinicalRecordModal({
                     Appointments &amp; clinic calendar
                   </h3>
                   <p className="text-slate-500 text-[11px]">
-                    Book a follow-up here. It appears on the doctor dashboard and receptionist calendar for that date.
+                    {sessionDoctor
+                      ? `Book a follow-up with ${sessionDoctor.name} only. Available and booked times stay in sync with the clinic calendar and Suwasiri App.`
+                      : "Appointment history for this file. Booking is available when a clinic doctor is signed in."}
                   </p>
                 </div>
               </div>
 
-              {onBookAppointment && (
-                <form
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 p-4 rounded-xl border-2 border-violet-200 bg-gradient-to-br from-violet-50 to-sky-50"
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    if (!bookReason.trim()) return;
-                    setBookingSlot(true);
-                    try {
-                      await onBookAppointment({
-                        patientId: patient.id,
-                        date: bookDate,
-                        time: bookTime,
-                        reason: bookReason.trim(),
-                        consultMode: bookMode,
-                        paymentMethod: bookPayment,
-                      });
-                      showToast(`Appointment booked for ${bookDate} at ${bookTime} (${bookPayment}) — calendar updated.`);
-                    } catch (err: any) {
-                      showToast(err?.message || "Could not book this slot.");
-                    } finally {
-                      setBookingSlot(false);
-                    }
+              {onBookAppointment && sessionDoctor && !hideActiveConsultDetails && (
+                <ReceptionBookingScheduler
+                  embedded
+                  lockDoctor
+                  lockPatient
+                  patients={[patient]}
+                  doctors={[sessionDoctor]}
+                  appointments={appointments}
+                  initialPatientId={patient.id}
+                  includeToday
+                  onClose={() => undefined}
+                  onConfirm={async (payload) => {
+                    await onBookAppointment({
+                      patientId: payload.patientId,
+                      date: payload.date,
+                      time: payload.time,
+                      reason: payload.reason,
+                      consultMode: payload.consultMode,
+                      doctorName: payload.doctorName,
+                      doctorStaffId: payload.doctorStaffId,
+                    });
+                    showToast(`Appointment booked for ${payload.date} at ${payload.time} — calendar updated.`);
                   }}
-                >
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-600 uppercase">Date</label>
-                    <input type="date" value={bookDate} onChange={(e) => setBookDate(e.target.value)} className="w-full p-2 border rounded-lg text-xs bg-white" required />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-600 uppercase">Time</label>
-                    <select value={bookTime} onChange={(e) => setBookTime(e.target.value)} className="w-full p-2 border rounded-lg text-xs bg-white">
-                      {["08:00 AM","08:30 AM","09:00 AM","09:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","01:00 PM","01:30 PM","02:00 PM","02:30 PM","03:00 PM","03:30 PM","04:00 PM","04:30 PM","05:00 PM"].map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1 sm:col-span-2 lg:col-span-1">
-                    <label className="text-[10px] font-bold text-slate-600 uppercase">Reason</label>
-                    <input value={bookReason} onChange={(e) => setBookReason(e.target.value)} className="w-full p-2 border rounded-lg text-xs bg-white" placeholder="Follow-up / review" required />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-600 uppercase">Mode</label>
-                    <select value={bookMode} onChange={(e) => setBookMode(e.target.value as "clinic" | "video")} className="w-full p-2 border rounded-lg text-xs bg-white">
-                      <option value="clinic">In-clinic</option>
-                      <option value="video">Video / telehealth</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-600 uppercase">Payment</label>
-                    <select value={bookPayment} onChange={(e) => setBookPayment(e.target.value)} className="w-full p-2 border rounded-lg text-xs bg-white">
-                      <option value="Pay at clinic">Pay at clinic</option>
-                      <option value="Cash">Cash</option>
-                      <option value="Card">Card / EFTPOS</option>
-                      <option value="Suwasiri Pay">Suwasiri Pay</option>
-                      <option value="Bank transfer">Bank transfer</option>
-                    </select>
-                  </div>
-                  <div className="flex items-end">
-                    <button type="submit" disabled={bookingSlot} className="w-full bg-violet-600 hover:bg-violet-700 text-white font-extrabold px-3 py-2 rounded-lg text-xs disabled:opacity-50">
-                      {bookingSlot ? "Booking…" : "Book on calendar"}
-                    </button>
-                  </div>
-                </form>
+                />
               )}
 
               <div className="space-y-4">

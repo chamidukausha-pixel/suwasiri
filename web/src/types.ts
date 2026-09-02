@@ -246,6 +246,8 @@ export interface Patient {
   age: number;
   gender: string;
   dateOfBirth?: string;
+  nic?: string;
+  address?: string;
   bloodType: string;
   allergies: string;
   phone: string;

@@ -22,7 +22,7 @@ import {
   Share2,
   Loader2,
 } from "lucide-react";
-import { Patient, Appointment, DrugFormularyItem, Billing, PrescriptionRecord } from "../types";
+import { Patient, Appointment, DrugFormularyItem, Billing, PrescriptionRecord, StaffProvider } from "../types";
 import {
   canStartTelehealthCall,
   isVideoBooking,
@@ -72,6 +72,7 @@ interface Props {
   focusPatientId?: string;
   focusAppointmentId?: string;
   sessionDoctorName?: string;
+  sessionDoctor?: StaffProvider;
   onInvitePatient: (pName: string, phone: string, transport: "WhatsApp" | "SMS", token: string) => void;
   onSaveTelehealthNotes: (patientId: string, notes: string) => void;
   drugsDatabase?: string[];
@@ -106,6 +107,7 @@ export default function TelehealthRoom({
   focusPatientId,
   focusAppointmentId,
   sessionDoctorName = "Dr. Priyantha Silva",
+  sessionDoctor,
   onSaveTelehealthNotes,
   drugsDatabase = [],
   formulary = [],
@@ -939,6 +941,7 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
                 currentRole={currentRole}
                 clinicName={clinicName || selectedPat.medicalCenter}
                 sessionDoctorName={sessionDoctorName}
+                sessionDoctor={sessionDoctor}
                 linkedAppointmentId={focusAppointmentId || selectedVideoApt?.id}
                 onClose={() => undefined}
                 onUpdatePatient={(updated) => onUpdatePatient?.(updated)}

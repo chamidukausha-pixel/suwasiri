@@ -778,7 +778,7 @@ function getStore() {
     return INITIAL_STATE;
   }
   try {
-    const raw = fs.readFileSync(DATA_FILE, "utf-8");
+    const raw = fs.readFileSync(DATA_FILE, "utf-8").replace(/^\uFEFF/, "");
     const data = JSON.parse(raw);
     
     // Auto migration checks for patient structure updates
@@ -1466,13 +1466,74 @@ app.patch("/api/appointments/:id/move", (req, res) => {
   res.json({ success: true, appointments: store.appointments, state: store });
 });
 
+function mergeKeyedRows(existing: any[] | undefined, incoming: any[] | undefined, keyFn: (row: any) => string) {
+  const map = new Map<string, any>();
+  for (const row of existing || []) {
+    if (!row) continue;
+    map.set(keyFn(row), row);
+  }
+  for (const row of incoming || []) {
+    if (!row) continue;
+    map.set(keyFn(row), row);
+  }
+  return Array.from(map.values());
+}
+
+function applySuwasiriDemographics(target: any, body: any) {
+  const {
+    name, age, gender, bloodType, allergies, phone, email, notes, dateOfBirth, nic, address,
+    emergencyContactName, emergencyContactPhone, suwasiriBarcode, medicalHistory, activeMedications,
+    heightCm, weightKg, labResults, vaccineRecords, medicareNumber, ihiNumber,
+  } = body;
+  if (name) target.name = name;
+  if (age !== undefined && age !== null && age !== "") target.age = parseInt(String(age), 10) || 0;
+  if (gender) target.gender = gender;
+  if (bloodType) target.bloodType = bloodType;
+  if (allergies) target.allergies = allergies;
+  if (phone) target.phone = phone;
+  if (email) target.email = email;
+  if (notes !== undefined) target.notes = notes;
+  if (dateOfBirth) target.dateOfBirth = dateOfBirth;
+  if (nic) {
+    target.nic = nic;
+    target.ihiNumber = nic;
+    target.medicareNumber = medicareNumber || nic;
+  } else if (medicareNumber) {
+    target.medicareNumber = medicareNumber;
+  }
+  if (ihiNumber) target.ihiNumber = ihiNumber;
+  if (address) target.address = address;
+  if (emergencyContactName) target.emergencyContactName = emergencyContactName;
+  if (emergencyContactPhone) target.emergencyContactPhone = emergencyContactPhone;
+  if (suwasiriBarcode) target.suwasiriBarcode = suwasiriBarcode;
+  if (heightCm !== undefined) target.heightCm = Number(heightCm);
+  if (weightKg !== undefined) target.weightKg = Number(weightKg);
+  if (medicalHistory) {
+    target.medicalHistory = Array.isArray(medicalHistory)
+      ? medicalHistory
+      : String(medicalHistory).split(",").map((s: string) => s.trim()).filter(Boolean);
+  }
+  if (Array.isArray(activeMedications)) target.activeMedications = activeMedications;
+  if (Array.isArray(labResults)) {
+    target.labResults = mergeKeyedRows(target.labResults, labResults, (row) =>
+      String(row.id || `${row.testName}|${row.date}`)
+    );
+  }
+  if (Array.isArray(vaccineRecords)) {
+    const cleaned = (target.vaccineRecords || []).filter((row: any) => row?.batchNumber !== "COV-RECG-77");
+    target.vaccineRecords = mergeKeyedRows(cleaned, vaccineRecords, (row) =>
+      `${row.vaccineName}|${row.date}|${row.dose}`
+    );
+  }
+}
+
 // Create/Register Patients Details
 app.post("/api/patients", (req, res) => {
   const store = getStore();
-  const { name, age, gender, bloodType, allergies, phone, email, notes, medicalHistory, medicalCenter, hospitalId, branchId, id: requestedId, suwasiriBarcode } = req.body;
+  const { name, age, medicalCenter, hospitalId, branchId, id: requestedId, suwasiriBarcode } = req.body;
 
-  if (!name || !age) {
-    res.status(400).json({ error: "Missing name or age" });
+  if (!name) {
+    res.status(400).json({ error: "Missing name" });
     return;
   }
 
@@ -1483,10 +1544,7 @@ app.post("/api/patients", (req, res) => {
       const synced = new Set(existing.syncedHospitalIds || [existing.hospitalId || HOSPITAL_PRIMECARE]);
       synced.add(hid);
       existing.syncedHospitalIds = Array.from(synced);
-      if (suwasiriBarcode) existing.suwasiriBarcode = suwasiriBarcode;
-      if (name) existing.name = name;
-      if (phone) existing.phone = phone;
-      if (email) existing.email = email;
+      applySuwasiriDemographics(existing, req.body);
       if (medicalCenter && hid === (existing.hospitalId || HOSPITAL_PRIMECARE)) {
         existing.medicalCenter = medicalCenter;
       }
@@ -1496,34 +1554,23 @@ app.post("/api/patients", (req, res) => {
   }
 
   const pId = requestedId || `${Math.floor(1000 + Math.random() * 9000)}-LK`;
-  
-  // parsed medical history split by commas or array fallback
-  let parseHistory = ["No systemic chronic conditions declared"];
-  if (medicalHistory) {
-    if (Array.isArray(medicalHistory)) {
-      parseHistory = medicalHistory;
-    } else {
-      parseHistory = String(medicalHistory).split(",").map(s => s.trim()).filter(Boolean);
-    }
-  }
+  const parsedAge = age !== undefined && age !== null && age !== "" ? parseInt(String(age), 10) : 0;
 
-  const newPatient = {
+  const newPatient: any = {
     id: pId,
     name,
-    age: parseInt(age),
-    gender: gender || "Male",
-    bloodType: bloodType || "O+",
-    allergies: allergies || "None declared",
-    phone: phone || "+94 77 000 0000",
-    email: email || `${name.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
+    age: Number.isFinite(parsedAge) ? parsedAge : 0,
+    gender: "Not recorded",
+    bloodType: "Not recorded",
+    allergies: "None declared",
+    phone: "",
+    email: "",
     image: "",
-    notes: notes || "",
+    notes: "",
     history: [],
     activeMedications: [],
-    medicalHistory: parseHistory,
-    vaccineRecords: [
-      { vaccineName: "COVID-19 Vaccine (Standard)", date: "2021-10-10", dose: "Completed Sequence", batchNumber: "COV-RECG-77", status: "Completed" }
-    ],
+    medicalHistory: [],
+    vaccineRecords: [],
     labResults: [],
     prescriptionsList: [],
     medicalCertificatesList: [],
@@ -1534,6 +1581,7 @@ app.post("/api/patients", (req, res) => {
     syncedHospitalIds: [hospitalId || HOSPITAL_PRIMECARE],
     accessStatus: "ACTIVE"
   };
+  applySuwasiriDemographics(newPatient, req.body);
 
   store.patients.unshift(newPatient);
   saveStore(store);
@@ -1859,7 +1907,12 @@ app.patch("/api/patients/:id", (req, res) => {
     phone,
     email,
     medicalCenter,
-    notes, 
+    notes,
+    dateOfBirth,
+    nic,
+    address,
+    emergencyContactName,
+    emergencyContactPhone,
     activeMedications, 
     allergies, 
     historyEntry,
@@ -1902,6 +1955,15 @@ app.patch("/api/patients/:id", (req, res) => {
   if (bloodType !== undefined) pat.bloodType = bloodType;
   if (phone !== undefined) pat.phone = phone;
   if (email !== undefined) pat.email = email;
+  if (dateOfBirth !== undefined) pat.dateOfBirth = dateOfBirth;
+  if (nic !== undefined) {
+    pat.nic = nic;
+    pat.ihiNumber = nic;
+    if (!pat.medicareNumber) pat.medicareNumber = nic;
+  }
+  if (address !== undefined) pat.address = address;
+  if (emergencyContactName !== undefined) pat.emergencyContactName = emergencyContactName;
+  if (emergencyContactPhone !== undefined) pat.emergencyContactPhone = emergencyContactPhone;
   if (medicalCenter !== undefined) pat.medicalCenter = medicalCenter;
 
   if (notes !== undefined) pat.notes = notes;

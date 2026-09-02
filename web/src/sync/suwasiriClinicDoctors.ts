@@ -82,6 +82,13 @@ export function staffDoctorStub(opts: {
   };
 }
 
+export function doctorWorksAtClinic(d: StaffProvider, hospitalId: string): boolean {
+  if (d.active === false) return false;
+  if ((d.hospitalId || "") !== hospitalId) return false;
+  if (d.role && !/doctor|medical officer/i.test(d.role)) return false;
+  return true;
+}
+
 export function clinicDoctorDocId(staffId: string) {
   const slug = staffId.replace(/[^a-zA-Z0-9_-]/g, "-").toLowerCase();
   return `clinic-${slug || Date.now()}`;

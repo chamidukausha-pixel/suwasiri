@@ -1,18 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Check, GripVertical, Phone, Video, X } from "lucide-react";
 import type { Appointment, Patient, StaffProvider } from "../types";
-import {
-  appointmentPatientName,
-  bookingOnSlot,
-  bookingsForDoctorOnDate,
-  formatAmPm,
-  parseClock,
-} from "../sync/suwasiriAppointments";
-
-const SLOT_TIMES = [
-  "09:00", "09:30", "10:00", "10:30", "11:15", "11:45",
-  "13:00", "13:30", "14:30", "15:00", "15:30", "16:15", "16:45", "17:45",
-];
+import { bookingOnSlot } from "../sync/suwasiriAppointments";
+import DoctorDaySlotsPanel, { CLINIC_SLOT_TIMES } from "./DoctorDaySlotsPanel";
 
 const REASONS = ["Follow up", "New symptom", "Test results", "Prescription"];
 
@@ -38,10 +28,6 @@ function weekday(d: Date) {
 
 function monthName(d: Date) {
   return d.toLocaleDateString("en-GB", { month: "long" });
-}
-
-function longDate(d: Date) {
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 }
 
 function initials(name: string) {
@@ -93,6 +79,8 @@ interface Props {
   walkInOverflowUsed?: number;
   initialConsultMode?: "clinic" | "video";
   lockPatient?: boolean;
+  lockDoctor?: boolean;
+  embedded?: boolean;
   onClose: () => void;
   onConfirm: (payload: ReceptionBookPayload) => Promise<void> | void;
 }
@@ -109,6 +97,8 @@ export default function ReceptionBookingScheduler({
   walkInMode = false,
   walkInOverflowUsed = 0,
   lockPatient = false,
+  lockDoctor = false,
+  embedded = false,
   onClose,
   onConfirm,
 }: Props) {
@@ -144,16 +134,8 @@ export default function ReceptionBookingScheduler({
 
   const freeCount = (key: string) => {
     if (!doctor) return 0;
-    return SLOT_TIMES.filter((t) => !slotTaken(appointments, doctor, key, t)).length;
+    return CLINIC_SLOT_TIMES.filter((t) => !slotTaken(appointments, doctor, key, t)).length;
   };
-
-  const bookedToday = doctor
-    ? bookingsForDoctorOnDate(appointments, {
-        doctorName: doctor.name,
-        doctorStaffId: doctor.id,
-        dateKey,
-      })
-    : [];
 
   const openSlots = doctor ? freeCount(dateKey) : 0;
   const overflowLeft = Math.max(0, 5 - walkInOverflowUsed);
@@ -224,26 +206,12 @@ export default function ReceptionBookingScheduler({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3">
-      <div
-        className="w-full max-w-4xl max-h-[96vh] overflow-y-auto rounded-2xl shadow-2xl border border-slate-200"
-        style={{ background: "#FAF9F7" }}
-      >
-        <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-[#E4E2DE] bg-[#FAF9F7]/95 backdrop-blur">
-          <button type="button" onClick={onClose} className="p-1.5 rounded-full hover:bg-slate-200 text-slate-600">
-            <X className="w-5 h-5" />
-          </button>
-          <h2 className="text-base font-bold text-[#1A1A1A]">
-            {walkInMode ? "Check walk-in availability" : "Book scheduler appointment slot"}
-          </h2>
-          <Phone className="w-5 h-5 text-slate-400" />
-        </div>
-
+  const inner = (
         <div className="p-4 space-y-4">
+          {!lockDoctor && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-1 space-y-2">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A]">Registered doctors — drag to reorder</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A]">Doctors at this clinic — drag to reorder</p>
               <div className="space-y-1.5">
                 {roster.map((d, i) => (
                   <div
@@ -298,6 +266,7 @@ export default function ReceptionBookingScheduler({
               </div>
             </div>
           </div>
+          )}
 
           <div>
             <label className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A] block mb-1">Patient</label>
@@ -379,86 +348,14 @@ export default function ReceptionBookingScheduler({
             </div>
           </div>
 
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A] mb-2">
-              Available times — {doctor?.name || "select a doctor"}
-              {selectedDate ? ` · ${longDate(selectedDate)}` : ""}
-            </p>
-            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
-              {SLOT_TIMES.map((t) => {
-                const booked = doctor
-                  ? bookingOnSlot(appointments, {
-                      doctorName: doctor.name,
-                      doctorStaffId: doctor.id,
-                      dateKey,
-                      time: t,
-                    })
-                  : undefined;
-                const taken = Boolean(booked);
-                const selected = t === time24 && !taken;
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    disabled={taken}
-                    onClick={() => setTime24(t)}
-                    title={taken ? `Booked: ${appointmentPatientName(booked!)}` : "Available"}
-                    className="py-2 rounded-xl text-xs font-bold border leading-tight"
-                    style={
-                      taken
-                        ? { background: "#F0EFED", color: "#8A8A8A", borderColor: "#E4E2DE" }
-                        : selected
-                          ? { background: CORAL, color: "#fff", borderColor: CORAL }
-                          : { background: "#fff", color: "#1A1A1A", borderColor: "#E4E2DE" }
-                    }
-                  >
-                    <span className={taken ? "line-through" : undefined}>{t}</span>
-                    {taken && (
-                      <span className="block text-[8px] font-bold uppercase tracking-wide mt-0.5 text-rose-700">
-                        Booked
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A] mb-2">
-              Booked times under {doctor?.name || "this doctor"}
-              {selectedDate ? ` · ${longDate(selectedDate)}` : ""}
-            </p>
-            {bookedToday.length > 0 ? (
-              <div className="bg-white rounded-2xl border border-[#E4E2DE] divide-y divide-[#E4E2DE] overflow-hidden">
-                {bookedToday.map((apt) => {
-                  const { hours, minutes } = parseClock(apt.time || "");
-                  const who = appointmentPatientName(apt);
-                  const via = apt.source === "suwasiri_app" ? "Suwasiri App" : "GP Care";
-                  return (
-                    <div key={apt.id} className="px-3 py-2.5 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-black text-slate-900">{formatAmPm(hours, minutes)}</p>
-                        <p className="text-xs font-semibold text-slate-800 truncate">{who}</p>
-                        <p className="text-[10px] text-slate-500">
-                          {via}
-                          {apt.consultMode === "video" || apt.isTelehealth ? " · Video" : " · In person"}
-                          {apt.reason ? ` · ${apt.reason}` : ""}
-                        </p>
-                      </div>
-                      <span className="shrink-0 text-[10px] font-extrabold uppercase tracking-wide px-2 py-1 rounded-full bg-rose-50 text-rose-800 border border-rose-200">
-                        Booked
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-slate-500 bg-white border border-dashed border-[#E4E2DE] rounded-2xl px-3 py-3">
-                No bookings on this date for this doctor. All listed times are available.
-              </p>
-            )}
-          </div>
+          <DoctorDaySlotsPanel
+            doctor={doctor}
+            dateKey={dateKey}
+            appointments={appointments}
+            selectedTime={time24}
+            onSelectTime={setTime24}
+            selectable
+          />
 
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A] mb-2">Reason for visit</p>
@@ -529,7 +426,33 @@ export default function ReceptionBookingScheduler({
           </button>
           )}
         </div>
-      </div>
+  );
+
+  const shell = (
+    <div
+      className={embedded ? "rounded-2xl border border-slate-200 overflow-hidden" : "w-full max-w-4xl max-h-[96vh] overflow-y-auto rounded-2xl shadow-2xl border border-slate-200"}
+      style={{ background: "#FAF9F7" }}
+    >
+      {!embedded && (
+        <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-[#E4E2DE] bg-[#FAF9F7]/95 backdrop-blur">
+          <button type="button" onClick={onClose} className="p-1.5 rounded-full hover:bg-slate-200 text-slate-600">
+            <X className="w-5 h-5" />
+          </button>
+          <h2 className="text-base font-bold text-[#1A1A1A]">
+            {walkInMode ? "Check walk-in availability" : "Book scheduler appointment slot"}
+          </h2>
+          <Phone className="w-5 h-5 text-slate-400" />
+        </div>
+      )}
+      {inner}
+    </div>
+  );
+
+  if (embedded) return shell;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3">
+      {shell}
     </div>
   );
 }

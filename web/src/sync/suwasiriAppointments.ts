@@ -9,7 +9,7 @@ import {
 } from "firebase/firestore";
 import { getFirebaseDb, isFirebaseConfigured } from "../firebase";
 import { HOSPITAL_PRIMECARE, BRANCH_COLOMBO } from "../tenancy";
-import type { Appointment, Patient } from "../types";
+import type { Appointment, Patient, StaffProvider } from "../types";
 import { suwasiriDoctorDocId } from "./suwasiriClinicDoctors";
 
 /** Sri Lanka has no DST; clinic wall-clock is always UTC+05:30. */
@@ -331,11 +331,24 @@ export function normalizeDoctorName(name: string): string {
     .trim();
 }
 
-/**
- * True when a Firestore / JSON appointment belongs to the selected clinic doctor.
- * Matches catalog id, staff id, exact name, or overlapping first+last names
- * (e.g. Dr. Chamidu Rathnayake vs Dr. Chamidu Kaushal Rathnayake).
- */
+export function matchSessionDoctor(
+  doctors: StaffProvider[],
+  session?: { id?: string; name?: string; email?: string } | null
+): StaffProvider | undefined {
+  if (!session) return undefined;
+  const byId = doctors.find((d) => d.userId === session.id || d.id === session.id);
+  if (byId) return byId;
+  if (session.email) {
+    const email = session.email.toLowerCase();
+    const byEmail = doctors.find((d) => (d.email || "").toLowerCase() === email);
+    if (byEmail) return byEmail;
+  }
+  const n = normalizeDoctorName(session.name || "");
+  if (!n) return undefined;
+  return doctors.find((d) => normalizeDoctorName(d.name) === n);
+}
+
+/** True when an appointment belongs to the selected clinic doctor. */
 export function isSameDoctor(opts: {
   doctorName: string;
   doctorStaffId?: string;
