@@ -337,8 +337,7 @@ class _ServiceNeedCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return MinTap(
       onTap: onTap,
-      selected: highlight,
-      glowColor: highlight ? AppColors.liquidGlow : AppColors.trustBlue,
+      liquid: false,
       borderRadius: BorderRadius.circular(20),
       child: SizedBox(
         width: 132,
@@ -394,7 +393,7 @@ class _QuickActionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return MinTap(
       onTap: onTap,
-      glowColor: iconBg,
+      liquid: false,
       borderRadius: BorderRadius.circular(18),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(10, 16, 10, 14),

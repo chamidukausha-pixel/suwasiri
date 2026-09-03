@@ -193,6 +193,26 @@ class AppLocalizations {
       'si': 'ඔබේ විශේෂඥ සොයන්න',
       'ta': 'உங்கள் சிறப்பு மருத்துவரைக் கண்டறியுங்கள்',
     },
+    'categories': {
+      'en': 'Categories',
+      'si': 'කාණ්ඩ',
+      'ta': 'வகைகள்',
+    },
+    'catMyHeart': {
+      'en': 'My Heart',
+      'si': 'මගේ හද',
+      'ta': 'என் இதயம்',
+    },
+    'catBrain': {
+      'en': 'Brain',
+      'si': 'මොළය',
+      'ta': 'மூளை',
+    },
+    'catNerves': {
+      'en': 'Nerves',
+      'si': 'ස්නායු',
+      'ta': 'நரம்புகள்',
+    },
     'seeAll': {
       'en': 'See all',
       'si': 'සියල්ල',

@@ -1,14 +1,33 @@
 import {
   collection,
-  getDocs,
-  query,
-  where,
   doc,
   getDoc,
+  getDocs,
+  getDocsFromServer,
+  query,
+  where,
 } from "firebase/firestore";
-import { getFirebaseDb, isFirebaseConfigured } from "../firebase";
+import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from "../firebase";
 import type { LabResult, Patient, VaccineRecord } from "../types";
 import { mapVaccinations } from "./suwasiriPatientChart";
+
+/** Same FNV-1a Unique Health ID as Flutter `SuwasiriHealthId.generate`. */
+export function generateSuwasiriHealthId(userId: string, nic: string): string {
+  const nicDigits = nic.replace(/[^0-9A-Za-z]/g, "").toUpperCase();
+  const seed = `${userId}|${nicDigits}`;
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  const body = hash.toString(16).toUpperCase().padStart(8, "0");
+  const check = (hash % 97).toString().padStart(2, "0");
+  return `SW${body}${check}`;
+}
+
+export function normalizeHealthId(raw: string): string {
+  return raw.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
@@ -279,6 +298,31 @@ async function enrichPatient(id: string, data: Record<string, unknown>): Promise
   };
 }
 
+async function readQuery(q: ReturnType<typeof query>) {
+  try {
+    return await getDocsFromServer(q);
+  } catch {
+    return await getDocs(q);
+  }
+}
+
+function healthIdsOnUser(id: string, data: Record<string, unknown>): string[] {
+  const nic = str(data.NIC || data.nic);
+  return [
+    str(data.barcodeNumber),
+    str(data.ceylonHealthId),
+    nic,
+    generateSuwasiriHealthId(id, nic || id),
+  ]
+    .map(normalizeHealthId)
+    .filter(Boolean);
+}
+
+function userMatchesHealthId(id: string, data: Record<string, unknown>, upper: string): boolean {
+  if (normalizeHealthId(id) === upper) return true;
+  return healthIdsOnUser(id, data).includes(upper);
+}
+
 export function patientVisibleAtHospital(p: Patient, hospitalId: string): boolean {
   if (p.accessStatus === "DELETED") return false;
   const ids = p.syncedHospitalIds && p.syncedHospitalIds.length > 0
@@ -288,45 +332,64 @@ export function patientVisibleAtHospital(p: Patient, hospitalId: string): boolea
 }
 
 async function queryByField(field: string, value: string): Promise<Patient | null> {
-  const db = getFirebaseDb();
-  const snap = await getDocs(query(collection(db, "users"), where(field, "==", value)));
-  if (snap.empty) return null;
-  const first = snap.docs[0];
-  return enrichPatient(first.id, first.data() as Record<string, unknown>);
+  if (!value) return null;
+  try {
+    const snap = await readQuery(
+      query(collection(getFirebaseDb(), "users"), where(field, "==", value))
+    );
+    if (snap.empty) return null;
+    const first = snap.docs[0];
+    return enrichPatient(first.id, first.data() as Record<string, unknown>);
+  } catch (err) {
+    console.warn(`Unique Health ID query ${field}:`, err);
+    return null;
+  }
 }
 
 /** Look up a Suwasiri Unique Health ID / barcode on Firestore `users`, plus vault labs and vaccinations. */
 export async function lookupSuwasiriHealthId(raw: string): Promise<Patient | null> {
   const code = raw.trim();
   if (!code || !isFirebaseConfigured()) return null;
-  const upper = code.toUpperCase();
-  const byBarcode = await queryByField("barcodeNumber", code);
-  if (byBarcode) return byBarcode;
-  const byBarcodeU = code === upper ? null : await queryByField("barcodeNumber", upper);
-  if (byBarcodeU) return byBarcodeU;
-  const byCeylon = await queryByField("ceylonHealthId", code);
-  if (byCeylon) return byCeylon;
-  const byCeylonU = await queryByField("ceylonHealthId", upper);
-  if (byCeylonU) return byCeylonU;
+  if (!getFirebaseAuth().currentUser) {
+    throw new Error("Sign in to GP Care first, then look up the Unique Health ID.");
+  }
+  const upper = normalizeHealthId(code);
+  const variants = [...new Set([code, code.toUpperCase(), upper].filter(Boolean))];
+
+  for (const value of variants) {
+    const hit =
+      (await queryByField("barcodeNumber", value)) ||
+      (await queryByField("ceylonHealthId", value)) ||
+      (await queryByField("NIC", value)) ||
+      (await queryByField("nic", value));
+    if (hit) return hit;
+  }
+
   const scanned = await scanUsersForHealthId(upper);
   if (scanned) return scanned;
-  const direct = await getDoc(doc(getFirebaseDb(), "users", code));
-  if (direct.exists()) {
-    return enrichPatient(direct.id, direct.data() as Record<string, unknown>);
+
+  try {
+    const direct = await getDoc(doc(getFirebaseDb(), "users", code));
+    if (direct.exists()) {
+      return enrichPatient(direct.id, direct.data() as Record<string, unknown>);
+    }
+  } catch (err) {
+    console.warn("Unique Health ID direct doc:", err);
   }
   return null;
 }
 
 async function scanUsersForHealthId(upper: string): Promise<Patient | null> {
-  const db = getFirebaseDb();
-  const snap = await getDocs(collection(db, "users"));
-  for (const d of snap.docs) {
-    const data = d.data() as Record<string, unknown>;
-    const barcode = str(data.barcodeNumber).toUpperCase();
-    const ceylon = str(data.ceylonHealthId).toUpperCase();
-    if (barcode === upper || ceylon === upper || d.id.toUpperCase() === upper) {
-      return enrichPatient(d.id, data);
+  try {
+    const snap = await readQuery(query(collection(getFirebaseDb(), "users")));
+    for (const d of snap.docs) {
+      const data = d.data() as Record<string, unknown>;
+      if (userMatchesHealthId(d.id, data, upper)) {
+        return enrichPatient(d.id, data);
+      }
     }
+  } catch (err) {
+    console.warn("Unique Health ID user scan:", err);
   }
   return null;
 }

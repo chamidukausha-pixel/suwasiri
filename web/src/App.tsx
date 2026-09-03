@@ -615,6 +615,7 @@ export default function App() {
   const [healthIdPreview, setHealthIdPreview] = useState<Patient | null>(null);
   const [healthIdLookupError, setHealthIdLookupError] = useState("");
   const [healthIdSaving, setHealthIdSaving] = useState(false);
+  const [healthIdSaved, setHealthIdSaved] = useState(false);
   const [selectedReceiptUrl, setSelectedReceiptUrl] = useState<string | null>(null);
   const [selectedReceiptPatientName, setSelectedReceiptPatientName] = useState<string>("");
 
@@ -1536,12 +1537,37 @@ export default function App() {
     suwasiriBarcode: patient.suwasiriBarcode || barcode.toUpperCase(),
   });
 
+  const persistLookedUpHealthId = async (patient: Patient, barcode: string) => {
+    const res = await fetch("/api/patients", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(suwasiriPatientPayload(patient, barcode)),
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error || `Save failed (${res.status})`);
+    }
+    const data = await res.json();
+    if (data.state?.patients) setPatients(data.state.patients);
+    else {
+      const saved = data.patient || patient;
+      setPatients((prev) => prev.some((p) => p.id === saved.id)
+        ? prev.map((p) => (p.id === saved.id ? { ...p, ...saved } : p))
+        : [saved, ...prev]);
+    }
+    return (data.patient || patient) as Patient;
+  };
+
   const handleLookupUniqueHealthId = async (raw: string) => {
     const input = raw.trim();
     if (!input) return;
+    setBarcodeSearchText(input);
     setBarcodeLoading(true);
+    setHealthIdSaving(false);
     setHealthIdLookupError("");
     setHealthIdPreview(null);
+    setHealthIdSaved(false);
+    let preview: Patient | null = null;
     try {
       const patient = await lookupSuwasiriHealthId(input);
       if (!patient) {
@@ -1550,19 +1576,38 @@ export default function App() {
         );
         return;
       }
+      const barcode = patient.suwasiriBarcode || input.toUpperCase();
+      preview = { ...patient, suwasiriBarcode: barcode };
+      setHealthIdPreview(preview);
+      setHealthIdSaving(true);
+      const saved = await persistLookedUpHealthId(preview, barcode);
       setHealthIdPreview({
-        ...patient,
-        suwasiriBarcode: patient.suwasiriBarcode || input.toUpperCase(),
+        ...saved,
+        labResults: saved.labResults?.length ? saved.labResults : preview.labResults,
+        vaccineRecords: saved.vaccineRecords?.length ? saved.vaccineRecords : preview.vaccineRecords,
+        nic: saved.nic || preview.nic,
+        address: saved.address || preview.address,
+        dateOfBirth: saved.dateOfBirth || preview.dateOfBirth,
+        emergencyContactName: saved.emergencyContactName || preview.emergencyContactName,
+        emergencyContactPhone: saved.emergencyContactPhone || preview.emergencyContactPhone,
       });
+      setHealthIdSaved(true);
     } catch (err: any) {
       const message = String(err?.message || err);
-      setHealthIdLookupError(
-        message.toLowerCase().includes("permission")
-          ? "Could not read this Unique Health ID. Sign in to GP Care with a Firebase account that can access Suwasiri patient files."
-          : `Could not look up Unique Health ID: ${message}`
-      );
+      if (message.toLowerCase().includes("sign in")) {
+        setHealthIdLookupError(message);
+      } else if (message.toLowerCase().includes("permission")) {
+        setHealthIdLookupError(
+          "Could not read this Unique Health ID. Sign in to GP Care with a Firebase staff account."
+        );
+      } else if (preview) {
+        setHealthIdLookupError("Details loaded, but could not save to Patient Clinical Records: " + message);
+      } else {
+        setHealthIdLookupError(`Could not look up Unique Health ID: ${message}`);
+      }
     } finally {
       setBarcodeLoading(false);
+      setHealthIdSaving(false);
     }
   };
 
@@ -1573,26 +1618,14 @@ export default function App() {
     setHealthIdLookupError("");
     try {
       const barcode = patient.suwasiriBarcode || barcodeSearchText.trim().toUpperCase();
-      const res = await fetch("/api/patients", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(suwasiriPatientPayload(patient, barcode)),
+      const saved = await persistLookedUpHealthId(patient, barcode);
+      setHealthIdPreview({
+        ...patient,
+        ...saved,
+        labResults: saved.labResults?.length ? saved.labResults : patient.labResults,
+        vaccineRecords: saved.vaccineRecords?.length ? saved.vaccineRecords : patient.vaccineRecords,
       });
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.error || `Save failed (${res.status})`);
-      }
-      const data = await res.json();
-      if (data.state?.patients) setPatients(data.state.patients);
-      else {
-        const saved = data.patient || patient;
-        setPatients((prev) => prev.some((p) => p.id === saved.id)
-          ? prev.map((p) => (p.id === saved.id ? { ...p, ...saved } : p))
-          : [saved, ...prev]);
-      }
-      setBarcodeSearchText("");
-      setHealthIdPreview(null);
-      alert(`${patient.name} is now on Patient Clinical Records at ${activeHospital?.name || "this clinic"}.`);
+      setHealthIdSaved(true);
     } catch (err: any) {
       setHealthIdLookupError("Could not save this Unique Health ID file: " + (err.message || err));
     } finally {
@@ -4059,11 +4092,13 @@ export default function App() {
                   saving={healthIdSaving}
                   preview={healthIdPreview}
                   error={healthIdLookupError}
+                  saved={healthIdSaved}
                   onLookup={handleLookupUniqueHealthId}
                   onSave={handleSaveUniqueHealthId}
                   onClear={() => {
                     setHealthIdPreview(null);
                     setHealthIdLookupError("");
+                    setHealthIdSaved(false);
                   }}
                 />
 

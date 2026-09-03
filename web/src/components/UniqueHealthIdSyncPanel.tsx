@@ -31,6 +31,7 @@ interface UniqueHealthIdSyncPanelProps {
   saving: boolean;
   preview: Patient | null;
   error: string;
+  saved?: boolean;
   onLookup: (raw: string) => void | Promise<void>;
   onSave: () => void | Promise<void>;
   onClear: () => void;
@@ -43,6 +44,7 @@ export default function UniqueHealthIdSyncPanel({
   saving,
   preview,
   error,
+  saved,
   onLookup,
   onSave,
   onClear,
@@ -64,7 +66,7 @@ export default function UniqueHealthIdSyncPanel({
           </h3>
         </div>
         <span className="text-[10px] text-slate-500 font-medium">
-          Enter the number from the patient’s Unique Health ID card, review their file, then Save
+          Enter the Unique Health ID and Sync to Portal. The live Suwasiri file is shown here and saved to this clinic.
         </span>
       </div>
 
@@ -108,7 +110,10 @@ export default function UniqueHealthIdSyncPanel({
           <button
             key={item.code}
             type="button"
-            onClick={() => onBarcodeChange(item.code)}
+            onClick={() => {
+              onBarcodeChange(item.code);
+              void onLookup(item.code);
+            }}
             className="bg-emerald-100 hover:bg-emerald-200 text-emerald-850 border border-emerald-200/60 p-1 px-1.5 rounded transition text-[9px] font-mono font-semibold"
           >
             {item.code} ({item.name})
@@ -119,6 +124,12 @@ export default function UniqueHealthIdSyncPanel({
       {error && (
         <p className="text-[11px] font-semibold text-rose-800 bg-rose-50 border border-rose-200 rounded px-3 py-2">
           {error}
+        </p>
+      )}
+
+      {saved && preview && (
+        <p className="text-[11px] font-semibold text-emerald-900 bg-emerald-100 border border-emerald-300 rounded px-3 py-2">
+          {preview.name} is saved on Patient Clinical Records at this clinic.
         </p>
       )}
 

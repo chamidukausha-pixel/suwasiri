@@ -1,11 +1,8 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/theme/app_colors.dart';
 
-/// Frosted glass + glossy highlight surface (liquid button look).
+/// Legacy name kept for call sites — renders a standard Material surface.
 class LiquidSurface extends StatelessWidget {
   const LiquidSurface({
     super.key,
@@ -28,87 +25,14 @@ class LiquidSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dark = AppColors.isDark(context);
-    final glow = glowColor ?? AppColors.liquidGlow;
-    final baseTint = tint ?? (dark ? Colors.white : AppColors.trustBlue);
-
-    final fillTop = selected
-        ? glow.withValues(alpha: dark ? 0.42 : 0.48)
-        : (dark
-            ? Colors.white.withValues(alpha: 0.14)
-            : Colors.white.withValues(alpha: 0.78));
-    final fillBottom = selected
-        ? glow.withValues(alpha: dark ? 0.18 : 0.22)
-        : (dark
-            ? Colors.white.withValues(alpha: 0.05)
-            : baseTint.withValues(alpha: 0.08));
-
-    return AnimatedScale(
-      scale: pressed ? 0.985 : 1,
-      duration: const Duration(milliseconds: 120),
-      curve: Curves.easeOut,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-        decoration: BoxDecoration(
-          borderRadius: borderRadius,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: dark ? 0.45 : 0.10),
-              blurRadius: pressed ? 10 : 22,
-              offset: Offset(0, pressed ? 3 : 10),
-            ),
-            if (selected)
-              BoxShadow(
-                color: glow.withValues(alpha: 0.28),
-                blurRadius: 26,
-                spreadRadius: -4,
-                offset: const Offset(0, 6),
-              ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: borderRadius,
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-            child: Container(
-              padding: padding,
-              decoration: BoxDecoration(
-                borderRadius: borderRadius,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [fillTop, fillBottom],
-                ),
-                border: Border.all(
-                  color: Colors.white.withValues(
-                    alpha: selected ? 0.72 : (dark ? 0.22 : 0.88),
-                  ),
-                  width: 1.15,
-                ),
-              ),
-              foregroundDecoration: BoxDecoration(
-                borderRadius: borderRadius,
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.center,
-                  colors: [
-                    Colors.white.withValues(alpha: dark ? 0.18 : 0.55),
-                    Colors.white.withValues(alpha: 0),
-                  ],
-                  stops: const [0, 0.45],
-                ),
-              ),
-              child: child,
-            ),
-          ),
-        ),
-      ),
+    return Padding(
+      padding: padding ?? EdgeInsets.zero,
+      child: child,
     );
   }
 }
 
-class LiquidFilledButton extends StatefulWidget {
+class LiquidFilledButton extends StatelessWidget {
   const LiquidFilledButton({
     super.key,
     required this.onPressed,
@@ -151,78 +75,32 @@ class LiquidFilledButton extends StatefulWidget {
   final bool haptic;
 
   @override
-  State<LiquidFilledButton> createState() => _LiquidFilledButtonState();
-}
-
-class _LiquidFilledButtonState extends State<LiquidFilledButton> {
-  bool _pressed = false;
-
-  @override
   Widget build(BuildContext context) {
-    final style = widget.style ?? const ButtonStyle();
-    final padding = style.padding?.resolve({}) ??
-        const EdgeInsets.symmetric(horizontal: 22, vertical: 14);
-    final minSize = style.minimumSize?.resolve({}) ?? const Size(48, 48);
-    final fgColor = style.foregroundColor?.resolve({}) ??
-        AppColors.ink(context);
-    final glow = widget.glowColor ?? AppColors.trustBlue;
-    final enabled = widget.onPressed != null;
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
-      onTapUp: enabled
-          ? (_) {
-              setState(() => _pressed = false);
-              if (widget.haptic) HapticFeedback.lightImpact();
-              widget.onPressed!();
-            }
-          : null,
-      onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
-      child: Opacity(
-        opacity: enabled ? 1 : 0.45,
-        child: LiquidSurface(
-          selected: widget.selected || _pressed,
-          pressed: _pressed,
-          glowColor: glow,
-          padding: padding,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minWidth: minSize.width,
-              minHeight: minSize.height,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (widget.icon != null) ...[
-                  IconTheme.merge(
-                    data: IconThemeData(
-                      color: fgColor,
-                      size: 20,
-                    ),
-                    child: widget.icon!,
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                DefaultTextStyle(
-                  style: TextStyle(
-                    color: fgColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                  ),
-                  child: widget.child,
-                ),
-              ],
-            ),
-          ),
-        ),
+    final mergedStyle = (style ?? const ButtonStyle()).merge(
+      ButtonStyle(
+        backgroundColor: glowColor == null
+            ? null
+            : WidgetStatePropertyAll(glowColor),
       ),
+    );
+
+    if (icon != null) {
+      return FilledButton.icon(
+        onPressed: onPressed,
+        style: mergedStyle,
+        icon: icon!,
+        label: child,
+      );
+    }
+    return FilledButton(
+      onPressed: onPressed,
+      style: mergedStyle,
+      child: child,
     );
   }
 }
 
-class LiquidOutlinedButton extends StatefulWidget {
+class LiquidOutlinedButton extends StatelessWidget {
   const LiquidOutlinedButton({
     super.key,
     required this.onPressed,
@@ -239,65 +117,19 @@ class LiquidOutlinedButton extends StatefulWidget {
   final bool haptic;
 
   @override
-  State<LiquidOutlinedButton> createState() => _LiquidOutlinedButtonState();
-}
-
-class _LiquidOutlinedButtonState extends State<LiquidOutlinedButton> {
-  bool _pressed = false;
-
-  @override
   Widget build(BuildContext context) {
-    final enabled = widget.onPressed != null;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
-      onTapUp: enabled
-          ? (_) {
-              setState(() => _pressed = false);
-              if (widget.haptic) HapticFeedback.lightImpact();
-              widget.onPressed!();
-            }
-          : null,
-      onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
-      child: Opacity(
-        opacity: enabled ? 1 : 0.45,
-        child: LiquidSurface(
-          selected: widget.selected,
-          pressed: _pressed,
-          glowColor: AppColors.trustBlue,
-          tint: AppColors.trustBlue,
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (widget.icon != null) ...[
-                IconTheme(
-                  data: IconThemeData(
-                    color: AppColors.trustBlue,
-                    size: 18,
-                  ),
-                  child: widget.icon!,
-                ),
-                const SizedBox(width: 8),
-              ],
-              DefaultTextStyle(
-                style: TextStyle(
-                  color: AppColors.trustBlue,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-                child: widget.child,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    if (icon != null) {
+      return OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: icon!,
+        label: child,
+      );
+    }
+    return OutlinedButton(onPressed: onPressed, child: child);
   }
 }
 
-class LiquidTextButton extends StatefulWidget {
+class LiquidTextButton extends StatelessWidget {
   const LiquidTextButton({
     super.key,
     required this.onPressed,
@@ -310,46 +142,12 @@ class LiquidTextButton extends StatefulWidget {
   final bool selected;
 
   @override
-  State<LiquidTextButton> createState() => _LiquidTextButtonState();
-}
-
-class _LiquidTextButtonState extends State<LiquidTextButton> {
-  bool _pressed = false;
-
-  @override
   Widget build(BuildContext context) {
-    final enabled = widget.onPressed != null;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
-      onTapUp: enabled
-          ? (_) {
-              setState(() => _pressed = false);
-              HapticFeedback.selectionClick();
-              widget.onPressed!();
-            }
-          : null,
-      onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
-      child: LiquidSurface(
-        selected: widget.selected,
-        pressed: _pressed,
-        glowColor: AppColors.liquidGlow,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        child: DefaultTextStyle(
-          style: TextStyle(
-            color: AppColors.trustBlue,
-            fontWeight: FontWeight.w700,
-            fontSize: 13,
-          ),
-          child: widget.child,
-        ),
-      ),
-    );
+    return TextButton(onPressed: onPressed, child: child);
   }
 }
 
-/// Pill row button: leading icon, label, optional trailing (matches reference mockup).
-class LiquidPillButton extends StatefulWidget {
+class LiquidPillButton extends StatelessWidget {
   const LiquidPillButton({
     super.key,
     required this.label,
@@ -368,54 +166,40 @@ class LiquidPillButton extends StatefulWidget {
   final Color? glowColor;
 
   @override
-  State<LiquidPillButton> createState() => _LiquidPillButtonState();
-}
-
-class _LiquidPillButtonState extends State<LiquidPillButton> {
-  bool _pressed = false;
-
-  @override
   Widget build(BuildContext context) {
-    final enabled = widget.onTap != null;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
-      onTapUp: enabled
-          ? (_) {
-              setState(() => _pressed = false);
-              HapticFeedback.lightImpact();
-              widget.onTap!();
-            }
-          : null,
-      onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
-      child: LiquidSurface(
-        selected: widget.selected,
-        pressed: _pressed,
-        glowColor: widget.glowColor,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Icon(widget.icon, color: AppColors.ink(context), size: 22),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                widget.label,
-                style: TextStyle(
-                  color: AppColors.ink(context),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
+    return Material(
+      color: selected
+          ? (glowColor ?? AppColors.trustBlueSoft)
+          : AppColors.surface,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, color: AppColors.trustBlueDark, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppColors.trustBlueDark,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
                 ),
               ),
-            ),
-            if (widget.trailing != null) widget.trailing!,
-          ],
+              ?trailing,
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Full-width primary action with optional icon (used across booking flows).
 class LiquidButton extends StatelessWidget {
   const LiquidButton({
     super.key,
@@ -438,37 +222,60 @@ class LiquidButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (busy) {
+      return SizedBox(
+        width: double.infinity,
+        height: height,
+        child: FilledButton(
+          onPressed: null,
+          style: FilledButton.styleFrom(
+            backgroundColor: color ?? AppColors.trustBlue,
+            minimumSize: Size(double.infinity, height),
+          ),
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Theme.of(context).colorScheme.onPrimary,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (icon != null) {
+      return SizedBox(
+        width: double.infinity,
+        height: height,
+        child: FilledButton.icon(
+          onPressed: onPressed,
+          style: FilledButton.styleFrom(
+            backgroundColor: color ?? AppColors.trustBlue,
+            minimumSize: Size(double.infinity, height),
+          ),
+          icon: Icon(icon, size: 20),
+          label: Text(label),
+        ),
+      );
+    }
+
     return SizedBox(
       width: double.infinity,
       height: height,
-      child: LiquidFilledButton(
-        onPressed: busy ? null : onPressed,
-        selected: selected,
-        glowColor: color ?? AppColors.trustBlue,
-        style: ButtonStyle(
-          minimumSize: WidgetStatePropertyAll(Size(double.infinity, height)),
-          padding: const WidgetStatePropertyAll(
-            EdgeInsets.symmetric(horizontal: 18),
-          ),
+      child: FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: color ?? AppColors.trustBlue,
+          minimumSize: Size(double.infinity, height),
         ),
-        icon: busy
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : (icon == null ? null : Icon(icon, size: 20)),
         child: Text(label),
       ),
     );
   }
 }
 
-/// Selectable pill chip (payment channel, filters, etc.).
-class LiquidChoiceChip extends StatefulWidget {
+class LiquidChoiceChip extends StatelessWidget {
   const LiquidChoiceChip({
     super.key,
     required this.label,
@@ -483,39 +290,22 @@ class LiquidChoiceChip extends StatefulWidget {
   final Color? glowColor;
 
   @override
-  State<LiquidChoiceChip> createState() => _LiquidChoiceChipState();
-}
-
-class _LiquidChoiceChipState extends State<LiquidChoiceChip> {
-  bool _pressed = false;
-
-  @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        HapticFeedback.selectionClick();
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _pressed = false),
-      child: LiquidSurface(
-        selected: widget.selected,
-        pressed: _pressed,
-        glowColor: widget.glowColor ?? AppColors.liquidGlow,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Center(
-          child: Text(
-            widget.label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppColors.ink(context),
-              fontWeight: FontWeight.w800,
-              fontSize: 12,
-            ),
-          ),
-        ),
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      selectedColor: (glowColor ?? AppColors.trustBlue).withValues(alpha: 0.16),
+      checkmarkColor: glowColor ?? AppColors.trustBlue,
+      labelStyle: TextStyle(
+        color: AppColors.trustBlueDark,
+        fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+        fontSize: 12,
+      ),
+      side: BorderSide(
+        color: selected
+            ? (glowColor ?? AppColors.trustBlue)
+            : AppColors.border,
       ),
     );
   }

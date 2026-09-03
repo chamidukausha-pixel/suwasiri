@@ -147,7 +147,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] GP Exam Room Consultation is one **Doctor notes** field (Subjective, medical issues this visit, and Plan & Management removed)
 - [x] Reception Recalls & Reminders In person / Video book writes Firestore `appointments` for that Suwasiri patient (Home **blue** / **purple**) and shows on the GP Care calendar that date
 - [x] Book Active Appointment and Patient Portal list **only doctors at this medical centre**. Booked vs available times (Suwasiri App + GP Care reception/doctor) stay in sync on the scheduler and when clicking a clinic calendar date. Patient profile **Appointments** books using the **logged-in doctor only**.
-- [x] Unique Health ID: receptionist **Sync to Portal** previews the live Suwasiri demographics + labs + vaccines in the Unique Health ID box; **Save** writes the file into Patient Clinical Records (no dummy barcode fallback)
+- [x] Unique Health ID: receptionist **Sync to Portal** loads the live Suwasiri file (demographics, labs, vaccines) into the Unique Health ID box and saves it to Patient Clinical Records; dummy barcode patients for the same ID are replaced
 
 ## In progress / next
 

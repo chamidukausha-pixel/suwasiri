@@ -157,7 +157,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
             children: [
               Expanded(
                 child: Text(
-                  l.t('findYourSpecialist'),
+                  l.t('categories'),
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         fontSize: 22,
                         fontWeight: FontWeight.w800,
@@ -173,16 +173,19 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
           ),
           const SizedBox(height: 12),
           SizedBox(
-            height: 100,
+            height: 118,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: DoctorCatalog.browseCategories.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 10),
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
               itemBuilder: (context, i) {
                 final cat = DoctorCatalog.browseCategories[i];
                 final selected = _category == cat.id;
                 return _CategoryTile(
                   label: l.t(cat.labelKey),
+                  selectedLabel: cat.selectedLabelKey == null
+                      ? null
+                      : l.t(cat.selectedLabelKey!),
                   icon: cat.icon,
                   color: cat.color,
                   selected: selected,
@@ -319,9 +322,11 @@ class _CategoryTile extends StatelessWidget {
     required this.color,
     required this.selected,
     required this.onTap,
+    this.selectedLabel,
   });
 
   final String label;
+  final String? selectedLabel;
   final IconData icon;
   final Color color;
   final bool selected;
@@ -329,34 +334,98 @@ class _CategoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = selected ? AppColors.ink(context) : color;
+    final displayLabel =
+        selected && selectedLabel != null ? selectedLabel! : label;
 
-    return MinTap(
-      onTap: onTap,
-      selected: selected,
-      glowColor: selected ? AppColors.liquidGlow : color,
-      borderRadius: BorderRadius.circular(18),
-      child: SizedBox(
-        width: 86,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Ink(
+          width: 92,
+          height: 112,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF3F4F8),
+            borderRadius: BorderRadius.circular(22),
+            border: selected
+                ? Border.all(color: color.withValues(alpha: 0.55), width: 2)
+                : Border.all(color: Colors.white.withValues(alpha: 0.6)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              Icon(icon, color: fg, size: 24),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: fg,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 10,
-                  height: 1.15,
+              Center(
+                child: Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        color.withValues(alpha: selected ? 0.28 : 0.14),
+                        color.withValues(alpha: selected ? 0.10 : 0.04),
+                      ],
+                    ),
+                    boxShadow: selected
+                        ? [
+                            BoxShadow(
+                              color: color.withValues(alpha: 0.35),
+                              blurRadius: 14,
+                              offset: const Offset(0, 6),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Icon(
+                    icon,
+                    color: selected ? color : color.withValues(alpha: 0.72),
+                    size: selected ? 34 : 30,
+                  ),
                 ),
               ),
+              if (selected)
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(8, 18, 8, 10),
+                    decoration: BoxDecoration(
+                      borderRadius: const BorderRadius.vertical(
+                        bottom: Radius.circular(22),
+                      ),
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          Colors.white,
+                          Colors.white.withValues(alpha: 0.92),
+                          Colors.white.withValues(alpha: 0),
+                        ],
+                        stops: const [0, 0.55, 1],
+                      ),
+                    ),
+                    child: Text(
+                      displayLabel,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppColors.trustBlueDark,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                        height: 1.1,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

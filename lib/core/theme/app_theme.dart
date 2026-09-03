@@ -123,7 +123,7 @@ abstract final class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.surface.withValues(alpha: 0.82),
-        indicatorColor: AppColors.liquidGlow.withValues(alpha: 0.22),
+        indicatorColor: AppColors.trustBlueSoft,
         elevation: 0,
         height: 68,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {

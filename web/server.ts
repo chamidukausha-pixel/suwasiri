@@ -1527,6 +1527,50 @@ function applySuwasiriDemographics(target: any, body: any) {
   }
 }
 
+function isDummySuwasiriImport(p: any): boolean {
+  const notes = String(p?.notes || "");
+  return /dynamically compiled|secure id:/i.test(notes);
+}
+
+function absorbClinicFile(target: any, source: any) {
+  if (!source || source.id === target.id) return;
+  const concat = (a: any[] | undefined, b: any[] | undefined) => [...(a || []), ...(b || [])];
+  target.history = concat(target.history, source.history);
+  target.prescriptionsList = concat(target.prescriptionsList, source.prescriptionsList);
+  target.medicalCertificatesList = concat(target.medicalCertificatesList, source.medicalCertificatesList);
+  target.sampleCollections = concat(target.sampleCollections, source.sampleCollections);
+  target.clinicalDocuments = concat(target.clinicalDocuments, source.clinicalDocuments);
+  target.imagingRecords = concat(target.imagingRecords, source.imagingRecords);
+  target.referralsList = concat(target.referralsList, source.referralsList);
+  if (!isDummySuwasiriImport(source)) {
+    target.labResults = mergeKeyedRows(target.labResults, source.labResults, (row) =>
+      String(row?.id || `${row?.testName}|${row?.date}`)
+    );
+    target.vaccineRecords = mergeKeyedRows(
+      (target.vaccineRecords || []).filter((row: any) => row?.batchNumber !== "COV-RECG-77"),
+      source.vaccineRecords,
+      (row) => `${row?.vaccineName}|${row?.date}|${row?.dose}`
+    );
+  }
+}
+
+function foldDuplicateSuwasiriFiles(store: any, canonical: any) {
+  const barcode = String(canonical.suwasiriBarcode || "").trim().toUpperCase();
+  const email = String(canonical.email || "").trim().toLowerCase();
+  const kept: any[] = [];
+  for (const p of store.patients || []) {
+    if (!p || p.id === canonical.id) continue;
+    const sameBarcode = barcode && String(p.suwasiriBarcode || "").trim().toUpperCase() === barcode;
+    const sameEmail = email && String(p.email || "").trim().toLowerCase() === email;
+    if (!sameBarcode && !sameEmail) {
+      kept.push(p);
+      continue;
+    }
+    if (!isDummySuwasiriImport(p)) absorbClinicFile(canonical, p);
+  }
+  store.patients = [canonical, ...kept];
+}
+
 // Create/Register Patients Details
 app.post("/api/patients", (req, res) => {
   const store = getStore();
@@ -1537,10 +1581,10 @@ app.post("/api/patients", (req, res) => {
     return;
   }
 
+  const hid = hospitalId || HOSPITAL_PRIMECARE;
   if (requestedId) {
     const existing = store.patients.find((p: { id: string }) => p.id === requestedId);
     if (existing) {
-      const hid = hospitalId || HOSPITAL_PRIMECARE;
       const synced = new Set(existing.syncedHospitalIds || [existing.hospitalId || HOSPITAL_PRIMECARE]);
       synced.add(hid);
       existing.syncedHospitalIds = Array.from(synced);
@@ -1548,6 +1592,9 @@ app.post("/api/patients", (req, res) => {
       if (medicalCenter && hid === (existing.hospitalId || HOSPITAL_PRIMECARE)) {
         existing.medicalCenter = medicalCenter;
       }
+      existing.hospitalId = existing.hospitalId || hid;
+      existing.branchId = existing.branchId || branchId || BRANCH_COLOMBO;
+      foldDuplicateSuwasiriFiles(store, existing);
       saveStore(store);
       return res.status(200).json({ patient: existing, state: store, isNewSync: false });
     }
@@ -1575,15 +1622,37 @@ app.post("/api/patients", (req, res) => {
     prescriptionsList: [],
     medicalCertificatesList: [],
     medicalCenter: medicalCenter || "Colombo Central Clinic",
-    hospitalId: hospitalId || HOSPITAL_PRIMECARE,
+    hospitalId: hid,
     branchId: branchId || BRANCH_COLOMBO,
     suwasiriBarcode: suwasiriBarcode || undefined,
-    syncedHospitalIds: [hospitalId || HOSPITAL_PRIMECARE],
+    syncedHospitalIds: [hid],
     accessStatus: "ACTIVE"
   };
   applySuwasiriDemographics(newPatient, req.body);
 
+  const email = String(newPatient.email || "").trim().toLowerCase();
+  const barcode = String(newPatient.suwasiriBarcode || "").trim().toUpperCase();
+  const sameFile = store.patients.find((p: any) => {
+    if (!p) return false;
+    if (email && String(p.email || "").trim().toLowerCase() === email) return true;
+    if (barcode && String(p.suwasiriBarcode || "").trim().toUpperCase() === barcode && !isDummySuwasiriImport(p)) return true;
+    return false;
+  });
+  if (sameFile && sameFile.id !== newPatient.id) {
+    const synced = new Set(sameFile.syncedHospitalIds || [sameFile.hospitalId || HOSPITAL_PRIMECARE]);
+    synced.add(hid);
+    sameFile.syncedHospitalIds = Array.from(synced);
+    applySuwasiriDemographics(sameFile, req.body);
+    sameFile.id = newPatient.id;
+    sameFile.hospitalId = sameFile.hospitalId || hid;
+    sameFile.branchId = sameFile.branchId || branchId || BRANCH_COLOMBO;
+    foldDuplicateSuwasiriFiles(store, sameFile);
+    saveStore(store);
+    return res.status(200).json({ patient: sameFile, state: store, isNewSync: false });
+  }
+
   store.patients.unshift(newPatient);
+  foldDuplicateSuwasiriFiles(store, newPatient);
   saveStore(store);
   res.status(201).json({ patient: newPatient, state: store });
 });

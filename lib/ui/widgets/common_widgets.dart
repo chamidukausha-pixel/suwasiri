@@ -12,7 +12,7 @@ class MinTap extends StatefulWidget {
     required this.child,
     this.haptic = true,
     this.enforceMinSize = true,
-    this.liquid = true,
+    this.liquid = false,
     this.selected = false,
     this.borderRadius = const BorderRadius.all(Radius.circular(16)),
     this.glowColor,
