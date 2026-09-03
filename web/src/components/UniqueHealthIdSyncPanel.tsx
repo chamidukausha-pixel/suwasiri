@@ -62,11 +62,11 @@ export default function UniqueHealthIdSyncPanel({
             SUWASIRI LIVE
           </div>
           <h3 className="font-serif font-extrabold text-xs text-emerald-800">
-            Suwasiri Unique Health ID sync
+            Suwasiri Unique Health ID — walk-in register
           </h3>
         </div>
         <span className="text-[10px] text-slate-500 font-medium">
-          Enter the Unique Health ID and Sync to Portal. The live Suwasiri file is shown here and saved to this clinic.
+          Walk-in patient: enter their Unique Health ID and Sync to Portal. They are registered at this clinic with name, age, NIC, labs, vaccines, and other Suwasiri details — no manual file needed.
         </span>
       </div>
 
@@ -129,7 +129,7 @@ export default function UniqueHealthIdSyncPanel({
 
       {saved && preview && (
         <p className="text-[11px] font-semibold text-emerald-900 bg-emerald-100 border border-emerald-300 rounded px-3 py-2">
-          {preview.name} is saved on Patient Clinical Records at this clinic.
+          {preview.name} is registered at this clinic with their Suwasiri file. You can book a walk-in appointment with a doctor.
         </p>
       )}
 

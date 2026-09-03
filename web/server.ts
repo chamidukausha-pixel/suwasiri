@@ -771,6 +771,10 @@ const INITIAL_STATE = {
   auditLogs: [],
 };
 
+function isFakeSuwasiriBarcodeFile(p: any): boolean {
+  return /dynamically compiled|secure id:|synced via suwasiri mobile app index/i.test(String(p?.notes || ""));
+}
+
 // Help load/save the store with automatic forward migration safeguards
 function getStore() {
   if (!fs.existsSync(DATA_FILE)) {
@@ -780,9 +784,16 @@ function getStore() {
   try {
     const raw = fs.readFileSync(DATA_FILE, "utf-8").replace(/^\uFEFF/, "");
     const data = JSON.parse(raw);
-    
-    // Auto migration checks for patient structure updates
     let mutated = false;
+
+    // Drop hashed dummy Unique Health ID files (wrong names like Ruwan for Chamidu’s ID).
+    if (Array.isArray(data.patients)) {
+      const live = data.patients.filter((p: any) => !isFakeSuwasiriBarcodeFile(p));
+      if (live.length !== data.patients.length) {
+        data.patients = live;
+        mutated = true;
+      }
+    }
     if (!data.drugs) {
       data.drugs = INITIAL_STATE.drugs;
       mutated = true;
@@ -1528,8 +1539,7 @@ function applySuwasiriDemographics(target: any, body: any) {
 }
 
 function isDummySuwasiriImport(p: any): boolean {
-  const notes = String(p?.notes || "");
-  return /dynamically compiled|secure id:/i.test(notes);
+  return isFakeSuwasiriBarcodeFile(p);
 }
 
 function absorbClinicFile(target: any, source: any) {
@@ -1632,10 +1642,12 @@ app.post("/api/patients", (req, res) => {
 
   const email = String(newPatient.email || "").trim().toLowerCase();
   const barcode = String(newPatient.suwasiriBarcode || "").trim().toUpperCase();
+  const nic = String(newPatient.nic || "").trim().toLowerCase();
   const sameFile = store.patients.find((p: any) => {
-    if (!p) return false;
+    if (!p || isDummySuwasiriImport(p)) return false;
     if (email && String(p.email || "").trim().toLowerCase() === email) return true;
-    if (barcode && String(p.suwasiriBarcode || "").trim().toUpperCase() === barcode && !isDummySuwasiriImport(p)) return true;
+    if (barcode && String(p.suwasiriBarcode || "").trim().toUpperCase() === barcode) return true;
+    if (nic && String(p.nic || p.ihiNumber || "").trim().toLowerCase() === nic) return true;
     return false;
   });
   if (sameFile && sameFile.id !== newPatient.id) {
@@ -1643,7 +1655,6 @@ app.post("/api/patients", (req, res) => {
     synced.add(hid);
     sameFile.syncedHospitalIds = Array.from(synced);
     applySuwasiriDemographics(sameFile, req.body);
-    sameFile.id = newPatient.id;
     sameFile.hospitalId = sameFile.hospitalId || hid;
     sameFile.branchId = sameFile.branchId || branchId || BRANCH_COLOMBO;
     foldDuplicateSuwasiriFiles(store, sameFile);
@@ -1754,214 +1765,24 @@ app.post("/api/online-booking", (req, res) => {
   res.status(201).json({ success: true, patient: pat, appointment: newApt, state: store });
 });
 
-// SUWASIRI NATIONAL MOBILE APP MEDICAL DIRECTORY (MOCK REGISTRY GATEWAY)
-const SUWASIRI_REGISTRY = [
-  {
-    barcode: "SWSR-9912",
-    name: "Sahan Gunasekara",
-    age: 34,
-    gender: "Male",
-    bloodType: "B+",
-    allergies: "Peanut Sensitivity",
-    phone: "+94 77 111 2222",
-    email: "sahan.g@gmail.com",
-    notes: "Synced via Suwasiri Mobile App index database. Heavy sports enthusiast.",
-    medicalHistory: ["Hyperlipidemia (onset 2024)", "Mild Dust Allergy"],
-    vaccineRecords: [
-      { vaccineName: "COVID-19 Pfizer", date: "2021-08-11", dose: "Completed Sequence", batchNumber: "COV-PZ-902", status: "Completed" },
-      { vaccineName: "Tetanus Toxoid", date: "2025-02-14", dose: "Booster", batchNumber: "TET-911", status: "Completed" }
-    ],
-    labResults: [
-      { id: "lab-swsr-1", testName: "Lipid Profile", date: "2026-01-20", status: "COMPLETED", result: "Total Cholesterol: 210 mg/dL", remarks: "Slightly elevated. Recommended daily exercise." }
-    ],
-    activeMedications: ["Atorvastatin 10mg Nocte"],
-    medicalCenter: "Colombo Central Clinic"
-  },
-  {
-    barcode: "SWSR-4451",
-    name: "Nimani Rajasinghe",
-    age: 28,
-    gender: "Female",
-    bloodType: "O-",
-    allergies: "Sulfa Drugs",
-    phone: "+94 77 333 4444",
-    email: "nimani.r@gmail.com",
-    notes: "Synced via Suwasiri Mobile App index database. Diagnosed with mild anemia in childhood.",
-    medicalHistory: ["Iron deficiency anemia", "Allergic Rhinitis"],
-    vaccineRecords: [
-      { vaccineName: "COVID-19 Moderna", date: "2021-07-20", dose: "Completed Sequence", batchNumber: "COV-MD-551", status: "Completed" }
-    ],
-    labResults: [
-      { id: "lab-swsr-2", testName: "Hemoglobin Count", date: "2026-03-01", status: "COMPLETED", result: "11.2 g/dL (Slightly low, Ref: 12-16)", remarks: "Suggesting iron rich supplements and green leafy veggies." }
-    ],
-    activeMedications: ["Iron Supplement (Ferosoft) 1 tab daily"],
-    medicalCenter: "Kandy Wellness Center"
-  },
-  {
-    barcode: "SWSR-1085",
-    name: "Dilhan Wickramasinghe",
-    age: 41,
-    gender: "Male",
-    bloodType: "A+",
-    allergies: "None declared",
-    phone: "+94 71 555 6666",
-    email: "dilhan.w@gmail.com",
-    notes: "Synced via Suwasiri Mobile App index database. Logistics Supervisor.",
-    medicalHistory: ["Gastroesophageal reflux disease (GERD, diagnosed 2023)"],
-    vaccineRecords: [
-      { vaccineName: "COVID-19 AstraZeneca", date: "2021-06-15", dose: "Completed Sequence", batchNumber: "COV-AZ-883", status: "Completed" }
-    ],
-    labResults: [],
-    activeMedications: ["Omeprazole 20mg daily AC"],
-    medicalCenter: "Colombo Central Clinic"
-  },
-  {
-    barcode: "SWSR-3022",
-    name: "Kavindi Perera",
-    age: 31,
-    gender: "Female",
-    bloodType: "AB+",
-    allergies: "Aspirin, Ibuprofen",
-    phone: "+94 72 888 9999",
-    email: "kavindi.p@gmail.com",
-    notes: "Synced via Suwasiri Mobile App index database. Graphic Designer.",
-    medicalHistory: ["Migraine with visual aura (diagnosed 2021)"],
-    vaccineRecords: [
-      { vaccineName: "COVID-19 Pfizer", date: "2021-09-02", dose: "Completed Sequence", batchNumber: "COV-PZ-101", status: "Completed" }
-    ],
-    labResults: [],
-    activeMedications: ["Sumatriptan 50mg PRN"],
-    medicalCenter: "Galle GP Care"
-  }
-];
-
-// Fallback dynamic generator helper based on barcode string hash
-function generateSuwasiriPatient(barcodeNum: string) {
-  let hash = 0;
-  for (let i = 0; i < barcodeNum.length; i++) {
-    hash = barcodeNum.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  hash = Math.abs(hash);
-
-  const sriLankanFirstNames = ["Pathum", "Suresh", "Ishara", "Nisansala", "Saman", "Awanthi", "Malith", "Ruwan", "Chathura", "Gayathri", "Kamal", "Dilini", "Sanjaya", "Chamikara", "Nimanka"];
-  const sriLankanLastNames = ["Silva", "Perera", "Fernando", "Jayasinghe", "Ranasinghe", "Wickramasinghe", "Gunasekara", "Herath", "Karunaratne", "Senanayake", "Jayawardena", "Alwis"];
-  const bloodTypesList = ["A+", "B+", "O+", "AB+", "A-", "B-", "O-"];
-  const allergyList = ["None declared", "Penicillin", "Dust mites", "Dairy products", "Sulfa drugs", "Amoxicillin", "Aspirin"];
-  const genericMeds = [
-    ["Cetirizine 10mg Nocte"],
-    ["Metformin 500mg daily"],
-    ["Lisinopril 5mg daily"],
-    ["Paracetamol 500mg PRN"],
-    ["None declared"]
-  ];
-  const genericHistory = [
-    ["Essential Hypertension (onset 2024)", "Mild Hyperuricemia"],
-    ["Seasonal Respiratory Allergies", "No other conditions"],
-    ["Type 2 Diabetes (onset 2025)"],
-    ["Primary Dysmenorrhea (occasional)"],
-    ["No systemic chronic conditions declared"]
-  ];
-
-  const first = sriLankanFirstNames[hash % sriLankanFirstNames.length];
-  const last = sriLankanLastNames[(hash >> 2) % sriLankanLastNames.length];
-  const age = (hash % 50) + 18;
-  const gender = (hash % 2 === 0) ? "Male" : "Female";
-  const bloodType = bloodTypesList[(hash >> 4) % bloodTypesList.length];
-  const allergy = allergyList[(hash >> 3) % allergyList.length];
-  const phone = `+94 77 ${Math.floor(1000000 + (hash % 9000000))}`;
-  const email = `${first.toLowerCase()}.${last.toLowerCase()}@suwasiri.lk`;
-  const activeMedications = genericMeds[hash % genericMeds.length];
-  const medicalHistory = genericHistory[(hash >> 1) % genericHistory.length];
-
-  const centerList = ["Colombo Central Clinic", "Kandy Wellness Center", "Galle GP Care", "Jaffna Medical Hub"];
-  const medicalCenter = centerList[hash % centerList.length];
-
-  return {
-    barcode: barcodeNum,
-    name: `${first} ${last}`,
-    age,
-    gender,
-    bloodType,
-    allergies: allergy,
-    phone,
-    email,
-    notes: `Dynamically compiled & synced from Suwasiri National Mobile App directory (Secure ID: ${barcodeNum}).`,
-    medicalHistory,
-    vaccineRecords: [
-      { vaccineName: "COVID-19 Vaccine (Standard)", date: "2021-12-05", dose: "Completed", batchNumber: `COV-SUW-${hash % 1000}`, status: "Completed" }
-    ],
-    labResults: [],
-    activeMedications,
-    medicalCenter
-  };
-}
-
-// SUWASIRI BARCODE RETRIEVAL & AUTO-SYNCHRONIZATION ENDPOINT
+// Unique Health ID lookup is live Firestore from Patient Clinical Records — never invent a dummy file.
 app.get("/api/suwasiri/barcode/:barcodeCode", (req, res) => {
   const store = getStore();
-  const rawBarcode = req.params.barcodeCode.trim();
-  
+  const rawBarcode = String(req.params.barcodeCode || "").trim().toUpperCase();
   if (!rawBarcode) {
-    return res.status(400).json({ error: "No barcode specified." });
+    return res.status(400).json({ error: "No Unique Health ID specified." });
   }
-
-  // 1. Look up if patient was already imported / exists with this barcode in store
-  let existingPatient = store.patients.find(
-    p => (p.suwasiriBarcode && p.suwasiriBarcode.toUpperCase() === rawBarcode.toUpperCase()) ||
-         (p.id.toUpperCase() === rawBarcode.toUpperCase())
+  const existingPatient = store.patients.find((p: any) =>
+    !isFakeSuwasiriBarcodeFile(p) &&
+    ((p.suwasiriBarcode && String(p.suwasiriBarcode).toUpperCase() === rawBarcode) ||
+      String(p.id).toUpperCase() === rawBarcode)
   );
-
   if (existingPatient) {
-    // Already synced earlier, just return it
     return res.json({ patient: existingPatient, isNewSync: false, state: store });
   }
-
-  // 2. Look up in predefined static Suwasiri database registry
-  let source = SUWASIRI_REGISTRY.find(p => p.barcode.toUpperCase() === rawBarcode.toUpperCase());
-  
-  // 3. If not in static directory, generate a realistic deterministic file
-  if (!source) {
-    source = generateSuwasiriPatient(rawBarcode);
-  }
-
-  // 4. Register this patient into Sri Lankan GP Care portal
-  const pId = `${Math.floor(1000 + Math.random() * 9000)}-LK`;
-  const newPatient = {
-    id: pId,
-    name: source.name,
-    age: source.age,
-    gender: source.gender,
-    bloodType: source.bloodType,
-    allergies: source.allergies,
-    phone: source.phone,
-    email: source.email,
-    image: "",
-    notes: source.notes,
-    history: [],
-    activeMedications: source.activeMedications,
-    medicalHistory: source.medicalHistory,
-    vaccineRecords: source.vaccineRecords,
-    labResults: source.labResults || [],
-    prescriptionsList: [],
-    medicalCertificatesList: [],
-    medicalCenter: source.medicalCenter || "Colombo Central Clinic",
-    suwasiriBarcode: rawBarcode.toUpperCase()
-  };
-
-  store.patients.unshift(newPatient);
-
-  // Post system BOT sync message
-  store.clinicMessages.push({
-    id: `msg-${Date.now()}`,
-    sender: "Suwasiri Portal Engine",
-    senderRole: "System BOT",
-    text: `⚡ Synergized central ID sync! Barcode "${rawBarcode.toUpperCase()}" loaded from Suwasiri Mobile App. Patient "${newPatient.name}" is now auto-registered at "${newPatient.medicalCenter}".`,
-    timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
-    channel: "#general-clinical"
+  return res.status(404).json({
+    error: "No clinic file for that Unique Health ID. Enter it under Patient Clinical Records and Sync to Portal to load the live Suwasiri patient.",
   });
-
-  saveStore(store);
-  res.status(201).json({ patient: newPatient, isNewSync: true, state: store });
 });
 
 // Update Patient File & Add History Log (Save consultation / e-prescription / vaccination)

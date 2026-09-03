@@ -110,7 +110,12 @@ import {
 } from "./sync/suwasiriAppointments";
 import { clinicExamSessionId, issuePrescriptionsToSuwasiri } from "./sync/suwasiriPrescriptions";
 import { issueLabReportToSuwasiri } from "./sync/suwasiriLabs";
-import { lookupSuwasiriHealthId, patientVisibleAtHospital } from "./sync/suwasiriHealthId";
+import {
+  isFakeSuwasiriClinicFile,
+  lookupSuwasiriHealthId,
+  looksLikeUniqueHealthId,
+  patientVisibleAtHospital,
+} from "./sync/suwasiriHealthId";
 import { saveConsultationNote } from "./sync/suwasiriConsultSync";
 import {
   applySuwasiriChart,
@@ -809,7 +814,7 @@ export default function App() {
       setLoading(true);
       const res = await fetch("/api/clinical-state");
       const data = await res.json();
-      setPatients(data.patients || []);
+      setPatients((data.patients || []).filter((p: Patient) => !isFakeSuwasiriClinicFile(p)));
       setAppointments(data.appointments || []);
       setAlerts(data.alerts || []);
       setTasks(data.tasks || []);
@@ -1534,12 +1539,14 @@ export default function App() {
       throw new Error(errBody.error || `Save failed (${res.status})`);
     }
     const data = await res.json();
-    if (data.state?.patients) setPatients(data.state.patients);
-    else {
+    if (data.state?.patients) {
+      setPatients(data.state.patients.filter((p: Patient) => !isFakeSuwasiriClinicFile(p)));
+    } else {
       const saved = data.patient || patient;
-      setPatients((prev) => prev.some((p) => p.id === saved.id)
-        ? prev.map((p) => (p.id === saved.id ? { ...p, ...saved } : p))
-        : [saved, ...prev]);
+      setPatients((prev) => {
+        const withoutFakes = prev.filter((p) => !isFakeSuwasiriClinicFile(p) && p.id !== saved.id);
+        return [{ ...saved }, ...withoutFakes];
+      });
     }
     return (data.patient || patient) as Patient;
   };
@@ -1578,6 +1585,7 @@ export default function App() {
         emergencyContactPhone: saved.emergencyContactPhone || preview.emergencyContactPhone,
       });
       setHealthIdSaved(true);
+      setSearchQuery(saved.name || preview.name);
     } catch (err: any) {
       const message = String(err?.message || err);
       if (message.toLowerCase().includes("sign in")) {
@@ -1612,6 +1620,7 @@ export default function App() {
         vaccineRecords: saved.vaccineRecords?.length ? saved.vaccineRecords : patient.vaccineRecords,
       });
       setHealthIdSaved(true);
+      setSearchQuery(saved.name || patient.name);
     } catch (err: any) {
       setHealthIdLookupError("Could not save this Unique Health ID file: " + (err.message || err));
     } finally {
@@ -2709,6 +2718,7 @@ export default function App() {
 
   // Name-first registry filter: searching a patient name shows only that person
   const filteredPatients = patients.filter(p => {
+    if (isFakeSuwasiriClinicFile(p)) return false;
     if (!patientVisibleAtHospital(p, sessionHospitalId)) return false;
     if (p.accessStatus === "DELETED" || p.accessStatus === "BLOCKED") return false;
     if (!isPlatformSA && !canViewHospitalWideCharts(activeRole) && (p.branchId || BRANCH_COLOMBO) !== sessionBranchId) return false;
@@ -2726,6 +2736,7 @@ export default function App() {
   });
 
   const nameSearchPatients = patients.filter((p) => {
+    if (isFakeSuwasiriClinicFile(p)) return false;
     if (!patientVisibleAtHospital(p, sessionHospitalId)) return false;
     if (p.accessStatus === "DELETED" || p.accessStatus === "BLOCKED") return false;
     if (!isPlatformSA && !canViewHospitalWideCharts(activeRole) && (p.branchId || BRANCH_COLOMBO) !== sessionBranchId) return false;
@@ -4050,7 +4061,7 @@ export default function App() {
                     </h2>
                     <p className="text-xs text-slate-500 font-sans">
                       {isFrontDeskStaff
-                        ? "Sync a caller’s Unique Health ID and check walk-in availability. Click a name to open their file (live consult booking and fees are hidden)."
+                        ? "Walk-in: enter the Unique Health ID and Sync to Portal to register that Suwasiri patient at this clinic, then book a walk-in. Click a name to open their file (live consult booking and fees are hidden)."
                         : "Click a patient name to open their GP Exam Room clinical profile."}
                     </p>
                   </div>
@@ -4070,9 +4081,21 @@ export default function App() {
                     <input
                       type="text"
                       className="w-full pl-10 pr-4 py-2 border rounded text-xs bg-slate-50 focus:border-[#00334f] outline-none"
-                      placeholder="Filter registered clinical files by name, clinical allergies and parameters..."
+                      placeholder="Filter by name, or enter a Unique Health ID (SW…) and press Enter to register that Suwasiri patient here"
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setSearchQuery(value);
+                        if (looksLikeUniqueHealthId(value)) {
+                          void handleLookupUniqueHealthId(value);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        if (!looksLikeUniqueHealthId(searchQuery)) return;
+                        e.preventDefault();
+                        void handleLookupUniqueHealthId(searchQuery);
+                      }}
                     />
                   </div>
                 </div>

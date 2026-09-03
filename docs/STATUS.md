@@ -89,11 +89,11 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] GP Care Clinical Calculators: search registered patient, click name for current details, edit/save; history reloads in the suite
 - [x] Recalls & Reminders live on Receptionist / Front Desk; SMS/email via registered phone/email; completing a recall drops the active count (e.g. 5 → 4)
 - [x] Reception **Book scheduler appointment slot**: drag working doctors, sage dates, coral times, 6‑month window; in-person → Suwasiri Home **blue** card, video → **purple** card; doctor + receptionist calendars show the name on that date
-- [x] Patient Clinical Records lives on Receptionist & Front Desk; Unique Health ID → **Sync to Portal** loads the live Suwasiri file (name, age, gender, DOB, blood, NIC, phone, email, address, allergies, emergency contact, vaccine history, previous lab reports) into the Unique Health ID box; **Save to Patient Clinical Records** registers that file at this clinic
+- [x] Patient Clinical Records lives on Receptionist & Front Desk; walk-in Unique Health ID → **Sync to Portal** registers that live Suwasiri patient at this clinic (name, age, gender, DOB, blood, NIC, phone, email, address, allergies, emergency contact, vaccine history, previous lab reports)
 - [x] **Check walk-in availability** uses the same sage/coral 6‑month scheduler; if the session is full, reception can add up to 5 walk-ins at the end of the list; Lobby ⬆️⬇️ reorders the queue
 - [x] Telehealth right rail is the clinical consultation room (not Active GP room); View Clinical Hub opens history and syncs to that patient’s Suwasiri file
 - [x] Telehealth e-Rx: view, download, and print after medicines are issued; still writes Suwasiri Call E-Prescription
-- [x] Unique Health ID Sync to Portal is clinic-scoped (PrimeCare vs other hospitals); Chamidu `SW3C6F5B5A27` / Sakuni `SW6CF9340271`; lookup no longer falls back to dummy barcode patients
+- [x] Unique Health ID Sync to Portal is clinic-scoped (PrimeCare vs other hospitals); Chamidu `SW3C6F5B5A27` / Sakuni `SW6CF9340271`; hashed dummy barcode patients are purged and never generated
 - [x] Reception delete/block patient requires a comment and admin approval
 - [x] Receipts: Paid by Suwasiri vs paid by manual via Suwasiri (view/download slip)
 - [x] Sample Dispatch Hub delete with yes/no confirm; Team Secure Chat is shared by all clinic staff
@@ -147,7 +147,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] GP Exam Room Consultation is one **Doctor notes** field (Subjective, medical issues this visit, and Plan & Management removed)
 - [x] Reception Recalls & Reminders In person / Video book writes Firestore `appointments` for that Suwasiri patient (Home **blue** / **purple**) and shows on the GP Care calendar that date
 - [x] Book Active Appointment lists **only doctors at this medical centre**. Booked vs available times (Suwasiri App + GP Care reception/doctor) stay in sync on the scheduler and when clicking a clinic calendar date. Patient profile **Appointments** books using the **logged-in doctor only**.
-- [x] Unique Health ID: receptionist **Sync to Portal** loads the live Suwasiri file (demographics, labs, vaccines) into the Unique Health ID box and saves it to Patient Clinical Records; dummy barcode patients for the same ID are replaced
+- [x] Unique Health ID: receptionist **Sync to Portal** (or Enter on an SW… ID in the filter box) loads the **live** Suwasiri file and **registers that patient at this clinic** (name, age, gender, DOB, blood, NIC, phone, email, address, allergies, emergency contact, vaccine history, previous labs). Dummy hashed files (wrong names like Ruwan for Chamidu’s ID) are purged and never created again.
 - [x] GP Care **Patient Portal** removed (patients use the Suwasiri app; unmatched Firebase emails are blocked from the clinic EMR)
 
 ## In progress / next

@@ -29,6 +29,16 @@ export function normalizeHealthId(raw: string): string {
   return raw.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
 }
 
+/** Suwasiri Unique Health ID printed on the card (SW + 10 alphanumeric). */
+export function looksLikeUniqueHealthId(raw: string): boolean {
+  return /^SW[A-Z0-9]{10}$/.test(normalizeHealthId(raw));
+}
+
+/** Dummy hashed Unique Health ID files (wrong name for a real SW… ID). */
+export function isFakeSuwasiriClinicFile(p: { notes?: string } | null | undefined): boolean {
+  return /dynamically compiled|secure id:|synced via suwasiri mobile app index/i.test(String(p?.notes || ""));
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
@@ -240,8 +250,8 @@ async function fetchVaccines(patientId: string): Promise<VaccineRecord[]> {
 export function mapUserDocToPatient(id: string, data: Record<string, unknown>): Patient {
   const intake = asRecord(data.healthIntake);
   const dob = isoDate(data.dateOfBirth || intake.dateOfBirth);
-  const barcode = str(data.barcodeNumber || data.ceylonHealthId);
   const nic = str(data.NIC || data.nic || intake.medicareDetails);
+  const barcode = str(data.barcodeNumber || data.ceylonHealthId) || generateSuwasiriHealthId(id, nic || id);
   const emergency = emergencyFromProfile(data, intake);
   const phone = str(data.mobileNo || data.phone || intake.contactDetails);
   const address = str(intake.address || data.region);
