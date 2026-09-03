@@ -57,7 +57,7 @@ export default function LoginView() {
             <h1 className="font-serif font-bold text-xl">Sri Lankan GP Care</h1>
           </div>
           <p className="text-xs text-slate-500">
-            Sign in with the same Firebase Auth as the Suwasiri mobile app (`suwasiri-91824`).
+            Clinic staff sign in with the same Firebase Auth as the Suwasiri app (`suwasiri-91824`). Patients use the mobile app, not this portal.
           </p>
         </div>
 

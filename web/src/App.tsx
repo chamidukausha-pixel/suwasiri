@@ -25,7 +25,6 @@ import {
   Stethoscope,
   Info,
   Clock,
-  HeartPulse,
   UserCheck,
   AlertTriangle,
   UserPlus,
@@ -72,7 +71,6 @@ import { mergeClinicalDocuments } from "./components/DocumentManagementHub";
 import RecallsDashboard from "./components/RecallsDashboard";
 import ReceptionBookingScheduler from "./components/ReceptionBookingScheduler";
 import type { ReceptionBookPayload } from "./components/ReceptionBookingScheduler";
-import PatientPortalView from "./components/PatientPortalView";
 import UniqueHealthIdSyncPanel from "./components/UniqueHealthIdSyncPanel";
 import PracticeManagerView from "./components/PracticeManagerView";
 import SystemAdminView from "./components/SystemAdminView";
@@ -528,7 +526,7 @@ export default function App() {
     (m) => m.userId === resolvedUserId && m.hospitalId === sessionHospitalId && m.active
   );
   const activeRole = roleDefs.find((r) => r.id === activeMembership?.roleId);
-  const currentRole = isPlatformSA ? "Platform Super Admin" : isPatientOnly ? "Patient" : (activeRole?.name || "Doctor");
+  const currentRole = isPlatformSA ? "Platform Super Admin" : (activeRole?.name || "Doctor");
   const showFrontDeskNotifications =
     currentRole === "Receptionist" ||
     currentRole === "Billing Officer" ||
@@ -543,7 +541,6 @@ export default function App() {
   const activeBranch = branches.find((b) => b.id === sessionBranchId);
   const canEditRbac = isGovernanceEditor(activeRole, isPlatformSA);
   const canOpen = (tab: string) => {
-    if (isPatientOnly) return tab === "patientPortal";
     return tabAllowed(tab, activeRole, isPlatformSA);
   };
 
@@ -577,10 +574,6 @@ export default function App() {
   };
 
   const requestTab = (tab: string) => {
-    if (isPatientOnly && tab !== "patientPortal") {
-      alert("This Firebase account has no staff membership. Use the Patient Portal, or ask a Hospital Super Admin to assign a role.");
-      return;
-    }
     if (!tabAllowed(tab, activeRole, isPlatformSA)) {
       alert(`Your ${currentRole} role does not have permission to open this module.`);
       return;
@@ -641,7 +634,6 @@ export default function App() {
     lastY: number;
     moved: boolean;
   } | null>(null);
-  const [selectedPatientForPortal, setSelectedPatientForPortal] = useState<Patient | null>(null);
 
   // Recalls & Preventive Health Reminders State
   const [recalls, setRecalls] = useState<RecallRecord[]>([
@@ -949,18 +941,12 @@ export default function App() {
       applyUser(staff.id);
     } else {
       setSessionUserId("");
-      setActiveTab("patientPortal");
     }
   }, [authUser?.uid, authUser?.email, staffUsers, loading]);
 
   useEffect(() => {
     if (!authUser || loading) return;
-    if (isPatientOnly) {
-      if (activeTab !== "patientPortal") {
-        setActiveTab("patientPortal");
-      }
-      return;
-    }
+    if (isPatientOnly) return;
     if (!tabAllowed(activeTab, activeRole, isPlatformSA)) {
       setActiveTab(defaultTabFor(activeRole, isPlatformSA));
     }
@@ -2884,6 +2870,38 @@ export default function App() {
     return <LoginView />;
   }
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#f9f9ff]">
+        <Loader2 className="w-10 h-10 text-[#00334f] animate-spin mb-2" />
+        <p className="text-xs font-bold text-slate-500">Loading clinic session…</p>
+      </div>
+    );
+  }
+
+  if (isPatientOnly) {
+    return (
+      <div className="min-h-screen bg-[#f9f9ff] flex items-center justify-center p-6">
+        <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-sm p-8 space-y-4 text-center">
+          <ShieldCheck className="w-8 h-8 text-[#00334f] mx-auto" />
+          <h1 className="font-serif font-bold text-xl text-[#00334f]">Staff access only</h1>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Sri Lankan GP Care is for clinic staff. Patients use the <strong>Suwasiri</strong> mobile app.
+            Ask a Hospital Super Admin to assign this email a staff role if you work at a medical centre.
+          </p>
+          <p className="text-[11px] font-mono text-slate-500 break-all">{authUser.email}</p>
+          <button
+            type="button"
+            onClick={() => { void signOutFirebase(); }}
+            className="w-full bg-[#00334f] text-white py-2.5 rounded-lg text-xs font-bold hover:bg-[#0c4a6e]"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen font-sans bg-[#f9f9ff] text-[#111c2d]" id="app_root">
       
@@ -2905,8 +2923,6 @@ export default function App() {
         </div>
 
         <nav className="flex-1 px-4 mt-4 space-y-1 overflow-y-auto">
-          {!isPatientOnly && (
-          <>
           {(canOpen("dashboard") || canOpen("clinical") || canOpen("pathology") || canOpen("telehealth")) && (
           <div className="pb-1">
             <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider px-2">Clinical Core (Doctor Portal)</span>
@@ -3144,33 +3160,10 @@ export default function App() {
             <span className="text-[13px] font-medium">Reports & Analytics</span>
           </button>
           )}
-          </>
-          )}
-
-          {canOpen("patientPortal") && (
-          <div className="pt-2 pb-1 border-t border-slate-100">
-            <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider px-2">Patient Facing Portal</span>
-          </div>
-          )}
-
-          {canOpen("patientPortal") && (
-          <button
-            onClick={() => requestTab("patientPortal")}
-            className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
-              activeTab === "patientPortal"
-                ? "text-emerald-900 bg-emerald-100 font-bold shadow-xs"
-                : "text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50"
-            }`}
-          >
-            <HeartPulse className="w-4 h-4 mr-3 text-emerald-600" />
-            <span className="text-[13px] font-bold">Patient Portal</span>
-          </button>
-          )}
         </nav>
 
-        {/* Sidebar bottom */}
         <div className="p-4 border-t border-[#c1c7cf] space-y-2">
-            {!isPatientOnly && (canOpen("calendar") || canOpen("clinical")) && (
+          {(canOpen("calendar") || canOpen("clinical")) && (
             <button
             onClick={() => {
               if (patients.length > 0) {
@@ -3186,7 +3179,7 @@ export default function App() {
             <Plus className="w-4 h-4 mr-1.5" />
             Book Active Appointment
           </button>
-            )}
+          )}
         </div>
       </aside>
 
@@ -3205,7 +3198,6 @@ export default function App() {
           branchId={sessionBranchId}
           roleId={activeMembership?.roleId || ""}
           isPlatformSA={isPlatformSA}
-          isPatientOnly={isPatientOnly}
           onSelectHospital={applyHospital}
           onSelectBranch={setSessionBranchId}
           onSignOut={() => { void signOutFirebase(); }}
@@ -5922,96 +5914,6 @@ export default function App() {
               </div>
             )}
 
-            {/* TAB: PATIENT PORTAL */}
-            {activeTab === "patientPortal" && (
-              <div className="space-y-6">
-                <PatientPortalView 
-                  patient={selectedPatientForPortal || patients[0] || {
-                    id: "9942-LK",
-                    name: "Fatima Zahra",
-                    age: 38,
-                    gender: "Female",
-                    bloodType: "B+",
-                    allergies: "Penicillin (Hives / Anaphylaxis risk)",
-                    notes: "Type 2 Diabetes Mellitus & Hypertension",
-                    phone: "+94 77 982 1100",
-                    email: "fatima.zahra@email.lk",
-                    address: "No. 45/2 Galle Road, Colombo 03, Western Province",
-                    medicalCenter: "Colombo Central Clinic",
-                    medicareNumber: "2948 10294 1 / 1 (Exp: 11/2028)",
-                    ihiNumber: "8003608129038472",
-                    emergencyContact: {
-                      name: "Mohamed Zahra",
-                      relationship: "Spouse",
-                      phone: "+94 77 982 1101"
-                    },
-                    nextOfKin: {
-                      name: "Amina Zahra",
-                      relationship: "Daughter",
-                      phone: "+94 77 982 1102"
-                    },
-                    preferredGp: "Dr. Priyantha Silva (FRACGP, MBBS)",
-                    activeMedications: [
-                      "Metformin Hydrochloride 500mg (1 tablet BD with meals)",
-                      "Telmisartan 40mg (1 tablet OD morning)",
-                      "Atorvastatin 20mg (1 tablet nocte)"
-                    ],
-                    medicalHistory: [
-                      "2019: Type 2 Diabetes Mellitus diagnosed",
-                      "2021: Primary Essential Hypertension",
-                      "2023: Mild Non-Proliferative Diabetic Retinopathy"
-                    ],
-                    diagnosesList: [
-                      { id: "diag-1", code: "E11.9", term: "Type 2 diabetes mellitus without complications", isPrimary: true, date: "2019-04-12" },
-                      { id: "diag-2", code: "I10", term: "Essential (primary) hypertension", isPrimary: false, date: "2021-08-19" }
-                    ],
-                    vaccineRecords: [
-                      { id: "v-1", vaccineName: "Influenza (Fluarix Tetra)", batchNumber: "FLX-9982A", dateAdministered: "2026-03-15", site: "Left Deltoid (IM)", dose: "0.5mL", provider: "Dr. Priyantha Silva" },
-                      { id: "v-2", vaccineName: "COVID-19 Pfizer (Comirnaty XBB.1.5)", batchNumber: "PFR-4410B", dateAdministered: "2025-10-20", site: "Right Deltoid (IM)", dose: "0.3mL", provider: "Dr. Priyantha Silva" }
-                    ],
-                    labResults: [
-                      { id: "lab-1", testName: "HbA1c Glycated Haemoglobin", resultValue: "6.8%", referenceRange: "4.0 - 6.0%", flag: "HIGH", date: "2026-07-10", notes: "Target < 7.0% met" },
-                      { id: "lab-2", testName: "eGFR (CKD-EPI)", resultValue: "88 mL/min/1.73m2", referenceRange: "> 60 mL/min", flag: "NORMAL", date: "2026-07-10", notes: "Normal renal function" }
-                    ]
-                  }}
-                  patientsList={hospitalPatients.length > 0 ? hospitalPatients : patients}
-                  appointments={tenantAppointments}
-                  recalls={recalls}
-                  onBookAppointment={(apt) => {
-                    if (apt.patientId) setNewAptPatientId(apt.patientId);
-                    if (apt.date) setNewAptDate(apt.date);
-                    if (apt.reason) setNewAptReason(String(apt.reason));
-                    setBookingLockPatient(true);
-                    setBookingMode("book");
-                    setShowAptModal(true);
-                  }}
-                  onCancelAppointment={(aptId) => {
-                    handleUpdateAptStatus(aptId, "CANCELLED");
-                    alert("Appointment cancelled successfully.");
-                  }}
-                  onSendMessage={(msg) => {
-                    handlePostSecureClinicChat(msg.text || "", msg.channel || "#general-clinical");
-                  }}
-                  onUpdatePatientDetails={(upPat) => {
-                    setPatients(prev => prev.map(p => p.id === upPat.id ? upPat : p));
-                    setSelectedPatientForPortal(upPat);
-                    alert("Patient profile and consent preferences updated!");
-                  }}
-                  onLaunchTelehealth={(apt) => {
-                    setActiveTab("telehealth");
-                  }}
-                  onSelectPatient={(p) => {
-                    setSelectedPatientForPortal(p);
-                  }}
-                  onOpenGpExam={(p) => {
-                    handleStartConsultation(p);
-                  }}
-                  onOpenDoctorClinicalRecord={(p) => {
-                    setActiveDoctorRecordPatient(p);
-                  }}
-                />
-              </div>
-            )}
 
           </div>
         )}

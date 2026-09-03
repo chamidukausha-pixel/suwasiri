@@ -13,7 +13,6 @@ interface Props {
   branchId: string;
   roleId: string;
   isPlatformSA: boolean;
-  isPatientOnly: boolean;
   onSelectHospital: (hospitalId: string) => void;
   onSelectBranch: (branchId: string) => void;
   onSignOut: () => void;
@@ -30,7 +29,6 @@ export default function RoleSwitcher({
   branchId,
   roleId,
   isPlatformSA,
-  isPatientOnly,
   onSelectHospital,
   onSelectBranch,
   onSignOut,
@@ -54,7 +52,7 @@ export default function RoleSwitcher({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 font-sans">
-        {!isPatientOnly && hospitalOptions.length > 0 && (
+        {hospitalOptions.length > 0 && (
           <label className="flex items-center gap-1">
             <Building2 className="w-3.5 h-3.5 text-slate-500" />
             <select
@@ -71,7 +69,7 @@ export default function RoleSwitcher({
           </label>
         )}
 
-        {!isPatientOnly && assignedBranches.length > 0 && (
+        {assignedBranches.length > 0 && (
           <label className="flex items-center gap-1">
             <MapPin className="w-3.5 h-3.5 text-slate-500" />
             <select
@@ -89,7 +87,7 @@ export default function RoleSwitcher({
         )}
 
         <span className="px-2 py-1 rounded bg-[#00334f] text-white font-bold">
-          {isPlatformSA ? "Platform Super Admin" : isPatientOnly ? "Patient" : role?.name || "No staff role"}
+          {isPlatformSA ? "Platform Super Admin" : role?.name || "No staff role"}
         </span>
 
         <button

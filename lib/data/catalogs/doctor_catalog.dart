@@ -20,6 +20,9 @@ class DoctorBrowseCategory {
   final List<String> specialties;
   /// Shorter label shown when the tile is selected (e.g. "My Heart").
   final String? selectedLabelKey;
+
+  /// Bundled 3D organ illustration for the category tile.
+  String get imageAsset => 'assets/categories/$id.png';
 }
 
 /// Curated specialist directory + registered clinics/hospitals by district.

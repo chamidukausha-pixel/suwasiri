@@ -39,7 +39,7 @@ Keep `web/` as the exact React/Vite/Express clinic portal. Do not change Flutter
 
 1. Document mapping of web models → Firestore collections ([WEB.md](WEB.md)) — tenancy collections listed in [FIREBASE.md](FIREBASE.md)
 2. Wire web `server.ts` / client to Firebase Auth + Firestore (`suwasiri-91824`) without changing the UI framework
-3. Shared appointments (live): Suwasiri App bookings show as **booked times** under that doctor on GP Care **Book Active Appointment** and **Patient Portal**. Receptionist Book scheduler writes clinic/video slots to the same `appointments` collection (Home blue/purple). Remaining GP EMR charts still use the web JSON store.
+3. Shared appointments (live): Suwasiri App bookings show as **booked times** under that doctor on GP Care **Book Active Appointment**. Receptionist Book scheduler writes clinic/video slots to the same `appointments` collection (Home blue/purple). Remaining GP EMR charts still use the web JSON store.
 4. Role-aware access: Platform Super Admin can open every web module; Hospital Super Admin same within a tenant; committed RBAC hides staff nav. Mobile stays patient-only.
 
 ## Do not regress

@@ -173,7 +173,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
           ),
           const SizedBox(height: 12),
           SizedBox(
-            height: 118,
+            height: 132,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: DoctorCatalog.browseCategories.length,
@@ -186,6 +186,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                   selectedLabel: cat.selectedLabelKey == null
                       ? null
                       : l.t(cat.selectedLabelKey!),
+                  imageAsset: cat.imageAsset,
                   icon: cat.icon,
                   color: cat.color,
                   selected: selected,
@@ -318,6 +319,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
 class _CategoryTile extends StatelessWidget {
   const _CategoryTile({
     required this.label,
+    required this.imageAsset,
     required this.icon,
     required this.color,
     required this.selected,
@@ -327,6 +329,7 @@ class _CategoryTile extends StatelessWidget {
 
   final String label;
   final String? selectedLabel;
+  final String imageAsset;
   final IconData icon;
   final Color color;
   final bool selected;
@@ -343,73 +346,64 @@ class _CategoryTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(22),
         child: Ink(
-          width: 92,
-          height: 112,
+          width: 102,
+          height: 128,
           decoration: BoxDecoration(
-            color: const Color(0xFFF3F4F8),
+            color: Color.alphaBlend(
+              color.withValues(alpha: selected ? 0.14 : 0.08),
+              const Color(0xFFF4F5F9),
+            ),
             borderRadius: BorderRadius.circular(22),
-            border: selected
-                ? Border.all(color: color.withValues(alpha: 0.55), width: 2)
-                : Border.all(color: Colors.white.withValues(alpha: 0.6)),
+            border: Border.all(
+              color: selected
+                  ? color.withValues(alpha: 0.65)
+                  : Colors.white.withValues(alpha: 0.85),
+              width: selected ? 2 : 1,
+            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 10,
+                color: selected
+                    ? color.withValues(alpha: 0.18)
+                    : Colors.black.withValues(alpha: 0.05),
+                blurRadius: selected ? 16 : 10,
                 offset: const Offset(0, 4),
               ),
             ],
           ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Center(
-                child: Container(
-                  width: 58,
-                  height: 58,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: RadialGradient(
-                      colors: [
-                        color.withValues(alpha: selected ? 0.28 : 0.14),
-                        color.withValues(alpha: selected ? 0.10 : 0.04),
-                      ],
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 10, 8, 36),
+                  child: Image.asset(
+                    imageAsset,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, _, _) => Center(
+                      child: Icon(
+                        icon,
+                        color: color,
+                        size: 42,
+                      ),
                     ),
-                    boxShadow: selected
-                        ? [
-                            BoxShadow(
-                              color: color.withValues(alpha: 0.35),
-                              blurRadius: 14,
-                              offset: const Offset(0, 6),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Icon(
-                    icon,
-                    color: selected ? color : color.withValues(alpha: 0.72),
-                    size: selected ? 34 : 30,
                   ),
                 ),
-              ),
-              if (selected)
                 Align(
                   alignment: Alignment.bottomCenter,
                   child: Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.fromLTRB(8, 18, 8, 10),
+                    padding: const EdgeInsets.fromLTRB(6, 20, 6, 8),
                     decoration: BoxDecoration(
-                      borderRadius: const BorderRadius.vertical(
-                        bottom: Radius.circular(22),
-                      ),
                       gradient: LinearGradient(
                         begin: Alignment.bottomCenter,
                         end: Alignment.topCenter,
                         colors: [
-                          Colors.white,
-                          Colors.white.withValues(alpha: 0.92),
+                          Colors.white.withValues(alpha: 0.96),
+                          Colors.white.withValues(alpha: 0.88),
                           Colors.white.withValues(alpha: 0),
                         ],
-                        stops: const [0, 0.55, 1],
+                        stops: const [0, 0.5, 1],
                       ),
                     ),
                     child: Text(
@@ -417,16 +411,18 @@ class _CategoryTile extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.trustBlueDark,
-                        fontWeight: FontWeight.w800,
+                        fontWeight:
+                            selected ? FontWeight.w800 : FontWeight.w700,
                         fontSize: 11,
                         height: 1.1,
                       ),
                     ),
                   ),
                 ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -538,8 +538,6 @@ export function tabAllowed(tab: string, role: RoleDefinition | undefined, isPlat
       return role.canAccessAnalyticsReports;
     case "admin":
       return role.canManageUsers;
-    case "patientPortal":
-      return role.canAccessDoctorDashboard || role.canManageCashierAndInvoicing || role.name === "Patient";
     default:
       return false;
   }

@@ -19,7 +19,7 @@ Web app **Suwasiri GP Care** is already registered (`1:900720308322:web:6874ced9
 | `reception@primecare.lk` | Receptionist (Colombo) |
 | `admin@southerncoast.lk` | Hospital Super Admin (Southern) |
 
-A Firebase user **without** a matching staff email only gets the **Patient Portal** (same `users/{uid}` profile as mobile).
+A Firebase user **without** a matching staff email cannot use GP Care (staff-only). Patients stay on the Suwasiri mobile app.
 
 ---
 
