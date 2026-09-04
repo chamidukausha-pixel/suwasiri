@@ -165,6 +165,7 @@ export default function ReceptionBookingScheduler({
       setError(err?.message || "Could not add walk-in.");
       setSaving(false);
     }
+    setSaving(false);
   };
   const onDragStart = (index: number) => setDragIndex(index);
   const onDropOn = (index: number) => {
@@ -200,6 +201,7 @@ export default function ReceptionBookingScheduler({
         specialty: doctor.specialty || "General Practice",
         consultMode,
       });
+      setSaving(false);
     } catch (err: any) {
       setError(err?.message || "Could not confirm booking.");
       setSaving(false);
@@ -268,6 +270,23 @@ export default function ReceptionBookingScheduler({
           </div>
           )}
 
+          {lockDoctor && doctor && (
+            <div className="bg-white rounded-2xl border border-[#E4E2DE] p-4 flex gap-3">
+              <div
+                className="w-16 h-16 rounded-2xl flex items-center justify-center text-lg font-black text-white shrink-0"
+                style={{ background: SAGE }}
+              >
+                {initials(doctor.name)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-base font-bold text-[#1A1A1A]">{doctor.name}</p>
+                <p className="text-xs text-slate-500">
+                  {doctor.specialty || "General Practice"} — your slots only. Other doctors at this clinic are not shown.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A] block mb-1">Patient</label>
             {lockPatient ? (
@@ -318,6 +337,8 @@ export default function ReceptionBookingScheduler({
             </button>
           </div>
 
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
+          <div className="lg:col-span-3 space-y-3">
           <div className="overflow-x-auto pb-1">
             <div className="flex gap-2 min-w-max">
               {dates.map(({ key, date }) => {
@@ -347,7 +368,9 @@ export default function ReceptionBookingScheduler({
               })}
             </div>
           </div>
+          </div>
 
+          <div className="lg:col-span-2">
           <DoctorDaySlotsPanel
             doctor={doctor}
             dateKey={dateKey}
@@ -356,6 +379,8 @@ export default function ReceptionBookingScheduler({
             onSelectTime={setTime24}
             selectable
           />
+          </div>
+          </div>
 
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A] mb-2">Reason for visit</p>

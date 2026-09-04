@@ -687,7 +687,7 @@ abstract final class DoctorCatalog {
         ),
         _doctorAt(
           id: 'd-chamidu-rathnayake',
-          name: 'Dr. Chamidu Rathnayake',
+          name: 'Dr. Chamidu Kaushal Rathnayake',
           specialty: 'General Practitioner',
           facility: primeCare,
           rating: 4.8,

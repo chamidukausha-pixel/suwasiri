@@ -753,6 +753,29 @@ class _CertificatesList extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: () async {
                       try {
+                        await PrescriptionExportService.printCertificate(
+                          certificate: c,
+                          patient: user,
+                        );
+                      } catch (e) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('${l.t('rxPdfFailed')}: $e'),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.print_outlined),
+                    label: Text(l.t('printCertificate')),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      try {
                         await PrescriptionExportService.downloadCertificatePdf(
                           certificate: c,
                           patient: user,

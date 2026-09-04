@@ -1,10 +1,12 @@
-import React from "react";
+import React, { useMemo } from "react";
 import type { Appointment, StaffProvider } from "../types";
 import {
+  appointmentClock,
   appointmentPatientName,
   bookingOnSlot,
   bookingsForDoctorOnDate,
   formatAmPm,
+  formatTime24,
   parseClock,
 } from "../sync/suwasiriAppointments";
 
@@ -52,6 +54,20 @@ export default function DoctorDaySlotsPanel({
       })
     : [];
 
+  const slotTimes = useMemo(() => {
+    const extra = booked
+      .map((apt) => {
+        const clock = appointmentClock(apt) || parseClock(apt.time || "");
+        return formatTime24(clock.hours, clock.minutes);
+      })
+      .filter((t) => !CLINIC_SLOT_TIMES.includes(t));
+    return [...CLINIC_SLOT_TIMES, ...Array.from(new Set(extra))].sort((a, b) => {
+      const ca = parseClock(a);
+      const cb = parseClock(b);
+      return ca.hours * 60 + ca.minutes - (cb.hours * 60 + cb.minutes);
+    });
+  }, [booked]);
+
   return (
     <div className="space-y-3">
       <div>
@@ -60,7 +76,7 @@ export default function DoctorDaySlotsPanel({
           {dateLabel ? ` · ${dateLabel}` : ""}
         </p>
         <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
-          {CLINIC_SLOT_TIMES.map((t) => {
+          {slotTimes.map((t) => {
             const row = doctor
               ? bookingOnSlot(appointments, {
                   doctorName: doctor.name,
@@ -107,13 +123,13 @@ export default function DoctorDaySlotsPanel({
         {booked.length > 0 ? (
           <div className="bg-white rounded-2xl border border-[#E4E2DE] divide-y divide-[#E4E2DE] overflow-hidden">
             {booked.map((apt) => {
-              const { hours, minutes } = parseClock(apt.time || "");
+              const clock = appointmentClock(apt) || parseClock(apt.time || "");
               const who = appointmentPatientName(apt);
               const via = apt.source === "suwasiri_app" ? "Suwasiri App" : "GP Care";
               return (
                 <div key={apt.id} className="px-3 py-2.5 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-black text-slate-900">{formatAmPm(hours, minutes)}</p>
+                    <p className="text-sm font-black text-slate-900">{formatAmPm(clock.hours, clock.minutes)}</p>
                     <p className="text-xs font-semibold text-slate-800 truncate">{who}</p>
                     <p className="text-[10px] text-slate-500">
                       {via}

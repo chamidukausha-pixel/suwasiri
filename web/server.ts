@@ -1361,19 +1361,24 @@ app.post("/api/appointments", (req, res) => {
   }
 
   const newApt = {
-    id: `apt-${Date.now()}`,
+    id: req.body.id || `apt-${Date.now()}`,
     patientId,
     time,
     reason,
     status: status || "SCHEDULED",
     date: date || new Date().toISOString().split("T")[0],
     doctorName: req.body.doctorName,
+    doctorId: req.body.doctorId || req.body.doctorStaffId,
     type: req.body.type,
     isTelehealth: !!req.body.isTelehealth,
     consultMode: req.body.consultMode || (req.body.isTelehealth ? "video" : "clinic"),
     patientName: req.body.patientName,
+    patientEmail: req.body.patientEmail,
     source: req.body.source || "gp_care",
-    paymentMethod: req.body.paymentMethod || "Pay at clinic"
+    paymentMethod: req.body.paymentMethod || "Pay at clinic",
+    hospitalId: req.body.hospitalId,
+    branchId: req.body.branchId,
+    clinicName: req.body.clinicName,
   };
 
   store.appointments.push(newApt);
@@ -1828,7 +1833,8 @@ app.patch("/api/patients/:id", (req, res) => {
     carePlansList,
     prescriptionsList,
     history,
-    clinicalDocuments
+    clinicalDocuments,
+    medicalCertificatesList
   } = req.body;
 
   const patIndex = store.patients.findIndex(p => p.id === id);
@@ -1884,6 +1890,7 @@ app.patch("/api/patients/:id", (req, res) => {
   if (Array.isArray(prescriptionsList)) pat.prescriptionsList = prescriptionsList;
   if (Array.isArray(history)) pat.history = history;
   if (Array.isArray(clinicalDocuments)) pat.clinicalDocuments = clinicalDocuments;
+  if (Array.isArray(medicalCertificatesList)) pat.medicalCertificatesList = medicalCertificatesList;
 
   if (newVaccineRecord) {
     pat.vaccineRecords.push(newVaccineRecord);
@@ -2047,7 +2054,10 @@ app.post("/api/lab-orders", (req, res) => {
   }
 
   const pat = store.patients.find(p => p.id === patientId);
-  const patientName = pat ? pat.name : (bodyName || "Unknown Patient");
+  const patientName = String(bodyName || "").trim() || (pat ? pat.name : "");
+  if (!patientName) {
+    return res.status(400).json({ error: "Pathology orders must name the patient this request belongs to." });
+  }
 
   const newOrder = {
     id: `order-${Date.now()}`,

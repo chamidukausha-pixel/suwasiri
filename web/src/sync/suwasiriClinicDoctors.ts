@@ -84,9 +84,9 @@ export function staffDoctorStub(opts: {
 
 export function doctorWorksAtClinic(d: StaffProvider, hospitalId: string): boolean {
   if (d.active === false) return false;
-  if ((d.hospitalId || "") !== hospitalId) return false;
   if (d.role && !/doctor|medical officer/i.test(d.role)) return false;
-  return true;
+  if (!(d.hospitalId || "").trim()) return true;
+  return d.hospitalId === hospitalId;
 }
 
 export function clinicDoctorDocId(staffId: string) {
@@ -97,16 +97,21 @@ export function clinicDoctorDocId(staffId: string) {
 /** Stable Suwasiri doctor id so app + GP Care share the same appointment_slots lock. */
 export function suwasiriDoctorDocId(opts: { staffId?: string; doctorName?: string }): string {
   const staff = (opts.staffId || "").trim();
-  if (/^(d-|clinic-)/i.test(staff)) return staff;
   const name = (opts.doctorName || "")
     .toLowerCase()
     .replace(/^dr\.?\s*/, "")
     .trim();
+  // Name aliases first — a published slug like d-chamidu-kaushal-rathnayake
+  // must still lock the same slots as the catalog id.
+  if (name.includes("chamidu") && (name.includes("rathnayake") || name.includes("kaushal"))) {
+    return "d-chamidu-rathnayake";
+  }
   if (name.includes("priyantha silva")) return "d-priyantha-silva";
   if (name.includes("anoja senanayake") || name.includes("anoja")) return "d-anoja-senanayake";
   if (name.includes("kasun jayawardena") || (name.includes("kasun") && name.includes("jayawardena"))) {
     return "d-kasun-jayawardena";
   }
+  if (/^(d-|clinic-)/i.test(staff)) return staff;
   const slug = name.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   if (slug) return `d-${slug}`;
   return clinicDoctorDocId(opts.staffId || "gp");

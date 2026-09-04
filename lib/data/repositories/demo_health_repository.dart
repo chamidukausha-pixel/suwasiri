@@ -542,11 +542,19 @@ class DemoHealthRepository implements HealthRepository {
   }
 
   @override
-  Future<List<DateTime>> getDoctorBookedSlots(String doctorId) async {
+  Future<List<DateTime>> getDoctorBookedSlots(
+    String doctorId, {
+    String doctorName = '',
+  }) async {
     final all = await _allAppointments();
     return all
         .where((a) =>
-            a.doctorId == doctorId &&
+            DoctorScheduleSlots.isSameClinicDoctor(
+              selectedId: doctorId,
+              selectedName: doctorName,
+              bookingDoctorId: a.doctorId,
+              bookingDoctorName: a.doctorName,
+            ) &&
             a.status != AppointmentStatus.cancelled &&
             a.status != AppointmentStatus.completed)
         .map((a) => a.timeSlot)
@@ -554,10 +562,13 @@ class DemoHealthRepository implements HealthRepository {
   }
 
   @override
-  Stream<List<DateTime>> watchDoctorBookedSlots(String doctorId) async* {
-    yield await getDoctorBookedSlots(doctorId);
+  Stream<List<DateTime>> watchDoctorBookedSlots(
+    String doctorId, {
+    String doctorName = '',
+  }) async* {
+    yield await getDoctorBookedSlots(doctorId, doctorName: doctorName);
     await for (final _ in _apptChanges.stream) {
-      yield await getDoctorBookedSlots(doctorId);
+      yield await getDoctorBookedSlots(doctorId, doctorName: doctorName);
     }
   }
 
@@ -576,7 +587,10 @@ class DemoHealthRepository implements HealthRepository {
     String? suwasiriReceiptUrl,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 500));
-    final taken = await getDoctorBookedSlots(doctor.id);
+    final taken = await getDoctorBookedSlots(
+      doctor.id,
+      doctorName: doctor.name,
+    );
     if (DoctorScheduleSlots.isTaken(slot, taken)) {
       throw SlotUnavailableException();
     }

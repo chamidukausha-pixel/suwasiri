@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -505,38 +507,51 @@ class FirebaseHealthRepository implements HealthRepository {
     final deduped = _mergeDoctors(merged);
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return deduped;
-    return deduped
-        .where((d) =>
-            d.name.toLowerCase().contains(q) ||
-            d.specialty.toLowerCase().contains(q) ||
-            d.hospital.toLowerCase().contains(q) ||
-            d.region.toLowerCase().contains(q) ||
-            d.address.toLowerCase().contains(q))
-        .toList();
+    final tokens = q.split(RegExp(r'\s+')).where((t) => t.isNotEmpty);
+    return deduped.where((d) {
+      final hay =
+          '${d.name} ${d.specialty} ${d.hospital} ${d.region} ${d.address}'
+              .toLowerCase();
+      if (hay.contains(q)) return true;
+      return tokens.every((t) => hay.contains(t));
+    }).toList();
   }
 
   static String _normDoctorName(String name) => name
       .toLowerCase()
       .replaceFirst(RegExp(r'^dr\.?\s*'), '')
-      .replaceAll(RegExp(r'\s+'), ' ')
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
       .trim();
+
+  static String _doctorMergeKey(Doctor d) {
+    final key = DoctorScheduleSlots.personKey(d.name);
+    return key.isEmpty ? _normDoctorName(d.name) : key;
+  }
 
   /// Prefer catalog ids (shared slot locks) and overlay GP Care roster / tenancy.
   static List<Doctor> _mergeDoctors(List<Doctor> list) {
     final byKey = <String, Doctor>{};
     for (final d in list) {
-      final key = '${_normDoctorName(d.name)}|${d.hospital.toLowerCase().trim()}';
+      final key = _doctorMergeKey(d);
       final existing = byKey[key];
       if (existing == null) {
-        byKey[key] = d;
+        byKey[key] = d.copyWith(
+          id: DoctorScheduleSlots.canonicalDoctorId(d.id, d.name),
+        );
         continue;
       }
-      final keepCatalogId = existing.id.startsWith('d-') ? existing.id : d.id;
+      final name = d.name.length >= existing.name.length ? d.name : existing.name;
+      final keepId = DoctorScheduleSlots.canonicalDoctorId(
+        existing.id.startsWith('d-') ? existing.id : d.id,
+        name,
+      );
       byKey[key] = existing.copyWith(
-        id: keepCatalogId,
+        id: keepId,
+        name: name,
         specialty:
             d.specialty.isNotEmpty ? d.specialty : existing.specialty,
         region: d.region.isNotEmpty ? d.region : existing.region,
+        hospital: d.hospital.isNotEmpty ? d.hospital : existing.hospital,
         hospitalId:
             d.hospitalId.isNotEmpty ? d.hospitalId : existing.hospitalId,
         branchId: d.branchId.isNotEmpty ? d.branchId : existing.branchId,
@@ -575,38 +590,110 @@ class FirebaseHealthRepository implements HealthRepository {
     });
   }
 
-  List<DateTime> _bookedFromDocs(
-    Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-  ) {
+  bool _isActiveBookingStatus(Map<String, dynamic> data) {
+    final status = (data['status'] as String? ?? '').toLowerCase();
+    return status != AppointmentStatus.cancelled.name &&
+        status != 'cancelled' &&
+        status != 'canceled' &&
+        status != 'completed';
+  }
+
+  List<DateTime> _bookedForDoctor({
+    required String doctorId,
+    required String doctorName,
+    required Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> appointmentDocs,
+    Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> lockDocs = const [],
+  }) {
     final out = <DateTime>[];
-    for (final d in docs) {
-      final data = d.data();
-      final status = (data['status'] as String? ?? '').toLowerCase();
-      if (status == AppointmentStatus.cancelled.name ||
-          status == 'cancelled' ||
-          status == 'completed') {
-        continue;
+    void consider(Map<String, dynamic> data) {
+      if (!_isActiveBookingStatus(data)) return;
+      if (!DoctorScheduleSlots.isSameClinicDoctor(
+        selectedId: doctorId,
+        selectedName: doctorName,
+        bookingDoctorId: '${data['doctorId'] ?? ''}',
+        bookingDoctorName: '${data['doctorName'] ?? ''}',
+      )) {
+        return;
       }
-      final raw = data['timeSlot'] as String?;
-      final slot = DateTime.tryParse(raw ?? '');
-      if (slot != null) out.add(slot);
+      final slot = DoctorScheduleSlots.wallClockFromBooking(data);
+      if (slot != null &&
+          !out.any((s) => DoctorScheduleSlots.sameMinute(s, slot))) {
+        out.add(slot);
+      }
+    }
+
+    for (final d in appointmentDocs) {
+      consider(d.data());
+    }
+    for (final d in lockDocs) {
+      consider(d.data());
     }
     return out;
   }
 
   @override
-  Future<List<DateTime>> getDoctorBookedSlots(String doctorId) async {
-    final snap =
-        await _appointments.where('doctorId', isEqualTo: doctorId).get();
-    return _bookedFromDocs(snap.docs);
+  Future<List<DateTime>> getDoctorBookedSlots(
+    String doctorId, {
+    String doctorName = '',
+  }) async {
+    final snap = await _appointments.get();
+    QuerySnapshot<Map<String, dynamic>>? locks;
+    try {
+      locks = await _appointmentSlots.get();
+    } catch (_) {}
+    return _bookedForDoctor(
+      doctorId: doctorId,
+      doctorName: doctorName,
+      appointmentDocs: snap.docs,
+      lockDocs: locks?.docs ?? const [],
+    );
   }
 
   @override
-  Stream<List<DateTime>> watchDoctorBookedSlots(String doctorId) {
-    return _appointments
-        .where('doctorId', isEqualTo: doctorId)
-        .snapshots()
-        .map((snap) => _bookedFromDocs(snap.docs));
+  Stream<List<DateTime>> watchDoctorBookedSlots(
+    String doctorId, {
+    String doctorName = '',
+  }) {
+    late StreamController<List<DateTime>> controller;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? apptSub;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? lockSub;
+    QuerySnapshot<Map<String, dynamic>>? appts;
+    QuerySnapshot<Map<String, dynamic>>? locks;
+
+    void emit() {
+      if (controller.isClosed) return;
+      controller.add(
+        _bookedForDoctor(
+          doctorId: doctorId,
+          doctorName: doctorName,
+          appointmentDocs: appts?.docs ?? const [],
+          lockDocs: locks?.docs ?? const [],
+        ),
+      );
+    }
+
+    controller = StreamController<List<DateTime>>(
+      onListen: () {
+        apptSub = _appointments.snapshots().listen((snap) {
+          appts = snap;
+          emit();
+        }, onError: (_) {
+          emit();
+        });
+        lockSub = _appointmentSlots.snapshots().listen((snap) {
+          locks = snap;
+          emit();
+        }, onError: (_) {
+          locks = null;
+          emit();
+        });
+      },
+      onCancel: () async {
+        await apptSub?.cancel();
+        await lockSub?.cancel();
+      },
+    );
+    return controller.stream;
   }
 
   @override
@@ -625,7 +712,10 @@ class FirebaseHealthRepository implements HealthRepository {
   }) async {
     final gp = GpCareClinicMap.resolve(doctor.hospital);
     final apptId = _uuid.v4();
-    final lockId = DoctorScheduleSlots.slotLockId(doctor.id, slot);
+    final canonicalId =
+        DoctorScheduleSlots.canonicalDoctorId(doctor.id, doctor.name);
+    final aliasIds = DoctorScheduleSlots.identityIds(doctor.id, doctor.name);
+    final lockId = DoctorScheduleSlots.slotLockId(canonicalId, slot);
     final hospitalId =
         doctor.hospitalId.isNotEmpty ? doctor.hospitalId : gp.hospitalId;
     final branchId =
@@ -633,7 +723,7 @@ class FirebaseHealthRepository implements HealthRepository {
     final appt = Appointment(
       id: apptId,
       patientId: patientId,
-      doctorId: doctor.id,
+      doctorId: canonicalId,
       doctorName: doctor.name,
       specialty: doctor.specialty,
       timeSlot: slot,
@@ -659,12 +749,16 @@ class FirebaseHealthRepository implements HealthRepository {
 
     try {
       await _db.runTransaction((tx) async {
-        final existing = await tx.get(lockRef);
-        if (existing.exists) {
-          throw SlotUnavailableException();
+        for (final id in aliasIds) {
+          final aliasLock =
+              _appointmentSlots.doc(DoctorScheduleSlots.slotLockId(id, slot));
+          final existing = await tx.get(aliasLock);
+          if (existing.exists) {
+            throw SlotUnavailableException();
+          }
         }
         tx.set(lockRef, {
-          'doctorId': doctor.id,
+          'doctorId': canonicalId,
           'doctorName': doctor.name,
           'timeSlot': slot.toIso8601String(),
           'date': gpCareDateKey(slot),

@@ -218,6 +218,112 @@ class AppLocalizations {
       'si': 'සියල්ල',
       'ta': 'அனைத்தும்',
     },
+    'practices': {
+      'en': 'Practices',
+      'si': 'සායන',
+      'ta': 'மருத்துவமனைகள்',
+    },
+    'practitioners': {
+      'en': 'Practitioners',
+      'si': 'වෛද්‍යවරු',
+      'ta': 'மருத்துவர்கள்',
+    },
+    'appointmentsAvailableFrom': {
+      'en': 'Appointments available from:',
+      'si': 'හමුවීම් ලබා ගත හැක්කේ:',
+      'ta': 'சந்திப்புகள் கிடைக்கும்:',
+    },
+    'seenAtClinicBefore': {
+      'en': 'Have you been seen at this clinic before?',
+      'si': 'මෙම සායනයට කලින් ඔබ පැමිණ තිබුණාද?',
+      'ta': 'இந்த கிளினிக்கில் முன்பு சிகிச்சை பெற்றுள்ளீர்களா?',
+    },
+    'existingPatient': {
+      'en': 'Existing patient',
+      'si': 'පවතින රෝගියා',
+      'ta': 'தற்போதைய நோயாளி',
+    },
+    'newPatient': {
+      'en': 'New patient',
+      'si': 'නව රෝගියා',
+      'ta': 'புதிய நோயாளி',
+    },
+    'atClinicName': {
+      'en': 'at {clinic}',
+      'si': '{clinic} හි',
+      'ta': '{clinic} இல்',
+    },
+    'backToClinic': {
+      'en': 'Back to {clinic}',
+      'si': '{clinic} වෙත ආපසු',
+      'ta': '{clinic} க்கு திரும்ப',
+    },
+    'addToCareTeam': {
+      'en': 'Add to my Care Team',
+      'si': 'මගේ සත්කාර කණ්ඩායමට එක් කරන්න',
+      'ta': 'என் Care Team-இல் சேர்',
+    },
+    'share': {
+      'en': 'Share',
+      'si': 'බෙදාගන්න',
+      'ta': 'பகிர்',
+    },
+    'map': {
+      'en': 'map',
+      'si': 'සිතියම',
+      'ta': 'வரைபடம்',
+    },
+    'call': {
+      'en': 'call',
+      'si': 'ඇමතුම',
+      'ta': 'அழை',
+    },
+    'moreTimes': {
+      'en': 'more',
+      'si': 'තව',
+      'ta': 'மேலும்',
+    },
+    'clinicOpenHours': {
+      'en': 'Open · Mon–Sat',
+      'si': 'විවෘත · ස–සි',
+      'ta': 'திற · த–ச',
+    },
+    'gpCareClinicNotice': {
+      'en':
+          'Synced with Sri Lankan GP Care. Mixed billing may apply. Bring your NIC and health ID. Telehealth available for eligible visits.',
+      'si':
+          'Sri Lankan GP Care සමඟ සමමුහුර්තයි. මිශ්‍ර බිල්පත් යොදා ගත හැක. NIC සහ සෞඛ්‍ය ID රැගෙන එන්න.',
+      'ta':
+          'Sri Lankan GP Care உடன் ஒத்திசைக்கப்பட்டுள்ளது. கலப்பு பில்லிங் பொருந்தலாம். NIC மற்றும் சுகாதார ID கொண்டு வாருங்கள்.',
+    },
+    'noDoctorsAtClinic': {
+      'en': 'Doctors will appear here after they are added in GP Care.',
+      'si': 'GP Care හි එකතු කළ පසු වෛද්‍යවරු මෙහි දිස්වයි.',
+      'ta': 'GP Care-இல் சேர்க்கப்பட்ட பிறகு மருத்துவர்கள் இங்கே தோன்றுவர்.',
+    },
+    'noSlotsSoon': {
+      'en': 'No slots in the next two weeks',
+      'si': 'ඊළඟ සති දෙකේ කාලයන් නැත',
+      'ta': 'அடுத்த இரண்டு வாரங்களில் இடம் இல்லை',
+    },
+    'professionalStatement': {
+      'en': 'Professional statement',
+      'si': 'වෘත්තීය ප්‍රකාශය',
+      'ta': 'தொழில்முறை அறிக்கை',
+    },
+    'areasOfInterest': {
+      'en': 'Areas of Interest',
+      'si': 'ආසාදන ක්ෂේත්‍ර',
+      'ta': 'ஆர்வப் பகுதிகள்',
+    },
+    'defaultDoctorBio': {
+      'en':
+          'Experienced clinician providing patient-centred care at accredited Sri Lankan clinics, synced with GP Care.',
+      'si':
+          'GP Care සමඟ සමමුහුර්ත Sri Lankan සායනවල රෝගි-කේන්ද්‍රීය සත්කාරය.',
+      'ta':
+          'GP Care உடன் ஒத்திசைக்கப்பட்ட Sri Lankan கிளினிக்குகளில் நோயாளி-மைய பராமரிப்பு.',
+    },
     'topDoctors': {
       'en': 'Top doctors',
       'si': 'ප්‍රමුඛ වෛද්‍යවරු',
@@ -1964,10 +2070,15 @@ class AppLocalizations {
       'si': 'ඊමේල් කරන්න',
       'ta': 'மின்னஞ்சல் அனுப்பு',
     },
+    'printCertificate': {
+      'en': 'Print',
+      'si': 'මුද්‍රණය',
+      'ta': 'அச்சிடு',
+    },
     'tapToViewCert': {
-      'en': 'Tap to view, download or email',
-      'si': 'බැලීමට, බාගැනීමට හෝ ඊමේල් කිරීමට තට්ටු කරන්න',
-      'ta': 'காண, பதிவிறக்க அல்லது மின்னஞ்சல் செய்ய தட்டவும்',
+      'en': 'Tap to view, print, download or email',
+      'si': 'බැලීමට, මුද්‍රණයට, බාගැනීමට හෝ ඊමේල් කිරීමට තට්ටු කරන්න',
+      'ta': 'காண, அச்சிட, பதிவிறக்க அல்லது மின்னஞ்சல் செய்ய தட்டவும்',
     },
     'certReady': {
       'en': 'Certificate ready to save / share.',

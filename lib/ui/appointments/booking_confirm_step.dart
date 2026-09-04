@@ -363,7 +363,7 @@ class BookingConfirmStep extends StatelessWidget {
                       crossAxisCount: 3,
                       mainAxisSpacing: 10,
                       crossAxisSpacing: 10,
-                      childAspectRatio: 2.35,
+                      childAspectRatio: 1.9,
                     ),
                     itemBuilder: (_, i) {
                       final t = times[i];
@@ -377,6 +377,7 @@ class BookingConfirmStep extends StatelessWidget {
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 160),
                           alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(vertical: 6),
                           decoration: BoxDecoration(
                             color: selected
                                 ? coral
@@ -392,27 +393,79 @@ class BookingConfirmStep extends StatelessWidget {
                                       : line,
                             ),
                           ),
-                          child: Text(
-                            _fmtTime24(t),
-                            style: TextStyle(
-                              color: selected
-                                  ? Colors.white
-                                  : taken
-                                      ? const Color(0xFFB0AEA9)
-                                      : ink,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                              decoration: taken
-                                  ? TextDecoration.lineThrough
-                                  : TextDecoration.none,
-                              decorationColor: const Color(0xFFB0AEA9),
-                            ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                _fmtTime24(t),
+                                style: TextStyle(
+                                  color: selected
+                                      ? Colors.white
+                                      : taken
+                                          ? const Color(0xFFB0AEA9)
+                                          : ink,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                  decoration: taken
+                                      ? TextDecoration.lineThrough
+                                      : TextDecoration.none,
+                                  decorationColor: const Color(0xFFB0AEA9),
+                                ),
+                              ),
+                              if (taken)
+                                const Text(
+                                  'BOOKED',
+                                  style: TextStyle(
+                                    color: Color(0xFFB42318),
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 8,
+                                    letterSpacing: 0.4,
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       );
                     },
                   ),
-                const SizedBox(height: 22),
+                const SizedBox(height: 16),
+                if (!slotsLoading && times.any(_taken)) ...[
+                  const Text(
+                    'BOOKED TIMES',
+                    style: TextStyle(
+                      color: muted,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final t in times.where(_taken))
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF3F2F0),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE8E6E2)),
+                          ),
+                          child: Text(
+                            '${_fmtTime24(t)} · Booked',
+                            style: const TextStyle(
+                              color: Color(0xFFB42318),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                const SizedBox(height: 6),
                 const Text(
                   'REASON FOR VISIT',
                   style: TextStyle(

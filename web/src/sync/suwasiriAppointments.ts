@@ -19,14 +19,85 @@ function colomboWallTime(dateKey: string, hours: number, minutes: number): Date 
   return new Date(iso);
 }
 
+function colomboDateKeyFromInstant(value: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Colombo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(value);
+}
+
+function colomboClockFromInstant(value: Date): { hours: number; minutes: number } {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Colombo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(value);
+  const hours = Number(parts.find((p) => p.type === "hour")?.value || "0");
+  const minutes = Number(parts.find((p) => p.type === "minute")?.value || "0");
+  return { hours, minutes };
+}
+
+/** YYYY-MM-DD clinic date, even when Firestore stored an ISO datetime. */
+export function appointmentDateKey(apt: { date?: string; timeSlot?: string }): string {
+  const raw = String(apt.date || "").trim();
+  const ymd = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (ymd) return ymd[1];
+  if (apt.timeSlot) {
+    const parsed = new Date(apt.timeSlot);
+    if (!Number.isNaN(parsed.getTime())) return colomboDateKeyFromInstant(parsed);
+  }
+  if (raw) {
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return colomboDateKeyFromInstant(parsed);
+  }
+  return raw;
+}
+
+export function parseClockStrict(timeLabel: string): { hours: number; minutes: number } | null {
+  const t = (timeLabel || "").trim().replace(/\./g, ":").replace(/\s+/g, " ");
+  const ampm = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+  if (ampm) {
+    let hours = Number(ampm[1]) % 12;
+    if (ampm[3].toUpperCase() === "PM") hours += 12;
+    return { hours, minutes: Number(ampm[2]) };
+  }
+  const glued = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?(AM|PM)$/i);
+  if (glued) {
+    let hours = Number(glued[1]) % 12;
+    if (glued[3].toUpperCase() === "PM") hours += 12;
+    return { hours, minutes: Number(glued[2]) };
+  }
+  const h24 = t.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (h24) return { hours: Number(h24[1]) % 24, minutes: Number(h24[2]) };
+  return null;
+}
+
+export function appointmentClock(apt: { time?: string; timeSlot?: string }): { hours: number; minutes: number } | null {
+  const fromLabel = parseClockStrict(apt.time || "");
+  if (fromLabel) return fromLabel;
+  if (apt.timeSlot) {
+    const parsed = new Date(apt.timeSlot);
+    if (!Number.isNaN(parsed.getTime())) return colomboClockFromInstant(parsed);
+  }
+  return null;
+}
+
+export function formatTime24(hours: number, minutes: number): string {
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
 export function parseSlot(apt: Appointment): Date | null {
+  const dateKey = appointmentDateKey(apt);
+  const clock = appointmentClock(apt);
+  if (dateKey && clock) return colomboWallTime(dateKey, clock.hours, clock.minutes);
   if (apt.timeSlot) {
     const parsed = new Date(apt.timeSlot);
     if (!Number.isNaN(parsed.getTime())) return parsed;
   }
-  if (!apt.date) return null;
-  const { hours, minutes } = parseClock(apt.time || "09:00 AM");
-  return colomboWallTime(apt.date, hours, minutes);
+  return null;
 }
 
 export function compareAppointmentTime(a: Appointment, b: Appointment): number {
@@ -90,27 +161,15 @@ export function mapFirestoreAppointment(
 ): Appointment {
   const video = isVideoConsult(data);
   const specialty = String(data.specialty || "");
-  let date = String(data.date || "");
-  let time = String(data.time || "");
   const timeSlotRaw = data.timeSlot ? String(data.timeSlot) : "";
-  if ((!date || !time) && timeSlotRaw) {
-    const slot = new Date(timeSlotRaw);
-    if (!Number.isNaN(slot.getTime())) {
-      if (!date) {
-        const y = slot.getFullYear();
-        const m = String(slot.getMonth() + 1).padStart(2, "0");
-        const d = String(slot.getDate()).padStart(2, "0");
-        date = `${y}-${m}-${d}`;
-      }
-      if (!time) {
-        time = slot.toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: true,
-        });
-      }
-    }
-  }
+  const provisional = {
+    date: String(data.date || ""),
+    time: String(data.time || ""),
+    timeSlot: timeSlotRaw || undefined,
+  };
+  const date = appointmentDateKey(provisional);
+  const clock = appointmentClock(provisional);
+  const time = clock ? formatAmPm(clock.hours, clock.minutes) : String(data.time || "");
   return {
     id,
     patientId: String(data.patientId || ""),
@@ -250,7 +309,7 @@ const TELEHEALTH_CALL_CLOSE_MS = 3 * 60 * 60 * 1000;
 export function isVideoBookingOnDate(apt: Appointment, dateKey: string): boolean {
   if (!isVideoBooking(apt)) return false;
   if (apt.status === "COMPLETED" || apt.status === "CANCELLED") return false;
-  return apt.date === dateKey;
+  return appointmentDateKey(apt) === dateKey;
 }
 
 export function telehealthCallOpensAt(apt: Appointment): Date | null {
@@ -282,21 +341,52 @@ export function subscribeSuwasiriAppointments(
   if (!isFirebaseConfigured()) return undefined;
   try {
     const db = getFirebaseDb();
-    return onSnapshot(
+    let fromAppointments: Appointment[] = [];
+    let fromLocks: Appointment[] = [];
+    const emit = () => {
+      const byId = new Map<string, Appointment>();
+      for (const a of fromLocks) byId.set(a.id, a);
+      for (const a of fromAppointments) byId.set(a.id, a);
+      const appointments = [...byId.values()];
+      const patients = appointments
+        .filter((a) => a.source === "suwasiri_app" && a.patientId)
+        .map(stubPatientFromBooking);
+      onChange(appointments, patients);
+    };
+    const unsubAppt = onSnapshot(
       collection(db, "appointments"),
       (snap) => {
-        const appointments = snap.docs.map((doc) =>
-          mapFirestoreAppointment(doc.id, doc.data() as Record<string, unknown>)
+        fromAppointments = snap.docs.map((row) =>
+          mapFirestoreAppointment(row.id, row.data() as Record<string, unknown>)
         );
-        const patients = appointments
-          .filter((a) => a.source === "suwasiri_app" && a.patientId)
-          .map(stubPatientFromBooking);
-        onChange(appointments, patients);
+        emit();
       },
       (err) => {
         console.warn("Suwasiri appointment sync:", err.message);
       }
     );
+    const unsubLocks = onSnapshot(
+      collection(db, "appointment_slots"),
+      (snap) => {
+        fromLocks = snap.docs.map((row) => {
+          const data = row.data() as Record<string, unknown>;
+          return mapFirestoreAppointment(String(data.appointmentId || row.id), {
+            ...data,
+            status: data.status || "upcoming",
+            source: data.source || "suwasiri_app",
+            reason: data.reason || "Booked",
+          });
+        });
+        emit();
+      },
+      (err) => {
+        console.warn("Suwasiri slot lock sync:", err.message);
+      }
+    );
+    return () => {
+      unsubAppt();
+      unsubLocks();
+    };
   } catch (err) {
     console.warn("Suwasiri appointment sync unavailable", err);
     return undefined;
@@ -331,6 +421,13 @@ export function normalizeDoctorName(name: string): string {
     .trim();
 }
 
+/** First + last token so "Chamidu Rathnayake" ≡ "Chamidu Kaushal Rathnayake". */
+export function doctorPersonKey(name: string): string {
+  const parts = normalizeDoctorName(name).split(" ").filter(Boolean);
+  if (parts.length === 0) return "";
+  return `${parts[0]}|${parts[parts.length - 1]}`;
+}
+
 export function matchSessionDoctor(
   doctors: StaffProvider[],
   session?: { id?: string; name?: string; email?: string } | null
@@ -348,6 +445,102 @@ export function matchSessionDoctor(
   return doctors.find((d) => normalizeDoctorName(d.name) === n);
 }
 
+const OPEN_ROSTER: StaffProvider["roster"] = {
+  monday: true,
+  tuesday: true,
+  wednesday: true,
+  thursday: true,
+  friday: true,
+  saturday: true,
+  sunday: true,
+};
+
+/** Use when the signed-in clinician is not in the published clinic-doctor list. */
+export function staffUserAsDoctor(
+  session: { id?: string; name?: string; email?: string } | null | undefined,
+  hospitalId: string
+): StaffProvider | undefined {
+  if (!session?.id && !session?.name) return undefined;
+  const name = (session.name || "").trim();
+  if (!name) return undefined;
+  return {
+    id: session.id || `doc-${normalizeDoctorName(name).replace(/\s+/g, "-")}`,
+    userId: session.id,
+    hospitalId,
+    name,
+    role: "Doctor",
+    specialty: "General Practice",
+    providerNumber: "",
+    email: session.email || "",
+    phone: "",
+    assignedRoom: "",
+    roster: OPEN_ROSTER,
+    active: true,
+  };
+}
+
+function looksLikeSuwasiriUid(id: string): boolean {
+  return id.length >= 16 && !/^\d{3,5}-LK$/i.test(id) && !id.startsWith("apt-") && !id.startsWith("p-");
+}
+
+/** Firestore `appointments.patientId` must be the Suwasiri uid so Home/Call show the booking. */
+export function suwasiriPatientIdForClinicFile(
+  patient: Patient | undefined,
+  extras: Patient[] = []
+): string {
+  if (!patient?.id) return "";
+  if (looksLikeSuwasiriUid(patient.id)) return patient.id;
+  const pool = extras.filter((p) => p.id !== patient.id && looksLikeSuwasiriUid(p.id));
+  const email = (patient.email || "").trim().toLowerCase();
+  if (email) {
+    const hit = pool.find((p) => (p.email || "").trim().toLowerCase() === email);
+    if (hit) return hit.id;
+  }
+  const barcode = (patient.suwasiriBarcode || "").trim().toUpperCase();
+  if (barcode) {
+    const hit = pool.find((p) => (p.suwasiriBarcode || "").trim().toUpperCase() === barcode);
+    if (hit) return hit.id;
+  }
+  const phone = (patient.phone || "").replace(/\D/g, "");
+  const name = (patient.name || "").trim().toLowerCase();
+  if (phone.length >= 8 && name) {
+    const hit = pool.find(
+      (p) =>
+        (p.name || "").trim().toLowerCase() === name &&
+        (p.phone || "").replace(/\D/g, "").slice(-8) === phone.slice(-8)
+    );
+    if (hit) return hit.id;
+  }
+  return patient.id;
+}
+
+export function appointmentBelongsToPatient(apt: Appointment, patient: Patient): boolean {
+  if (apt.patientId === patient.id) return true;
+  const email = (patient.email || "").trim().toLowerCase();
+  if (email && (apt.patientEmail || "").trim().toLowerCase() === email) return true;
+  const name = (patient.name || "").trim().toLowerCase();
+  if (name && (apt.patientName || "").trim().toLowerCase() === name) return true;
+  return false;
+}
+
+/** Ids that all mean the same published clinician (catalog vs Platform Console slug). */
+export function doctorIdentityIds(opts: { doctorName?: string; doctorStaffId?: string }): string[] {
+  const ids = new Set<string>();
+  if (opts.doctorStaffId) ids.add(opts.doctorStaffId);
+  ids.add(
+    suwasiriDoctorCatalogId({
+      staffUserId: opts.doctorStaffId,
+      doctorName: opts.doctorName,
+    })
+  );
+  const n = normalizeDoctorName(opts.doctorName || "");
+  if (n.includes("chamidu") && (n.includes("rathnayake") || n.includes("kaushal"))) {
+    ids.add("d-chamidu-rathnayake");
+    ids.add("d-chamidu-kaushal-rathnayake");
+  }
+  return [...ids].filter(Boolean);
+}
+
 /** True when an appointment belongs to the selected clinic doctor. */
 export function isSameDoctor(opts: {
   doctorName: string;
@@ -355,22 +548,11 @@ export function isSameDoctor(opts: {
   appointment: Appointment;
 }): boolean {
   const apt = opts.appointment;
-  const selectedIds = new Set(
-    [
-      opts.doctorStaffId,
-      suwasiriDoctorCatalogId({
-        staffUserId: opts.doctorStaffId,
-        doctorName: opts.doctorName,
-      }),
-    ].filter(Boolean) as string[]
-  );
-  const aptIds = [
-    apt.doctorId,
-    suwasiriDoctorCatalogId({
-      staffUserId: apt.doctorId,
-      doctorName: apt.doctorName,
-    }),
-  ].filter(Boolean) as string[];
+  const selectedIds = new Set(doctorIdentityIds({ doctorName: opts.doctorName, doctorStaffId: opts.doctorStaffId }));
+  const aptIds = doctorIdentityIds({
+    doctorName: apt.doctorName,
+    doctorStaffId: apt.doctorId,
+  });
   if (aptIds.some((id) => selectedIds.has(id))) return true;
 
   const na = normalizeDoctorName(opts.doctorName);
@@ -394,14 +576,15 @@ export function bookingOnSlot(
   appointments: Appointment[],
   opts: { doctorName: string; doctorStaffId?: string; dateKey: string; time: string }
 ): Appointment | undefined {
-  const { hours, minutes } = parseClock(opts.time);
+  const wanted = parseClockStrict(opts.time) || parseClock(opts.time);
   return appointments.find((a) => {
-    if (!isActiveBooking(a) || a.date !== opts.dateKey) return false;
+    if (!isActiveBooking(a) || appointmentDateKey(a) !== opts.dateKey) return false;
     if (!isSameDoctor({ doctorName: opts.doctorName, doctorStaffId: opts.doctorStaffId, appointment: a })) {
       return false;
     }
-    const t = parseClock(a.time || "");
-    return t.hours === hours && t.minutes === minutes;
+    const t = appointmentClock(a);
+    if (!t) return false;
+    return t.hours === wanted.hours && t.minutes === wanted.minutes;
   });
 }
 
@@ -413,7 +596,7 @@ export function bookingsForDoctorOnDate(
     .filter(
       (a) =>
         isActiveBooking(a) &&
-        a.date === opts.dateKey &&
+        appointmentDateKey(a) === opts.dateKey &&
         isSameDoctor({
           doctorName: opts.doctorName,
           doctorStaffId: opts.doctorStaffId,
@@ -426,18 +609,7 @@ export function bookingsForDoctorOnDate(
 
 /** Accepts "10:00 AM", "03:00 PM", or 24-hour "15:00" / "09:00". */
 export function parseClock(timeLabel: string): { hours: number; minutes: number } {
-  const t = timeLabel.trim();
-  const ampm = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (ampm) {
-    let hours = Number(ampm[1]) % 12;
-    if (ampm[3].toUpperCase() === "PM") hours += 12;
-    return { hours, minutes: Number(ampm[2]) };
-  }
-  const h24 = t.match(/^(\d{1,2}):(\d{2})$/);
-  if (h24) {
-    return { hours: Number(h24[1]) % 24, minutes: Number(h24[2]) };
-  }
-  return { hours: 9, minutes: 0 };
+  return parseClockStrict(timeLabel) || { hours: 9, minutes: 0 };
 }
 
 export function formatAmPm(hours: number, minutes: number): string {
@@ -453,10 +625,22 @@ function slotLockId(doctorId: string, dateKey: string, timeLabel: string): strin
   return `${doctorId}_${dateKey}_${hh}-${mm}`;
 }
 
+function slotLockIdsForDoctor(opts: {
+  doctorId: string;
+  doctorName: string;
+  dateKey: string;
+  timeLabel: string;
+}): string[] {
+  return doctorIdentityIds({
+    doctorStaffId: opts.doctorId,
+    doctorName: opts.doctorName,
+  }).map((id) => slotLockId(id, opts.dateKey, opts.timeLabel));
+}
+
 function timeSlotIso(dateKey: string, timeLabel: string): string {
   const { hours, minutes } = parseClock(timeLabel);
   const [y, m, d] = dateKey.split("-").map(Number);
-  return new Date(y, (m || 1) - 1, d || 1, hours, minutes, 0, 0).toISOString();
+  return `${y}-${String(m || 1).padStart(2, "0")}-${String(d || 1).padStart(2, "0")}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00+05:30`;
 }
 
 /**
@@ -487,17 +671,29 @@ export async function bookGpCareSlotToFirestore(opts: {
   const { hours, minutes } = parseClock(opts.time);
   const timeAmPm = formatAmPm(hours, minutes);
   const db = getFirebaseDb();
-  const lockId = slotLockId(opts.doctorId, opts.date, timeAmPm);
-  const lockRef = doc(db, "appointment_slots", lockId);
-  const existing = await getDoc(lockRef);
-  if (existing.exists()) {
-    return { ok: false, reason: "This doctor date/time is already booked" };
+  const canonicalDoctorId = suwasiriDoctorCatalogId({
+    staffUserId: opts.doctorId,
+    doctorName: opts.doctorName,
+  });
+  const lockIds = slotLockIdsForDoctor({
+    doctorId: opts.doctorId,
+    doctorName: opts.doctorName,
+    dateKey: opts.date,
+    timeLabel: timeAmPm,
+  });
+  for (const id of lockIds) {
+    const existing = await getDoc(doc(db, "appointment_slots", id));
+    if (existing.exists()) {
+      return { ok: false, reason: "This doctor date/time is already booked" };
+    }
   }
+  const lockId = slotLockId(canonicalDoctorId, opts.date, timeAmPm);
+  const lockRef = doc(db, "appointment_slots", lockId);
   const appointmentId = `gp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const iso = timeSlotIso(opts.date, timeAmPm);
   const specialty = opts.specialty || "";
   await setDoc(lockRef, {
-    doctorId: opts.doctorId,
+    doctorId: canonicalDoctorId,
     doctorName: opts.doctorName,
     timeSlot: iso,
     date: opts.date,
@@ -513,7 +709,7 @@ export async function bookGpCareSlotToFirestore(opts: {
     patientName: opts.patientName,
     patientEmail: opts.patientEmail || "",
     patientPhone: opts.patientPhone || "",
-    doctorId: opts.doctorId,
+    doctorId: canonicalDoctorId,
     doctorName: opts.doctorName,
     specialty,
     timeSlot: iso,

@@ -42,6 +42,7 @@ Future<void> showBookingCheckoutFlow(
   BuildContext context, {
   required Doctor doctor,
   String? initialVisitReason,
+  DateTime? initialSlot,
 }) async {
   final result = await showModalBottomSheet<_BookingResult>(
     context: context,
@@ -54,6 +55,7 @@ Future<void> showBookingCheckoutFlow(
     builder: (_) => _BookingCheckoutSheet(
       doctor: doctor,
       initialVisitReason: initialVisitReason,
+      initialSlot: initialSlot,
     ),
   );
   if (result == null || !context.mounted) return;
@@ -156,10 +158,12 @@ class _BookingCheckoutSheet extends StatefulWidget {
   const _BookingCheckoutSheet({
     required this.doctor,
     this.initialVisitReason,
+    this.initialSlot,
   });
 
   final Doctor doctor;
   final String? initialVisitReason;
+  final DateTime? initialSlot;
 
   @override
   State<_BookingCheckoutSheet> createState() => _BookingCheckoutSheetState();
@@ -178,8 +182,11 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
 
   static const _venueFee = 350;
 
-  List<TimeOfDay> get _times =>
-      DoctorScheduleSlots.timesFor(widget.doctor, _selectedDate);
+  List<TimeOfDay> get _times => DoctorScheduleSlots.timesFor(
+        widget.doctor,
+        _selectedDate,
+        booked: _bookedSlots,
+      );
 
   int get _consultFee => widget.doctor.feeLkr;
   int get _total => _consultFee + _venueFee;
@@ -208,7 +215,11 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
 
   void _pickFirstOpenDate() {
     for (final d in _dates) {
-      final times = DoctorScheduleSlots.timesFor(widget.doctor, d);
+      final times = DoctorScheduleSlots.timesFor(
+        widget.doctor,
+        d,
+        booked: _bookedSlots,
+      );
       if (times.isEmpty) continue;
       _selectedDate = d;
       _selectedTime = times.first;
@@ -223,13 +234,28 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
     if (reason != null && reason.isNotEmpty) {
       _visitReason = reason;
     }
-    _selectedDate = _dates.first;
-    final firstTimes = DoctorScheduleSlots.timesFor(widget.doctor, _selectedDate);
-    _selectedTime = firstTimes.isNotEmpty ? firstTimes.first : DoctorScheduleSlots.times.first;
-    _pickFirstOpenDate();
+    if (widget.initialSlot != null) {
+      final slot = widget.initialSlot!;
+      _selectedDate = DateTime(slot.year, slot.month, slot.day);
+      _selectedTime = TimeOfDay(hour: slot.hour, minute: slot.minute);
+    } else {
+      _selectedDate = _dates.first;
+      final firstTimes = DoctorScheduleSlots.timesFor(
+        widget.doctor,
+        _selectedDate,
+        booked: _bookedSlots,
+      );
+      _selectedTime = firstTimes.isNotEmpty
+          ? firstTimes.first
+          : DoctorScheduleSlots.times.first;
+      _pickFirstOpenDate();
+    }
     _bookedSub = context
         .read<HealthRepository>()
-        .watchDoctorBookedSlots(widget.doctor.id)
+        .watchDoctorBookedSlots(
+          widget.doctor.id,
+          doctorName: widget.doctor.name,
+        )
         .listen((booked) {
       if (!mounted) return;
       setState(() {

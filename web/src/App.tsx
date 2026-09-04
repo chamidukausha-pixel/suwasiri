@@ -104,8 +104,12 @@ import {
   subscribeSuwasiriAppointments,
   suwasiriDoctorCatalogId,
   updateSuwasiriAppointmentStatus,
-  normalizeDoctorName,
+  doctorIdentityIds,
+  doctorPersonKey,
   matchSessionDoctor,
+  staffUserAsDoctor,
+  suwasiriPatientIdForClinicFile,
+  appointmentDateKey,
   isSameDoctor,
 } from "./sync/suwasiriAppointments";
 import { clinicExamSessionId, issuePrescriptionsToSuwasiri } from "./sync/suwasiriPrescriptions";
@@ -124,6 +128,7 @@ import {
 } from "./sync/suwasiriPatientChart";
 import { subscribeSuwasiriVaccinePatients } from "./sync/suwasiriVaccinations";
 import { pushSuwasiriNotification } from "./sync/suwasiriNotifications";
+import { syncPatientAllergiesToSuwasiri } from "./sync/suwasiriAllergies";
 import { sampleCategoryForTest } from "./catalogs/pathologyInvestigations";
 import {
   publishClinicCenterToSuwasiri,
@@ -978,22 +983,16 @@ export default function App() {
     p.accessStatus !== "DELETED" &&
     p.accessStatus !== "BLOCKED"
   );
-  const tenantAppointments = appointments.filter((a) => {
-    if (a.hospitalId) return a.hospitalId === sessionHospitalId;
-    const p = patients.find((pt) => pt.id === a.patientId);
-    return !p || (p.hospitalId || HOSPITAL_PRIMECARE) === sessionHospitalId;
-  });
   const registeredDoctors = (() => {
     const list: StaffProvider[] = [];
     const seen = new Set<string>();
     const add = (d: StaffProvider) => {
       if (!d?.name) return;
       if (!doctorWorksAtClinic(d, sessionHospitalId)) return;
-      const cat = suwasiriDoctorCatalogId({ staffUserId: d.id, doctorName: d.name });
-      const nameKey = normalizeDoctorName(d.name);
-      if (seen.has(cat) || seen.has(d.id) || (nameKey && seen.has(`n:${nameKey}`))) return;
-      seen.add(cat);
-      seen.add(d.id);
+      const ids = doctorIdentityIds({ doctorStaffId: d.id, doctorName: d.name });
+      const nameKey = doctorPersonKey(d.name);
+      if (ids.some((id) => seen.has(id)) || (nameKey && seen.has(`n:${nameKey}`))) return;
+      ids.forEach((id) => seen.add(id));
       if (nameKey) seen.add(`n:${nameKey}`);
       list.push(d);
     };
@@ -1001,7 +1000,20 @@ export default function App() {
     workingDoctors.forEach(add);
     return list;
   })();
+  const tenantAppointments = appointments.filter((a) => {
+    if (!a.hospitalId || a.hospitalId === sessionHospitalId) return true;
+    return registeredDoctors.some((d) =>
+      isSameDoctor({
+        doctorName: d.name,
+        doctorStaffId: d.id,
+        appointment: a,
+      })
+    );
+  });
   const sessionDoctor = matchSessionDoctor(registeredDoctors, sessionUser);
+  const examBookingDoctor =
+    sessionDoctor ||
+    (!isFrontDeskStaff ? staffUserAsDoctor(sessionUser, sessionHospitalId) : undefined);
   const clinicBookings = sessionDoctor && !isFrontDeskStaff
     ? tenantAppointments.filter((a) =>
         isSameDoctor({
@@ -1013,15 +1025,16 @@ export default function App() {
     : tenantAppointments;
   const todayKey = formatDateKey(new Date());
   const dayAppointments = clinicBookings
-    .filter((a) => a.date === selectedClinicDate)
+    .filter((a) => appointmentDateKey(a) === selectedClinicDate)
     .slice()
     .sort(compareLobbyPlace);
   const appointmentCountsByDate = clinicBookings.reduce((acc, a) => {
-    if (!a.date) return acc;
-    acc[a.date] = (acc[a.date] || 0) + 1;
+    const key = appointmentDateKey(a);
+    if (!key) return acc;
+    acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
-  const dayBookedAppointments = tenantAppointments.filter((a) => a.date === selectedBillingDate);
+  const dayBookedAppointments = tenantAppointments.filter((a) => appointmentDateKey(a) === selectedBillingDate);
   const dayBilling = billing.filter((inv) =>
     dayBookedAppointments.some(
       (a) => (inv.patientId && a.patientId === inv.patientId) || a.patientName === inv.patientName
@@ -1134,7 +1147,7 @@ export default function App() {
           <DoctorDaySlotsPanel
             doctor={calendarSlotDoctor}
             dateKey={selectedClinicDate}
-            appointments={tenantAppointments}
+            appointments={appointments}
             selectable={false}
           />
         </div>
@@ -1404,8 +1417,12 @@ export default function App() {
       doctorName,
     });
     const video = opts.consultMode === "video";
+    const suwasiriPatientId = suwasiriPatientIdForClinicFile(patient, [
+      ...suwasiriPatients,
+      ...patients,
+    ]);
     const slotResult = await bookGpCareSlotToFirestore({
-      patientId: opts.patientId,
+      patientId: suwasiriPatientId || opts.patientId,
       patientName: patient?.name || "Patient",
       patientEmail: patient?.email,
       patientPhone: patient?.phone,
@@ -1425,9 +1442,69 @@ export default function App() {
       throw new Error(slotResult.reason);
     }
 
+    const optimistic: Appointment = {
+      id: slotResult.appointmentId,
+      patientId: suwasiriPatientId || opts.patientId,
+      time: opts.time,
+      reason: opts.reason,
+      status: opts.status || "SCHEDULED",
+      date: opts.date,
+      type: video ? "Telehealth Video" : "Standard GP Consult",
+      doctorName,
+      doctorId,
+      isTelehealth: video,
+      consultMode: video ? "video" : "clinic",
+      source: "gp_care",
+      hospitalId: patient?.hospitalId || sessionHospitalId,
+      branchId: patient?.branchId,
+      clinicName: patient?.medicalCenter || activeHospital?.name,
+      patientName: patient?.name,
+      patientEmail: patient?.email,
+      patientPhone: patient?.phone,
+      specialty: opts.specialty,
+    };
+    setSuwasiriAppointments((prev) =>
+      prev.some((a) => a.id === optimistic.id) ? prev : [optimistic, ...prev]
+    );
+
+    try {
+      const res = await fetch("/api/appointments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: slotResult.appointmentId,
+          patientId: opts.patientId,
+          patientName: patient?.name,
+          patientEmail: patient?.email,
+          time: opts.time,
+          reason: opts.reason,
+          status: opts.status || "SCHEDULED",
+          date: opts.date,
+          doctorName,
+          doctorId,
+          doctorStaffId: opts.doctorStaffId,
+          type: video ? "Telehealth Video" : "Standard GP Consult",
+          isTelehealth: video,
+          consultMode: video ? "video" : "clinic",
+          source: "gp_care",
+          hospitalId: patient?.hospitalId || sessionHospitalId,
+          branchId: patient?.branchId || sessionBranchId,
+          clinicName: patient?.medicalCenter || activeHospital?.name,
+          paymentMethod: opts.paymentMethod || "Pay at clinic",
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.state?.appointments) setAppointments(data.state.appointments);
+        if (data.state?.billing) setBilling(data.state.billing);
+      }
+    } catch (err) {
+      console.warn("Local clinic calendar persist:", err);
+    }
+
     const when = `${opts.date} at ${opts.time}`;
     void pushSuwasiriNotification({
-      patientId: opts.patientId,
+      patientId: suwasiriPatientId || opts.patientId,
       title: video ? "Video consult booked" : "Clinic visit booked",
       body: video
         ? `${doctorName} — video consult on ${when}. It appears on your Suwasiri Home purple card and Call tab.`
@@ -1634,6 +1711,16 @@ export default function App() {
     setSelectedConsultPatient((prev) => (prev?.id === updated.id ? { ...updated, name: prev.name || updated.name } : prev));
     setActiveDoctorRecordPatient((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
     setActiveHubPatient((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev));
+    const suwasiriAllergyId = suwasiriPatientIdForClinicFile(updated, [
+      ...suwasiriPatients,
+      ...patients,
+    ]);
+    if (updated.allergies !== undefined) {
+      void syncPatientAllergiesToSuwasiri({
+        patientId: suwasiriAllergyId || updated.id,
+        allergies: updated.allergies || "",
+      });
+    }
     if (selectedConsultPatient?.id === updated.id) {
       setConsultAllergiesStr(updated.allergies || "");
       if (updated.activeMedications) setConsultMedsList(updated.activeMedications);
@@ -1661,6 +1748,7 @@ export default function App() {
           prescriptionsList: updated.prescriptionsList,
           history: updated.history,
           clinicalDocuments: updated.clinicalDocuments,
+          medicalCertificatesList: updated.medicalCertificatesList,
         }),
       });
       if (res.ok) {
@@ -1718,15 +1806,26 @@ export default function App() {
     reason: string;
     consultMode?: "clinic" | "video";
     paymentMethod?: string;
+    doctorName?: string;
+    doctorStaffId?: string;
   }) => {
+    const doctor = examBookingDoctor;
     await bookClinicSlot({
       ...payload,
-      doctorName: sessionDoctor?.name || sessionUser?.name,
-      doctorStaffId: sessionDoctor?.id,
+      doctorName: payload.doctorName || doctor?.name || sessionUser?.name,
+      doctorStaffId: payload.doctorStaffId || doctor?.id || sessionUser?.id,
+      specialty: doctor?.specialty,
     });
     const [y, m] = payload.date.split("-").map(Number);
     if (y && m) setCalendarMonth({ year: y, month: m - 1 });
     selectClinicDate(payload.date);
+    const when = `${payload.date} at ${payload.time}`;
+    const video = payload.consultMode === "video";
+    alert(
+      video
+        ? `Video follow-up booked for ${when}. It is on this doctor’s calendar, reception, and the patient’s Suwasiri Home purple card.`
+        : `In-person follow-up booked for ${when}. It is on this doctor’s calendar, reception, and the patient’s Suwasiri Home blue card.`
+    );
   };
 
   const handleCheckInWalkIn = async (pat: Patient) => {
@@ -1803,7 +1902,7 @@ export default function App() {
   const handleMoveAppointment = async (id: string, direction: "up" | "down" | "top") => {
     try {
       const dayList = tenantAppointments
-        .filter((a) => a.date === selectedClinicDate)
+        .filter((a) => appointmentDateKey(a) === selectedClinicDate)
         .slice()
         .sort(compareLobbyPlace);
       const currentIndex = dayList.findIndex((a) => a.id === id);
@@ -2345,8 +2444,21 @@ export default function App() {
     }
   };
 
-  const handleHubOrderLabTest = async (patientId: string, testName: string, remarks: string) => {
-    const pat = patients.find((p) => p.id === patientId);
+  const handleHubOrderLabTest = async (
+    patientId: string,
+    testName: string,
+    remarks: string,
+    patientName?: string
+  ) => {
+    const pat =
+      patients.find((p) => p.id === patientId) ||
+      (activeDoctorRecordPatient?.id === patientId ? activeDoctorRecordPatient : undefined) ||
+      (selectedConsultPatient?.id === patientId ? selectedConsultPatient : undefined);
+    const name = (patientName || pat?.name || "").trim();
+    if (!name) {
+      alert("Choose the patient this pathology request is for. The notification is filed under that name only.");
+      return;
+    }
     try {
       const res = await fetch("/api/lab-orders", {
         method: "POST",
@@ -2355,23 +2467,27 @@ export default function App() {
           patientId,
           testName,
           remarks,
-          patientName: pat?.name,
+          patientName: name,
           sampleCategory: sampleCategoryForTest(testName),
           orderedBy: sessionUser?.name || currentRole,
         })
       });
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || `Order failed (${res.status})`);
+      }
       if (data.state?.labOrders) setLabOrders(data.state.labOrders);
       if (data.state?.sampleCollections) setSampleCollections(data.state.sampleCollections);
       if (data.state?.notifications) setNotifications(data.state.notifications);
       if (data.state?.clinicMessages) setClinicMessages(data.state.clinicMessages);
-      alert(`Pathology order for "${testName}" sent to Sample Dispatch Hub. Reception will be notified.`);
+      if (data.state?.patients) setPatients(data.state.patients);
+      alert(`Pathology order for ${name}: “${testName}” sent to Sample Dispatch Hub under ${name}.`);
       void logAudit({
         action: "Ordered pathology investigation",
         category: "PATHOLOGY",
         patientId,
-        patientName: pat?.name,
-        details: `Lab test issued: ${testName}. ${remarks || ""}`.trim(),
+        patientName: name,
+        details: `Lab test issued: ${testName} for ${name}. ${remarks || ""}`.trim(),
       });
     } catch (err) {
       console.error(err);
@@ -3702,20 +3818,6 @@ export default function App() {
                         onClick={() => {
                           if (patients.length > 0) setNewAptPatientId(patients[0].id);
                           setNewAptDate(selectedClinicDate);
-                          setBookingMode("book");
-                          setBookingLockPatient(false);
-                          setShowAptModal(true);
-                        }}
-                        className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3.5 py-2 text-xs font-bold rounded flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Book Appointment
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          if (patients.length > 0) setNewAptPatientId(patients[0].id);
-                          setNewAptDate(selectedClinicDate);
                           setBookingMode("walkin");
                           setBookingLockPatient(false);
                           setShowAptModal(true);
@@ -4266,12 +4368,12 @@ export default function App() {
                           || appointments.find((a) => a.patientId === selectedConsultPatient.id && a.status !== "COMPLETED"));
                         return apt ? overlayBookingIdentity(apt, named) : named;
                       })()}
-                      appointments={tenantAppointments}
+                      appointments={appointments}
                       billingList={billing}
                       currentRole={currentRole}
                       clinicName={activeHospital?.name || selectedConsultPatient.medicalCenter}
                       sessionDoctorName={sessionUser?.name || "GP"}
-                      sessionDoctor={sessionDoctor}
+                      sessionDoctor={examBookingDoctor}
                       linkedAppointmentId={examFileOnlyView ? undefined : (examAppointmentId || undefined)}
                       hideActiveConsultDetails={examFileOnlyView}
                       heightMode="natural"
@@ -4284,7 +4386,12 @@ export default function App() {
                       onUpdatePatient={persistClinicalFile}
                       onBookAppointment={bookFromClinicalRecord}
                       onOrderPathology={(testName, remarks) => {
-                        void handleHubOrderLabTest(selectedConsultPatient.id, testName, remarks);
+                        void handleHubOrderLabTest(
+                          selectedConsultPatient.id,
+                          testName,
+                          remarks,
+                          selectedConsultPatient.name
+                        );
                       }}
                       onUpdateAppointment={applyDoctorAppointmentPatch}
                       onRenderPrescription={(rx) => {
@@ -4728,7 +4835,7 @@ export default function App() {
             {activeTab === "telehealth" && (
               <TelehealthRoom
                 patients={hospitalPatients}
-                appointments={tenantAppointments}
+                appointments={appointments}
                 sessionDate={selectedClinicDate}
                 formulary={SRI_LANKA_GP_DRUGS}
                 activePatient={
@@ -4738,7 +4845,7 @@ export default function App() {
                 focusPatientId={telehealthFocus?.patientId}
                 focusAppointmentId={telehealthFocus?.appointmentId}
                 sessionDoctorName={sessionUser?.name || "Dr. Priyantha Silva"}
-                sessionDoctor={sessionDoctor}
+                sessionDoctor={examBookingDoctor}
                 drugsDatabase={drugs}
                 onSelectVideoPatient={(pat, appointmentId) => {
                   setTelehealthFocus({ patientId: pat.id, appointmentId });
@@ -4760,7 +4867,8 @@ export default function App() {
                 onBookAppointment={bookFromClinicalRecord}
                 onOrderPathology={(testName, remarks) => {
                   const pid = telehealthFocus?.patientId;
-                  if (pid) void handleHubOrderLabTest(pid, testName, remarks);
+                  const named = hospitalPatients.find((p) => p.id === pid);
+                  if (pid) void handleHubOrderLabTest(pid, testName, remarks, named?.name);
                 }}
                 onUpdateAppointment={applyDoctorAppointmentPatch}
                 onRenderPrescription={(rx) => {
@@ -5949,7 +6057,7 @@ export default function App() {
         <ReceptionBookingScheduler
           patients={hospitalPatients.length > 0 ? hospitalPatients : patients}
           doctors={registeredDoctors}
-          appointments={tenantAppointments}
+          appointments={appointments}
           initialPatientId={newAptPatientId}
           initialDate={newAptDate}
           initialReason={newAptReason}
@@ -5957,7 +6065,7 @@ export default function App() {
           includeToday
           walkInMode={bookingMode === "walkin"}
           walkInOverflowUsed={tenantAppointments.filter((a) =>
-            a.date === newAptDate &&
+            appointmentDateKey(a) === newAptDate &&
             a.status !== "CANCELLED" &&
             /walk-in overflow/i.test(a.reason || "")
           ).length}
@@ -6694,15 +6802,23 @@ export default function App() {
             patients.find((p) => p.id === activeDoctorRecordPatient.id) || activeDoctorRecordPatient,
             suwasiriCharts[activeDoctorRecordPatient.id]
           ))}
-          appointments={tenantAppointments}
+          appointments={appointments}
           billingList={billing}
           currentRole={currentRole}
           clinicName={activeHospital?.name}
           sessionDoctorName={sessionUser?.name || "GP"}
-          sessionDoctor={sessionDoctor}
+          sessionDoctor={examBookingDoctor}
           onClose={() => setActiveDoctorRecordPatient(null)}
           onUpdatePatient={persistClinicalFile}
           onBookAppointment={bookFromClinicalRecord}
+          onOrderPathology={(testName, remarks) => {
+            void handleHubOrderLabTest(
+              activeDoctorRecordPatient.id,
+              testName,
+              remarks,
+              activeDoctorRecordPatient.name
+            );
+          }}
           onUpdateAppointment={applyDoctorAppointmentPatch}
           onRenderPrescription={(rx) => {
             if (activeDoctorRecordPatient) {

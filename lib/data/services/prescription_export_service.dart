@@ -370,6 +370,17 @@ $lines
     return doc.save();
   }
 
+  static Future<void> printCertificate({
+    required DoctorCertificate certificate,
+    UserProfile? patient,
+  }) async {
+    final bytes = await buildCertificatePdfBytes(
+      certificate: certificate,
+      patient: patient,
+    );
+    await Printing.layoutPdf(onLayout: (_) async => bytes);
+  }
+
   static Future<void> downloadCertificatePdf({
     required DoctorCertificate certificate,
     UserProfile? patient,

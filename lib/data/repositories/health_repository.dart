@@ -64,9 +64,16 @@ abstract class HealthRepository {
   Stream<List<Appointment>> watchAppointments(String patientId);
   Stream<List<AppNotification>> watchNotifications(String patientId);
 
-  /// Booked consult minutes for [doctorId] (upcoming only), synced from Firestore.
-  Future<List<DateTime>> getDoctorBookedSlots(String doctorId);
-  Stream<List<DateTime>> watchDoctorBookedSlots(String doctorId);
+  /// Booked consult minutes for this doctor (upcoming only), synced from Firestore.
+  /// Matches catalog + Platform Console aliases (e.g. Chamidu Rathnayake).
+  Future<List<DateTime>> getDoctorBookedSlots(
+    String doctorId, {
+    String doctorName = '',
+  });
+  Stream<List<DateTime>> watchDoctorBookedSlots(
+    String doctorId, {
+    String doctorName = '',
+  });
 
   Future<Appointment> bookAppointment({
     required String patientId,

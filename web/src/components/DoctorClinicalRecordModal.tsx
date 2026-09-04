@@ -25,10 +25,10 @@ import { clinicExamSessionId, issuePrescriptionsToSuwasiri } from "../sync/suwas
 import { saveConsultationNote } from "../sync/suwasiriConsultSync";
 import { issueLabReportToSuwasiri, issueImagingReportToSuwasiri } from "../sync/suwasiriLabs";
 import { issueVaccineHistoryToSuwasiri } from "../sync/suwasiriVaccinations";
-import { syncPatientAllergiesToSuwasiri } from "../sync/suwasiriAllergies";
 import { issueMedicalCertificateToSuwasiri } from "../sync/suwasiriCertificates";
 import { pushSuwasiriNotification } from "../sync/suwasiriNotifications";
 import ReceptionBookingScheduler from "./ReceptionBookingScheduler";
+import { appointmentBelongsToPatient, staffUserAsDoctor } from "../sync/suwasiriAppointments";
 
 export type ClinicalTab = 
   | "summary"
@@ -109,12 +109,18 @@ export default function DoctorClinicalRecordModal({
 }: Props) {
   const issuedDoctor = sessionDoctorName || "Dr. Priyantha Silva";
   const issuedClinic = clinicName || patient.medicalCenter || "PrimeCare Medical Centre - Colombo Central";
+  const bookingDoctor =
+    sessionDoctor ||
+    staffUserAsDoctor(
+      sessionDoctorName ? { name: sessionDoctorName } : undefined,
+      patient.hospitalId || ""
+    );
 
   const [activeTab, setActiveTab] = useState<ClinicalTab>(initialTab || (embedded ? "consultation" : "summary"));
   const [showCalculatorModal, setShowCalculatorModal] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  const patientAppointments = appointments.filter(a => a.patientId === patient.id);
+  const patientAppointments = appointments.filter((a) => appointmentBelongsToPatient(a, patient));
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>(
     patientAppointments[0]?.id || ""
   );
@@ -227,9 +233,10 @@ export default function DoctorClinicalRecordModal({
   const [newMedDose, setNewMedDose] = useState("Take 1 tablet daily in the morning");
   const [newMedRepeats, setNewMedRepeats] = useState(2);
 
-  // Allergy add state
+  // Allergy add / edit state
   const [newAllergyInput, setNewAllergyInput] = useState("");
   const [editingAllergyIndex, setEditingAllergyIndex] = useState<number | null>(null);
+  const [editingAllergyDraft, setEditingAllergyDraft] = useState("");
   const [doctorNote, setDoctorNote] = useState("");
   const [refEmail, setRefEmail] = useState("lalith.fernando@asiri.lk");
   const [docEmail, setDocEmail] = useState("");
@@ -286,6 +293,29 @@ export default function DoctorClinicalRecordModal({
   const [mcStatus, setMcStatus] = useState<MedicalCertificateRecord["status"]>("UNFIT_FOR_WORK");
   const [mcRemarks, setMcRemarks] = useState("");
   const [mcSaving, setMcSaving] = useState(false);
+  const [viewingCertificate, setViewingCertificate] = useState<MedicalCertificateRecord | null>(null);
+  const [viewingImaging, setViewingImaging] = useState<ImagingRecord | null>(null);
+  const [imagingReportDrafts, setImagingReportDrafts] = useState<Record<string, string>>({});
+
+  const MC_LEAVE_REASONS = [
+    "Viral fever / acute febrile illness",
+    "Upper respiratory tract infection",
+    "Influenza-like illness / COVID-19",
+    "Dengue fever / suspected dengue",
+    "Gastroenteritis",
+    "Injury / trauma",
+    "Musculoskeletal pain / backache",
+    "Migraine / headache",
+    "Asthma / COPD exacerbation",
+    "Hypertension / cardiac review",
+    "Skin infection / cellulitis",
+    "Pregnancy-related rest",
+    "Post-operative recovery",
+    "Mental health / work stress",
+    "School / exam medical leave",
+    "Fitness to return to work / school",
+    "Other (see additional remarks)",
+  ];
 
   useEffect(() => {
     if (!mcStartDate || !mcEndDate) return;
@@ -306,17 +336,17 @@ export default function DoctorClinicalRecordModal({
   };
 
   const allergyItems = (patient.allergies || "")
-    .split(/[,;]+/)
+    .split(/[,;\n]+/)
     .map((s) => s.trim())
-    .filter((s) => s && !/^nkda$/i.test(s) && !/^none$/i.test(s) && !/^no known allergies$/i.test(s));
+    .filter((s) => {
+      if (!s) return false;
+      const n = s.toLowerCase().replace(/[.]/g, "");
+      return !/^(nkda|none|none declared|none known|no known allergies|no known drug allergies|nka|nil)$/.test(n);
+    });
 
   const persistAllergies = (items: string[]) => {
-    const joined = items.join(", ");
+    const joined = items.length ? items.join(", ") : "NKDA";
     onUpdatePatient({ ...patient, allergies: joined });
-    void syncPatientAllergiesToSuwasiri({
-      patientId: patient.id,
-      allergies: joined,
-    });
   };
 
   const isVideoApt = (apt: Appointment) =>
@@ -330,29 +360,9 @@ export default function DoctorClinicalRecordModal({
     null;
   const pastAppointments = [...patientAppointments].sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
   const viewingApt = patientAppointments.find((a) => a.id === selectedAppointmentId) || currentBooking;
-  const bookingModalityLabel = currentBooking
-    ? (isVideoApt(currentBooking)
-        ? "Telehealth Video"
-        : `In-Person OPD${currentBooking.room ? ` (${currentBooking.room})` : currentBooking.clinicName ? ` (${currentBooking.clinicName})` : ""}`)
-    : consultModality;
   const bookingFeeLkr = currentBooking && typeof currentBooking.feeAmount === "number" ? currentBooking.feeAmount : consultFeeLkr;
   const viewingPastEncounter = Boolean(currentBooking && viewingApt && viewingApt.id !== currentBooking.id);
   const dayKey = (value?: string) => (value || "").slice(0, 10);
-  const visitDate = viewingApt ? dayKey(viewingApt.date) : "";
-  const isVisitDay = (value?: string) => Boolean(visitDate && dayKey(value) === visitDate);
-  const visitHistory = viewingApt
-    ? (patient.history || []).filter((h) => h.appointmentId === viewingApt.id || isVisitDay(h.date))
-    : (patient.history || []);
-  const visitDiagnoses = viewingApt
-    ? (patient.diagnosesList || []).filter((d) => isVisitDay(d.dateDiagnosed))
-    : (patient.diagnosesList || []);
-  const visitPrescriptions = viewingApt
-    ? (patient.prescriptionsList || []).filter((rx) => isVisitDay(rx.date))
-    : (patient.prescriptionsList || []);
-  const visitMedicines = Array.from(new Set([
-    ...visitPrescriptions.flatMap((rx) => rx.items),
-    ...(viewingApt?.consultationActivity?.prescriptionsIssued || []),
-  ].filter(Boolean)));
 
   const loadEncounter = (apt: Appointment) => {
     setSelectedAppointmentId(apt.id);
@@ -685,6 +695,52 @@ export default function DoctorClinicalRecordModal({
     });
   };
 
+  const imagingReportText = (img: ImagingRecord) =>
+    [
+      "IMAGING REPORT",
+      `Patient: ${patient.name}`,
+      `Patient ID: ${patient.id}`,
+      `Study: ${img.modality} — ${img.bodyPart}`,
+      `Ordered: ${img.dateOrdered}`,
+      img.dateCompleted ? `Reported: ${img.dateCompleted}` : "",
+      `Status: ${img.status}`,
+      `Indication: ${img.clinicalIndication}`,
+      `Report: ${img.radiologistReport || img.findings || "Pending imaging laboratory report"}`,
+      `Clinic: ${issuedClinic}`,
+      `Doctor: ${issuedDoctor}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+  const fileIssuedImagingReport = (img: ImagingRecord) => {
+    const report = (imagingReportDrafts[img.id] || img.radiologistReport || "").trim();
+    if (!report) {
+      showToast("Enter the imaging laboratory report before filing it.");
+      return;
+    }
+    const filed: ImagingRecord = {
+      ...img,
+      status: "REPORT_READY",
+      radiologistReport: report,
+      findings: report,
+      dateCompleted: new Date().toISOString().split("T")[0],
+      doctorReviewed: true,
+      reviewedBy: issuedDoctor,
+    };
+    onUpdatePatient({
+      ...patient,
+      imagingRecords: (patient.imagingRecords || []).map((row) => (row.id === img.id ? filed : row)),
+    });
+    void issueImagingReportToSuwasiri({
+      patientId: patient.id,
+      doctorName: issuedDoctor,
+      clinicName: issuedClinic,
+      imaging: filed,
+    });
+    setViewingImaging(filed);
+    showToast(`Issued ${img.modality} report filed under ${patient.name} and synced to Suwasiri Vault → Lab reports.`);
+  };
+
   // Add Referral
   const handleCreateReferral = (e: React.FormEvent) => {
     e.preventDefault();
@@ -732,7 +788,7 @@ export default function DoctorClinicalRecordModal({
     { id: "imaging", label: "Imaging", icon: Image, box: "bg-cyan-100 border-cyan-300 text-cyan-950", active: "bg-gradient-to-r from-cyan-500 to-sky-600 text-white border-cyan-600" },
     { id: "referrals", label: "Referrals", icon: Send, box: "bg-orange-100 border-orange-300 text-orange-950", active: "bg-gradient-to-r from-orange-500 to-amber-600 text-white border-orange-600" },
     { id: "careplans", label: "Care Plans", icon: Heart, box: "bg-pink-100 border-pink-300 text-pink-950", active: "bg-gradient-to-r from-pink-500 to-rose-500 text-white border-pink-600" },
-    { id: "documents", label: "Documents", icon: Folder, box: "bg-blue-100 border-blue-300 text-blue-950", active: "bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-blue-600" },
+    { id: "documents", label: "Medical Certificate", icon: Folder, box: "bg-blue-100 border-blue-300 text-blue-950", active: "bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-blue-600" },
     { id: "myhealthrecord", label: "My Health Record", icon: Database, box: "bg-slate-100 border-slate-300 text-slate-800", active: "bg-gradient-to-r from-slate-500 to-slate-700 text-white border-slate-600" },
     { id: "appointments", label: "Appointments", icon: Calendar, box: "bg-violet-100 border-violet-300 text-violet-950", active: "bg-gradient-to-r from-violet-500 to-purple-600 text-white border-violet-600" },
     { id: "billing", label: "Billing", icon: DollarSign, box: "bg-yellow-100 border-yellow-300 text-yellow-950", active: "bg-gradient-to-r from-yellow-400 to-amber-500 text-yellow-950 border-yellow-500" },
@@ -991,36 +1047,6 @@ export default function DoctorClinicalRecordModal({
                 </p>
               </div>
 
-              {!hideActiveConsultDetails && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-sky-50/70 border border-sky-200 rounded-xl">
-                <div>
-                  <label className="block font-bold text-sky-950 text-[11px] mb-1">Encounter / current booking:</label>
-                  <div className="w-full p-2 bg-white border border-sky-300 rounded-lg font-bold text-sky-900 text-xs min-h-[38px]">
-                    {currentBooking
-                      ? `${currentBooking.date} (${currentBooking.time}) — ${currentBooking.reason || currentBooking.type || "Standard GP Consult"}`
-                      : "Walk-in unscheduled consultation (today)"}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-sky-950 text-[11px] mb-1">Consultation Modality:</label>
-                  <div className="w-full p-2 bg-white border border-sky-300 rounded-lg font-semibold text-slate-800 text-xs min-h-[38px]">
-                    {bookingModalityLabel}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-sky-950 text-[11px] mb-1">Consultation Fee (LKR):</label>
-                  <div className="relative">
-                    <span className="absolute left-2.5 top-2 font-bold text-slate-500 text-xs">Rs.</span>
-                    <div className="w-full pl-9 pr-2 py-1.5 bg-slate-50 border border-sky-300 rounded-lg font-bold text-slate-800 text-xs min-h-[38px]">
-                      {bookingFeeLkr.toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              )}
-
               {viewingPastEncounter && viewingApt && (
                 <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-[11px] font-bold text-amber-950">
                   <span>Showing only issued details and medicines from {viewingApt.date} ({viewingApt.time}). Modality and fee stay with today’s booking.</span>
@@ -1063,36 +1089,6 @@ export default function DoctorClinicalRecordModal({
                   />
                 </div>
               </div>
-
-              <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50 overflow-hidden">
-                  <div className="px-3 py-2 flex items-center gap-2">
-                    <Pill className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                    <span>
-                      <span className="block font-extrabold text-slate-900 text-[11px]">Medicines issued this visit</span>
-                      <span className="block text-[10px] text-slate-600">
-                        {viewingApt ? `${viewingApt.date} (${viewingApt.time})` : "Current file"}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="px-3 pb-3 max-h-40 overflow-y-auto">
-                    <div className="divide-y divide-emerald-100 bg-white rounded-xl border border-emerald-100 px-3">
-                      {visitMedicines.map((med) => (
-                        <div key={med} className="py-2 font-semibold text-slate-900">{med}</div>
-                      ))}
-                      {visitPrescriptions.map((rx) => (
-                        <div key={rx.id} className="py-1.5 text-[10px] text-slate-500">
-                          Rx {rx.rxNumber} · {rx.date}
-                          {rx.dosageInstructions ? ` · ${rx.dosageInstructions}` : ""}
-                        </div>
-                      ))}
-                      {visitMedicines.length === 0 && visitPrescriptions.length === 0 && (
-                        <p className="text-slate-400 italic py-2">
-                          {viewingApt ? `No medicines issued on ${viewingApt.date}.` : "No medicines issued on this visit yet."}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
 
               <div className="flex justify-between items-center pt-3 border-t">
                 <div className="flex items-center gap-2 text-slate-500 text-[11px]">
@@ -1197,13 +1193,6 @@ export default function DoctorClinicalRecordModal({
                         : [completeObs, ...(patient.observationsHistory || [])],
                     };
                     onUpdatePatient(updatedPatient);
-
-                    if ((updatedPatient.allergies || "").trim()) {
-                      void syncPatientAllergiesToSuwasiri({
-                        patientId: patient.id,
-                        allergies: String(updatedPatient.allergies),
-                      });
-                    }
 
                     void saveConsultationNote({
                       patientId: patient.id,
@@ -1401,39 +1390,71 @@ export default function DoctorClinicalRecordModal({
           {/* TAB 6: ALLERGIES */}
           {activeTab === "allergies" && (
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-5 text-xs">
-              <div className="flex justify-between items-center">
-                <h3 className="font-bold text-sm text-slate-900">Patient Allergies & Adverse Drug Reactions</h3>
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">Patient Allergies &amp; Adverse Drug Reactions</h3>
+                <p className="text-slate-500 text-[11px] mt-0.5">
+                  Edit or delete any listed allergy. Changes save on this file, the header badge, and {patient.name}’s Suwasiri Unique Health ID.
+                </p>
               </div>
 
               <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-3">
-                <div className="flex items-center gap-2 text-red-800 font-bold">
-                  <ShieldAlert className="w-4 h-4" />
-                  <span>Declared allergies</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-red-800 font-bold">
+                    <ShieldAlert className="w-4 h-4" />
+                    <span>Declared allergies</span>
+                  </div>
+                  {allergyItems.length > 0 && (
+                    <button
+                      type="button"
+                      className="px-2.5 py-1 bg-white border border-red-300 text-red-800 font-bold rounded-lg"
+                      onClick={() => {
+                        if (!window.confirm(`Clear all allergies for ${patient.name}? The file will show NKDA.`)) return;
+                        persistAllergies([]);
+                        setEditingAllergyIndex(null);
+                        setEditingAllergyDraft("");
+                        showToast("Allergies cleared — NKDA on this file and Suwasiri Profile");
+                      }}
+                    >
+                      Clear all
+                    </button>
+                  )}
                 </div>
                 {allergyItems.length === 0 ? (
-                  <p className="text-red-900 font-extrabold text-sm">No Known Allergies</p>
+                  <p className="text-red-900 font-extrabold text-sm">No Known Allergies (NKDA)</p>
                 ) : (
                   <ul className="space-y-2">
                     {allergyItems.map((item, index) => (
-                      <li key={`${item}-${index}`} className="flex items-center gap-2">
+                      <li
+                        key={`${item}-${index}`}
+                        className="flex flex-wrap items-center gap-2 bg-white border border-red-200 rounded-xl px-3 py-2"
+                      >
                         {editingAllergyIndex === index ? (
                           <>
                             <input
                               autoFocus
-                              value={newAllergyInput}
-                              onChange={(e) => setNewAllergyInput(e.target.value)}
-                              className="flex-1 p-2 bg-white border border-red-200 rounded-lg font-semibold"
+                              value={editingAllergyDraft}
+                              onChange={(e) => setEditingAllergyDraft(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key !== "Enter") return;
+                                e.preventDefault();
+                                const next = editingAllergyDraft.trim();
+                                if (!next) return;
+                                persistAllergies(allergyItems.map((a, i) => (i === index ? next : a)));
+                                setEditingAllergyIndex(null);
+                                setEditingAllergyDraft("");
+                                showToast("Allergy updated on this file and Suwasiri Profile");
+                              }}
+                              className="flex-1 min-w-[140px] p-2 bg-white border border-red-200 rounded-lg font-semibold text-sm"
                             />
                             <button
                               type="button"
                               className="px-3 py-1.5 bg-red-700 text-white font-bold rounded-lg"
                               onClick={() => {
-                                const next = newAllergyInput.trim();
+                                const next = editingAllergyDraft.trim();
                                 if (!next) return;
-                                const items = allergyItems.map((a, i) => (i === index ? next : a));
-                                persistAllergies(items);
+                                persistAllergies(allergyItems.map((a, i) => (i === index ? next : a)));
                                 setEditingAllergyIndex(null);
-                                setNewAllergyInput("");
+                                setEditingAllergyDraft("");
                                 showToast("Allergy updated on this file and Suwasiri Profile");
                               }}
                             >
@@ -1444,7 +1465,7 @@ export default function DoctorClinicalRecordModal({
                               className="px-3 py-1.5 bg-white border font-bold rounded-lg"
                               onClick={() => {
                                 setEditingAllergyIndex(null);
-                                setNewAllergyInput("");
+                                setEditingAllergyDraft("");
                               }}
                             >
                               Cancel
@@ -1452,25 +1473,32 @@ export default function DoctorClinicalRecordModal({
                           </>
                         ) : (
                           <>
-                            <span className="flex-1 text-red-900 font-extrabold text-sm">{item}</span>
+                            <span className="flex-1 min-w-[120px] text-red-900 font-extrabold text-sm">{item}</span>
                             <button
                               type="button"
-                              className="px-2 py-1 bg-white border border-red-200 text-red-800 font-bold rounded"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-red-200 text-red-800 font-bold rounded-lg"
                               onClick={() => {
                                 setEditingAllergyIndex(index);
-                                setNewAllergyInput(item);
+                                setEditingAllergyDraft(item);
                               }}
                             >
+                              <Edit3 className="w-3.5 h-3.5" />
                               Edit
                             </button>
                             <button
                               type="button"
-                              className="px-2 py-1 bg-white border border-red-200 text-red-800 font-bold rounded"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-red-200 text-red-800 font-bold rounded-lg"
                               onClick={() => {
+                                if (!window.confirm(`Remove “${item}” from ${patient.name}’s allergies?`)) return;
                                 persistAllergies(allergyItems.filter((_, i) => i !== index));
+                                if (editingAllergyIndex === index) {
+                                  setEditingAllergyIndex(null);
+                                  setEditingAllergyDraft("");
+                                }
                                 showToast(`Removed ${item}`);
                               }}
                             >
+                              <Trash2 className="w-3.5 h-3.5" />
                               Delete
                             </button>
                           </>
@@ -1482,22 +1510,27 @@ export default function DoctorClinicalRecordModal({
               </div>
 
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                <label className="block font-bold text-slate-700">Add allergy:</label>
+                <label className="block font-bold text-slate-700">Add allergy</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    value={editingAllergyIndex === null ? newAllergyInput : ""}
-                    onChange={e => {
-                      if (editingAllergyIndex !== null) return;
-                      setNewAllergyInput(e.target.value);
+                    value={newAllergyInput}
+                    onChange={(e) => setNewAllergyInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      if (!newAllergyInput.trim()) return;
+                      persistAllergies([...allergyItems, newAllergyInput.trim()]);
+                      setNewAllergyInput("");
+                      showToast(`Added allergy — shown under ${patient.name} on Suwasiri Profile`);
                     }}
                     placeholder="e.g. Penicillin, Aspirin, Sulfa drugs..."
                     className="flex-1 p-2 bg-white border border-slate-300 rounded-lg font-semibold"
-                    disabled={editingAllergyIndex !== null}
                   />
                   <button
+                    type="button"
                     onClick={() => {
-                      if (editingAllergyIndex !== null || !newAllergyInput.trim()) return;
+                      if (!newAllergyInput.trim()) return;
                       persistAllergies([...allergyItems, newAllergyInput.trim()]);
                       setNewAllergyInput("");
                       showToast(`Added allergy — shown under ${patient.name} on Suwasiri Profile`);
@@ -1907,22 +1940,41 @@ export default function DoctorClinicalRecordModal({
 
               <div>
                 <h4 className="font-extrabold text-slate-800 text-xs uppercase tracking-wide mb-2">Imaging history</h4>
-                <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl max-h-56 overflow-y-auto">
+                <p className="text-[11px] text-slate-500 mb-2">Requests stay on this patient. When the imaging laboratory issues the report, file it here — then View, Print, and it syncs to Suwasiri Vault → Lab reports.</p>
+                <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl max-h-[28rem] overflow-y-auto">
                   {(patient.imagingRecords || []).length === 0 ? (
                     <p className="text-slate-400 italic p-4">No previous imaging reports on this file yet.</p>
                   ) : (patient.imagingRecords || []).map((img) => {
-                    const body = `IMAGING REPORT\nPatient: ${patient.name}\nStudy: ${img.modality} — ${img.bodyPart}\nOrdered: ${img.dateOrdered}\nStatus: ${img.status}\nIndication: ${img.clinicalIndication}\nReport: ${img.radiologistReport || img.findings || "Pending"}\nClinic: ${issuedClinic}\nDoctor: ${issuedDoctor}`;
+                    const body = imagingReportText(img);
+                    const issued = img.status === "COMPLETED" || img.status === "REPORT_READY";
+                    const draft = imagingReportDrafts[img.id] ?? (issued ? (img.radiologistReport || img.findings || "") : "");
                     return (
-                      <div key={img.id} className="p-3 bg-white space-y-1">
+                      <div key={img.id} className="p-3 bg-white space-y-2">
                         <div className="flex justify-between gap-2">
                           <div>
                             <p className="font-bold text-slate-900">{img.modality} — {img.bodyPart}</p>
-                            <p className="text-slate-500 text-[11px]">Indication: {img.clinicalIndication} • Ordered: {img.dateOrdered}</p>
-                            {img.radiologistReport && <p className="text-slate-700 mt-1">{img.radiologistReport}</p>}
+                            <p className="text-slate-500 text-[11px]">Indication: {img.clinicalIndication} • Ordered: {img.dateOrdered} • {patient.name}</p>
+                            {issued && img.radiologistReport && <p className="text-slate-700 mt-1">{img.radiologistReport}</p>}
                           </div>
                           <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded h-fit">{img.status}</span>
                         </div>
+                        {!issued && (
+                          <label className="block">
+                            <span className="text-[10px] font-bold uppercase text-slate-500">Imaging laboratory report</span>
+                            <textarea
+                              rows={2}
+                              value={draft}
+                              onChange={(e) => setImagingReportDrafts((prev) => ({ ...prev, [img.id]: e.target.value }))}
+                              placeholder="Paste the issued imaging report for this patient…"
+                              className="mt-1 w-full p-2 border border-cyan-200 rounded-lg bg-cyan-50/50 text-[11px] outline-none focus:border-cyan-400"
+                            />
+                          </label>
+                        )}
                         <div className="flex flex-wrap gap-1.5 pt-1">
+                          <button type="button" onClick={() => setViewingImaging(img)} className="inline-flex items-center gap-1 px-2 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded font-bold text-[10px]"><Eye className="w-3 h-3" /> View</button>
+                          {!issued && (
+                            <button type="button" onClick={() => fileIssuedImagingReport(img)} className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[10px]">File issued report</button>
+                          )}
                           <button type="button" onClick={() => printDocument(`${img.modality} ${img.bodyPart}`, body)} className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded font-bold text-[10px]"><Printer className="w-3 h-3" /> Print</button>
                           <button type="button" onClick={() => sendByEmail(patient.email, `Imaging: ${img.modality} ${img.bodyPart}`, body)} className="inline-flex items-center gap-1 px-2 py-1 bg-sky-50 hover:bg-sky-100 text-sky-900 rounded font-bold text-[10px]"><Mail className="w-3 h-3" /> Email</button>
                           <button type="button" onClick={() => sendByPhone(patient.phone, `${img.modality} ${img.bodyPart} (${img.dateOrdered}): ${img.status}`)} className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 rounded font-bold text-[10px]"><Phone className="w-3 h-3" /> Phone</button>
@@ -1932,6 +1984,30 @@ export default function DoctorClinicalRecordModal({
                   })}
                 </div>
               </div>
+
+              {viewingImaging && (
+                <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+                  <div className="bg-white rounded-xl max-w-2xl w-full border shadow-xl max-h-[90vh] flex flex-col">
+                    <div className="flex justify-between items-start gap-3 border-b px-5 py-4">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-cyan-800">Imaging report</p>
+                        <h3 className="font-serif font-bold text-base text-[#00334f]">{viewingImaging.modality} — {viewingImaging.bodyPart}</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">{patient.name} · {viewingImaging.dateOrdered}</p>
+                      </div>
+                      <button type="button" onClick={() => setViewingImaging(null)} className="text-slate-400 hover:text-slate-700 p-1" title="Close">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <pre className="flex-1 overflow-y-auto p-5 text-[11px] leading-relaxed font-mono text-slate-800 whitespace-pre-wrap bg-slate-50">
+                      {imagingReportText(viewingImaging)}
+                    </pre>
+                    <div className="border-t px-5 py-3 flex justify-end gap-2">
+                      <button type="button" onClick={() => printDocument(`${viewingImaging.modality} ${viewingImaging.bodyPart}`, imagingReportText(viewingImaging))} className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded font-bold text-[11px]"><Printer className="w-3.5 h-3.5" /> Print</button>
+                      <button type="button" onClick={() => setViewingImaging(null)} className="px-3 py-1.5 bg-[#00334f] text-white rounded font-bold text-[11px]">Close</button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -2079,8 +2155,8 @@ export default function DoctorClinicalRecordModal({
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-4 text-xs">
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                 <div>
-                  <h3 className="font-bold text-sm text-slate-900">Documents history</h3>
-                  <p className="text-slate-500 text-[11px]">Scan or drop files onto this patient’s chart, or issue a medical certificate to Suwasiri Vault.</p>
+                  <h3 className="font-bold text-sm text-slate-900">Medical Certificate</h3>
+                  <p className="text-slate-500 text-[11px]">Issue a certificate for {patient.name}. It is saved here, can be viewed and printed, and syncs to Suwasiri Vault → Medical certificates.</p>
                 </div>
                 {examAddDocMode !== "chooser" && (
                 <button
@@ -2088,7 +2164,7 @@ export default function DoctorClinicalRecordModal({
                   onClick={() => setExamAddDocMode("chooser")}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#00334f] text-white rounded-lg font-bold text-[11px]"
                 >
-                  <Plus className="w-3.5 h-3.5" /> Add document
+                  <Plus className="w-3.5 h-3.5" /> Attach supporting file
                 </button>
                 )}
               </div>
@@ -2143,12 +2219,26 @@ export default function DoctorClinicalRecordModal({
                 }}
               >
                 <h4 className="font-extrabold text-amber-950 text-xs uppercase tracking-wide">Issue medical certificate</h4>
-                <p className="text-[11px] text-slate-600">Writes to this patient’s Suwasiri Vault → Medical certificates.</p>
+                <p className="text-[11px] text-slate-600">The diagnosis / leave reason is printed on the certificate and sent to {patient.name}’s Suwasiri Vault.</p>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Diagnosis / leave reason category</label>
+                  <select
+                    required
+                    value={MC_LEAVE_REASONS.includes(mcDiagnosis) ? mcDiagnosis : (mcDiagnosis ? "Other (see additional remarks)" : "")}
+                    onChange={(e) => setMcDiagnosis(e.target.value)}
+                    className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold"
+                  >
+                    <option value="">Select a category…</option>
+                    {MC_LEAVE_REASONS.map((reason) => (
+                      <option key={reason} value={reason}>{reason}</option>
+                    ))}
+                  </select>
+                </div>
                 <input
                   required
                   value={mcDiagnosis}
                   onChange={(e) => setMcDiagnosis(e.target.value)}
-                  placeholder="Diagnosis / leave reason"
+                  placeholder="Diagnosis / leave reason shown on the certificate"
                   className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold"
                 />
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -2300,6 +2390,11 @@ export default function DoctorClinicalRecordModal({
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-1.5 shrink-0">
+                      <button type="button" onClick={() => {
+                        const cert = (patient.medicalCertificatesList || []).find((c) => c.id === doc.id);
+                        if (cert) setViewingCertificate(cert);
+                        else printDocument(doc.title, doc.body);
+                      }} className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded font-bold text-[10px]"><Eye className="w-3 h-3" /> View</button>
                       <button type="button" onClick={() => printDocument(doc.title, doc.body)} className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 rounded font-bold text-[10px]"><Printer className="w-3 h-3" /> Print</button>
                       <button type="button" onClick={() => sendByEmail(docEmail || patient.email, doc.title, doc.body)} className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-sky-50 text-sky-900 rounded font-bold text-[10px]"><Mail className="w-3 h-3" /> Email</button>
                       <button type="button" onClick={() => sendByPhone(docPhone || patient.phone, `${doc.title} is ready at ${issuedClinic}`)} className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 text-emerald-900 rounded font-bold text-[10px]"><Phone className="w-3 h-3" /> Phone</button>
@@ -2309,9 +2404,45 @@ export default function DoctorClinicalRecordModal({
                 {(patient.clinicalDocuments || []).length === 0 &&
                   (patient.myHealthRecordDocs || []).length === 0 &&
                   (patient.medicalCertificatesList || []).length === 0 && (
-                    <div className="p-5 text-center text-slate-500 italic">No documents on this file yet. Use Add Doc to scan or browse.</div>
+                    <div className="p-5 text-center text-slate-500 italic">No medical certificates on this file yet.</div>
                   )}
               </div>
+              {viewingCertificate && (
+                <div className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+                  <div className="bg-white rounded-xl max-w-2xl w-full border shadow-xl max-h-[90vh] flex flex-col">
+                    <div className="flex justify-between items-start gap-3 border-b px-5 py-4">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-amber-800">Medical certificate</p>
+                        <h3 className="font-serif font-bold text-base text-[#00334f]">{patient.name}</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">{viewingCertificate.diagnosis} · {viewingCertificate.date}</p>
+                      </div>
+                      <button type="button" onClick={() => setViewingCertificate(null)} className="text-slate-400 hover:text-slate-700 p-1" title="Close">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <pre className="flex-1 overflow-y-auto p-5 text-[11px] leading-relaxed font-mono text-slate-800 whitespace-pre-wrap bg-slate-50">
+{`MEDICAL CERTIFICATE
+Patient: ${patient.name}
+Diagnosis / leave reason: ${viewingCertificate.diagnosis}
+Certified status: ${viewingCertificate.status.replace(/_/g, " ")}
+Leave: ${viewingCertificate.startDate} to ${viewingCertificate.endDate} (${viewingCertificate.numDays} days)
+Doctor: ${viewingCertificate.doctorName} (${viewingCertificate.doctorRegNo})
+Clinic: ${issuedClinic}
+${viewingCertificate.additionalRemarks || ""}`}
+                    </pre>
+                    <div className="border-t px-5 py-3 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => printDocument(`Medical certificate — ${viewingCertificate.diagnosis}`, `MEDICAL CERTIFICATE\nPatient: ${patient.name}\nDiagnosis: ${viewingCertificate.diagnosis}\nLeave: ${viewingCertificate.startDate} to ${viewingCertificate.endDate} (${viewingCertificate.numDays} days)\nStatus: ${viewingCertificate.status}\nDoctor: ${viewingCertificate.doctorName} (${viewingCertificate.doctorRegNo})\n${viewingCertificate.additionalRemarks || ""}`)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded font-bold text-[11px]"
+                      >
+                        <Printer className="w-3.5 h-3.5" /> Print
+                      </button>
+                      <button type="button" onClick={() => setViewingCertificate(null)} className="px-3 py-1.5 bg-[#00334f] text-white rounded font-bold text-[11px]">Close</button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -2351,20 +2482,37 @@ export default function DoctorClinicalRecordModal({
                     Appointments &amp; clinic calendar
                   </h3>
                   <p className="text-slate-500 text-[11px]">
-                    {sessionDoctor
-                      ? `Book a follow-up with ${sessionDoctor.name} only. Available and booked times stay in sync with the clinic calendar and Suwasiri App.`
-                      : "Appointment history for this file. Booking is available when a clinic doctor is signed in."}
+                    {bookingDoctor && onBookAppointment && !hideActiveConsultDetails
+                      ? `Book a follow-up with ${bookingDoctor.name} only. The right-hand times are this doctor’s available and booked slots — other clinic doctors are not shown. Confirm writes to ${patient.name}’s Suwasiri Home (blue in-person / purple video) and the reception / clinic calendars.`
+                      : hideActiveConsultDetails
+                        ? "Appointment history for this file."
+                        : "Sign in as a clinic doctor to book a follow-up on your own available times."}
                   </p>
                 </div>
               </div>
 
-              {onBookAppointment && sessionDoctor && !hideActiveConsultDetails && (
+              {(() => {
+                const upcoming = [...patientAppointments]
+                  .filter((a) => a.status !== "COMPLETED" && a.status !== "CANCELLED")
+                  .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+                const next = upcoming[0];
+                if (!next) return null;
+                return (
+                  <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-violet-800">Next appointment</p>
+                    <p className="text-sm font-bold text-[#00334f]">{next.date} at {next.time}</p>
+                    <p className="text-[11px] text-slate-600">{next.reason || next.type} · {next.doctorName || bookingDoctor?.name || issuedDoctor}</p>
+                  </div>
+                );
+              })()}
+
+              {onBookAppointment && bookingDoctor && !hideActiveConsultDetails && (
                 <ReceptionBookingScheduler
                   embedded
                   lockDoctor
                   lockPatient
                   patients={[patient]}
-                  doctors={[sessionDoctor]}
+                  doctors={[bookingDoctor]}
                   appointments={appointments}
                   initialPatientId={patient.id}
                   includeToday
@@ -2379,16 +2527,15 @@ export default function DoctorClinicalRecordModal({
                       doctorName: payload.doctorName,
                       doctorStaffId: payload.doctorStaffId,
                     });
-                    showToast(`Appointment booked for ${payload.date} at ${payload.time} — calendar updated.`);
                   }}
                 />
               )}
 
               <div className="space-y-4">
-                {appointments.filter(a => a.patientId === patient.id).length === 0 ? (
+                {patientAppointments.length === 0 ? (
                   <div className="text-center py-8 text-slate-400 italic">No appointment history found for this patient.</div>
                 ) : (
-                  appointments.filter(a => a.patientId === patient.id).map(a => (
+                  patientAppointments.map(a => (
                     <div key={a.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white transition-all space-y-3">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
                         <div>

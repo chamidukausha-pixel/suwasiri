@@ -22,7 +22,7 @@ interface Props {
   labOrders?: LabOrder[];
   currentRole: string;
   onStartConsultation: (patient: Patient) => void;
-  onOrderLabTest?: (patientId: string, testName: string, remarks: string) => void;
+  onOrderLabTest?: (patientId: string, testName: string, remarks: string, patientName?: string) => void;
   onReviewLab?: (patient: Patient, lab: LabResult, opts?: { critical?: boolean; comment?: string }) => void;
 }
 
@@ -36,7 +36,7 @@ export default function PathologyHub({
 }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [showOrderModal, setShowOrderModal] = useState(false);
-  const [orderPatientId, setOrderPatientId] = useState(patients[0]?.id || "");
+  const [orderPatientId, setOrderPatientId] = useState("");
   const [orderTestName, setOrderTestName] = useState(PATHOLOGY_INVESTIGATIONS[0].name);
   const [orderRemarks, setOrderRemarks] = useState("");
 
@@ -147,7 +147,8 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
   const handleCreateOrder = (e: React.FormEvent) => {
     e.preventDefault();
     if (onOrderLabTest && orderPatientId) {
-      onOrderLabTest(orderPatientId, orderTestName, orderRemarks);
+      const named = patients.find((p) => p.id === orderPatientId)?.name;
+      onOrderLabTest(orderPatientId, orderTestName, orderRemarks, named);
       setShowOrderModal(false);
       setOrderRemarks("");
     }
@@ -181,7 +182,10 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowOrderModal(true)}
+              onClick={() => {
+                setOrderPatientId("");
+                setShowOrderModal(true);
+              }}
               className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
             >
               <Plus className="w-4 h-4" />
@@ -597,7 +601,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
             <form onSubmit={handleCreateOrder} className="space-y-3.5 text-xs">
               <div>
                 <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
-                  Select Patient
+                  Select Patient — the notification is filed under this name
                 </label>
                 <select
                   value={orderPatientId}
@@ -605,12 +609,18 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                   className="w-full p-2.5 border rounded-lg bg-white text-slate-800 font-bold outline-none focus:border-[#00334f]"
                   required
                 >
+                  <option value="">Choose the patient…</option>
                   {patients.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} ({p.age} yrs, {p.gender}) — ID: {p.id}
                     </option>
                   ))}
                 </select>
+                {orderPatientId ? (
+                  <p className="text-[11px] font-bold text-emerald-800 mt-1">
+                    Request will notify Sample Dispatch Hub under {patients.find((p) => p.id === orderPatientId)?.name}.
+                  </p>
+                ) : null}
               </div>
 
               <div>
