@@ -1,8 +1,11 @@
 import {
   collection,
   doc,
+  getDocs,
   onSnapshot,
+  query,
   setDoc,
+  where,
   type Unsubscribe,
 } from "firebase/firestore";
 import { getFirebaseDb, isFirebaseConfigured } from "../firebase";
@@ -49,7 +52,11 @@ export function subscribeClinicDoctors(
     return onSnapshot(
       collection(db, "clinic_doctors"),
       (snap) => {
-        onChange(snap.docs.map((d) => mapClinicDoctorDoc(d.id, d.data() as Record<string, unknown>)));
+        onChange(
+          snap.docs
+            .filter((d) => (d.data() as Record<string, unknown>).active !== false)
+            .map((d) => mapClinicDoctorDoc(d.id, d.data() as Record<string, unknown>))
+        );
       },
       (err) => {
         console.warn("Clinic doctor sync:", err.message);
@@ -147,11 +154,11 @@ export async function publishClinicDoctorToSuwasiri(opts: {
   phone?: string;
   rosterHours?: StaffProvider["rosterHours"];
   roster?: StaffProvider["roster"];
-}): Promise<void> {
-  if (!isFirebaseConfigured()) return;
+}): Promise<boolean> {
+  if (!isFirebaseConfigured()) return false;
   const name = opts.name.trim();
   const specialty = opts.specialty.trim();
-  if (!name || !specialty) return;
+  if (!name || !specialty) return false;
   const displayName = /^dr\.?\s/i.test(name) ? name : `Dr. ${name}`;
   const hospital = opts.hospitalName.trim() || "GP Care Clinic";
   const id = suwasiriDoctorDocId({ staffId: opts.staffId, doctorName: displayName });
@@ -187,6 +194,39 @@ export async function publishClinicDoctorToSuwasiri(opts: {
     },
     { merge: true }
   );
+  return true;
+}
+
+async function markClinicDoctorInactive(id: string): Promise<void> {
+  await setDoc(
+    doc(getFirebaseDb(), "clinic_doctors", id),
+    { active: false, updatedAt: new Date().toISOString() },
+    { merge: true }
+  );
+}
+
+/** Hide a resigned doctor on Suwasiri Doctors / booking (keeps the Firestore id for later re-add). */
+export async function unpublishClinicDoctorFromSuwasiri(opts: {
+  staffId: string;
+  doctorName?: string;
+  hospitalId?: string;
+}): Promise<boolean> {
+  if (!isFirebaseConfigured()) return false;
+  const ids = new Set<string>();
+  ids.add(suwasiriDoctorDocId({ staffId: opts.staffId, doctorName: opts.doctorName }));
+  try {
+    const db = getFirebaseDb();
+    if (opts.staffId) {
+      const byStaff = await getDocs(query(collection(db, "clinic_doctors"), where("staffId", "==", opts.staffId)));
+      byStaff.docs.forEach((d) => ids.add(d.id));
+    }
+  } catch (err) {
+    console.warn("Lookup clinic doctor to unpublish:", err);
+  }
+  await Promise.allSettled(
+    [...ids].filter((id) => id.length > 0).map((id) => markClinicDoctorInactive(id))
+  );
+  return true;
 }
 
 export async function publishClinicCenterToSuwasiri(opts: {
@@ -195,10 +235,10 @@ export async function publishClinicCenterToSuwasiri(opts: {
   region?: string;
   address?: string;
   branchName?: string;
-}): Promise<void> {
-  if (!isFirebaseConfigured()) return;
+}): Promise<boolean> {
+  if (!isFirebaseConfigured()) return false;
   const name = opts.name.trim();
-  if (!name) return;
+  if (!name) return false;
   await setDoc(
     doc(getFirebaseDb(), "clinic_centers", opts.hospitalId),
     {
@@ -212,6 +252,7 @@ export async function publishClinicCenterToSuwasiri(opts: {
     },
     { merge: true }
   );
+  return true;
 }
 
 export async function republishStaffDoctorsToSuwasiri(opts: {
@@ -224,6 +265,7 @@ export async function republishStaffDoctorsToSuwasiri(opts: {
   const doctors = opts.staff.filter(
     (s) => s.active !== false && /doctor|medical officer/i.test(s.role || "")
   );
+  const keepStaffIds = new Set(doctors.map((s) => s.id));
   for (const s of doctors) {
     const branch = opts.branches.find((b) => (s.branchIds || []).includes(b.id)) || opts.branches[0];
     try {
@@ -231,7 +273,7 @@ export async function republishStaffDoctorsToSuwasiri(opts: {
         staffId: s.id,
         name: s.name,
         specialty: s.specialty || "General Practitioner",
-        hospitalName: branch?.name || opts.hospitalName,
+        hospitalName: opts.hospitalName || branch?.name || "GP Care Clinic",
         hospitalId: opts.hospitalId,
         branchName: branch?.name,
         branchId: branch?.id,
@@ -244,5 +286,24 @@ export async function republishStaffDoctorsToSuwasiri(opts: {
     } catch (err) {
       console.warn("Could not republish clinic doctor to Suwasiri:", err);
     }
+  }
+  if (!opts.hospitalId || !isFirebaseConfigured()) return;
+  try {
+    const snap = await getDocs(
+      query(collection(getFirebaseDb(), "clinic_doctors"), where("hospitalId", "==", opts.hospitalId))
+    );
+    await Promise.allSettled(
+      snap.docs
+        .filter((d) => {
+          const data = d.data() as Record<string, unknown>;
+          if (data.active === false) return false;
+          if (data.source && data.source !== "gp_care") return false;
+          const staffId = String(data.staffId || "");
+          return staffId.length > 0 && !keepStaffIds.has(staffId);
+        })
+        .map((d) => markClinicDoctorInactive(d.id))
+    );
+  } catch (err) {
+    console.warn("Could not hide resigned clinic doctors on Suwasiri:", err);
   }
 }

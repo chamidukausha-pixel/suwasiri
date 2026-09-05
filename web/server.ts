@@ -1254,9 +1254,7 @@ app.delete("/api/tenancy/staff/:id", (req, res) => {
   const staffId = req.params.id;
   const staff = (store.staffDirectory || []).find((s: any) => s.id === staffId);
   if (!staff) return res.status(404).json({ error: "Staff not found" });
-  store.staffDirectory = (store.staffDirectory || []).map((s: any) =>
-    s.id === staffId ? { ...s, active: false } : s
-  );
+  store.staffDirectory = (store.staffDirectory || []).filter((s: any) => s.id !== staffId);
   store.memberships = (store.memberships || []).map((m: any) =>
     m.userId === staff.userId && m.hospitalId === staff.hospitalId
       ? { ...m, active: false }
@@ -1495,13 +1493,22 @@ function mergeKeyedRows(existing: any[] | undefined, incoming: any[] | undefined
   return Array.from(map.values());
 }
 
+function isPlaceholderClinicName(name?: string): boolean {
+  const n = String(name || "").trim().toLowerCase();
+  return !n || n === "patient" || n === "suwasiri patient" || n === "unknown" || n === "unknown patient";
+}
+
 function applySuwasiriDemographics(target: any, body: any) {
   const {
     name, age, gender, bloodType, allergies, phone, email, notes, dateOfBirth, nic, address,
     emergencyContactName, emergencyContactPhone, suwasiriBarcode, medicalHistory, activeMedications,
     heightCm, weightKg, labResults, vaccineRecords, medicareNumber, ihiNumber,
   } = body;
-  if (name) target.name = name;
+  if (name && !isPlaceholderClinicName(name)) {
+    target.name = name;
+  } else if (name && isPlaceholderClinicName(target.name)) {
+    target.name = name;
+  }
   if (age !== undefined && age !== null && age !== "") target.age = parseInt(String(age), 10) || 0;
   if (gender) target.gender = gender;
   if (bloodType) target.bloodType = bloodType;
@@ -2588,8 +2595,18 @@ app.delete("/api/sample-collections/:id", (req, res) => {
 app.post("/api/patient-access-requests", (req, res) => {
   const store = getStore();
   if (!store.patientAccessRequests) store.patientAccessRequests = [];
-  const { patientId, type, comment, requestedBy, hospitalId } = req.body;
-  const pat = store.patients.find((p) => p.id === patientId);
+  const { patientId, type, comment, requestedBy, hospitalId, patientSnapshot } = req.body;
+  let pat = store.patients.find((p) => p.id === patientId);
+  if (!pat && patientSnapshot && patientSnapshot.name) {
+    pat = {
+      ...patientSnapshot,
+      id: patientId,
+      name: patientSnapshot.name,
+      hospitalId: hospitalId || patientSnapshot.hospitalId || HOSPITAL_PRIMECARE,
+      accessStatus: "ACTIVE",
+    };
+    store.patients.unshift(pat);
+  }
   if (!pat) return res.status(404).json({ error: "Patient not found" });
   if (!comment || !String(comment).trim()) {
     return res.status(400).json({ error: "A comment is required to delete or block a patient." });
@@ -2602,13 +2619,39 @@ app.post("/api/patient-access-requests", (req, res) => {
     type: kind,
     comment: String(comment).trim(),
     requestedBy: requestedBy || "Reception",
-    hospitalId: hospitalId || HOSPITAL_PRIMECARE,
+    hospitalId: hospitalId || pat.hospitalId || HOSPITAL_PRIMECARE,
     status: "PENDING",
     createdAt: new Date().toISOString()
   };
   pat.accessStatus = kind === "BLOCK" ? "PENDING_BLOCK" : "PENDING_DELETE";
   pat.accessComment = reqRow.comment;
   store.patientAccessRequests.unshift(reqRow);
+
+  const stamp = new Date().toISOString().replace("T", " ").substring(0, 16);
+  const actionLabel = kind === "BLOCK" ? "block" : "delete";
+  if (!store.notifications) store.notifications = [];
+  store.notifications.unshift({
+    id: `notif-par-${Date.now()}`,
+    patientName: pat.name,
+    recipient: "Operations & Governance",
+    transport: "App Notification",
+    templateType: "PATIENT_ACCESS_REQUEST",
+    content: `${reqRow.requestedBy} requested to ${actionLabel} patient file “${pat.name}” (${pat.id}). Comment: ${reqRow.comment}`,
+    date: stamp,
+    status: "UNREAD",
+    read: false,
+    accessRequestId: reqRow.id,
+  });
+  if (!store.clinicMessages) store.clinicMessages = [];
+  store.clinicMessages.push({
+    id: `msg-par-${Date.now()}`,
+    sender: "Operations Portal",
+    senderRole: "System BOT",
+    text: `${kind === "BLOCK" ? "🚫" : "🗑️"} Patient Clinical Records: ${reqRow.requestedBy} asked to ${actionLabel} “${pat.name}”. Open Platform Console (Operations & Governance) to approve or reject.`,
+    timestamp: stamp,
+    channel: "#emergency-notices"
+  });
+
   saveStore(store);
   res.status(201).json({ request: reqRow, state: store });
 });
@@ -2628,6 +2671,17 @@ app.patch("/api/patient-access-requests/:id", (req, res) => {
     } else {
       pat.accessStatus = row.type === "BLOCK" ? "BLOCKED" : "DELETED";
     }
+  }
+  if (store.notifications) {
+    store.notifications.forEach((n) => {
+      const match =
+        n.templateType === "PATIENT_ACCESS_REQUEST" &&
+        (n.accessRequestId === row.id || (!n.accessRequestId && n.patientName === row.patientName && n.status !== "READ"));
+      if (match) {
+        n.read = true;
+        n.status = "READ";
+      }
+    });
   }
   saveStore(store);
   res.json({ request: row, state: store });

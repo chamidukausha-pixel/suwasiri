@@ -521,6 +521,7 @@ export interface NotificationLog {
   sampleId?: string;
   testName?: string;
   registeredBy?: string;
+  accessRequestId?: string;
 }
 
 export interface ClinicMessage {

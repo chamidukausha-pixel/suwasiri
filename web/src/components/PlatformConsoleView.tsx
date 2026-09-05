@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { Building2, Plus, ShieldAlert, UserCheck, Users } from "lucide-react";
-import type { Branch, Hospital, RoleDefinition, StaffMembership, StaffProvider, StaffUser } from "../types";
+import { Bell, Building2, Plus, ShieldAlert, UserCheck, Users } from "lucide-react";
+import type { Branch, Hospital, PatientAccessRequest, RoleDefinition, StaffMembership, StaffProvider, StaffUser } from "../types";
 import { DOCTOR_SPECIALTIES } from "../catalogs/doctorSpecialties";
 import { SRI_LANKA_DISTRICTS } from "../catalogs/sriLankaDistricts";
 
@@ -23,6 +23,8 @@ interface Props {
     specialty?: string;
   }) => Promise<void> | void;
   onRemoveStaff: (payload: { staffId: string; hospitalId: string }) => Promise<void> | void;
+  accessRequests?: PatientAccessRequest[];
+  onReviewAccessRequest?: (id: string, status: "APPROVED" | "REJECTED") => void;
 }
 
 const STAFF_ROLES = ["Doctor", "Receptionist", "Nurse", "Practice Manager", "Hospital Super Admin", "Pharmacist"];
@@ -38,6 +40,8 @@ export default function PlatformConsoleView({
   onToggleHospitalStatus,
   onCreateStaff,
   onRemoveStaff,
+  accessRequests = [],
+  onReviewAccessRequest,
 }: Props) {
   const [newName, setNewName] = useState("");
   const [newDistrict, setNewDistrict] = useState("Colombo");
@@ -49,6 +53,7 @@ export default function PlatformConsoleView({
   const [staffSpecialty, setStaffSpecialty] = useState<string>("Cardiologist");
   const [staffBranches, setStaffBranches] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const pendingAccess = accessRequests.filter((r) => r.status === "PENDING");
 
   return (
     <div className="space-y-6">
@@ -60,10 +65,70 @@ export default function PlatformConsoleView({
           <div>
             <h1 className="text-xl font-bold text-[#00334f]">Operations & Governance portal</h1>
             <p className="text-xs text-slate-500">
-              Platform Super Admin: create hospital tenants, add employees, and remove staff who have resigned from a clinic. New medical centres and doctors sync to the Suwasiri app so patients can search by doctor name, clinic name, and district.
+              Platform Super Admin: create a clinic (e.g. CKR clinic), add a doctor, and patients can search that clinic or doctor in the Suwasiri app and book available times. Remove (resigned) hides them in GP Care and Suwasiri.
             </p>
           </div>
         </div>
+      </div>
+
+      <div className={`rounded-xl p-5 space-y-3 shadow-xs border-2 ${pendingAccess.length > 0 ? "bg-rose-50 border-rose-300" : "bg-white border-slate-200"}`}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className={`w-8 h-8 rounded-lg text-white flex items-center justify-center ${pendingAccess.length > 0 ? "bg-rose-600" : "bg-slate-700"}`}>
+              <Bell className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className={`font-bold text-sm ${pendingAccess.length > 0 ? "text-rose-950" : "text-[#00334f]"}`}>
+                Notifications — Patient Clinical Records
+              </h2>
+              <p className={`text-[11px] ${pendingAccess.length > 0 ? "text-rose-800" : "text-slate-500"}`}>
+                When Reception deletes or blocks a patient file, the request appears here for Super Admin.
+              </p>
+            </div>
+          </div>
+          <span className={`text-[11px] font-black px-2.5 py-1 rounded-full ${pendingAccess.length > 0 ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-600"}`}>
+            {pendingAccess.length} pending
+          </span>
+        </div>
+        {pendingAccess.length === 0 ? (
+          <p className="text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+            No pending delete or block requests.
+          </p>
+        ) : (
+          pendingAccess.map((r) => {
+            const hospital = hospitals.find((h) => h.id === r.hospitalId);
+            return (
+              <div key={r.id} className="bg-white border border-rose-200 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="font-bold text-sm text-[#00334f]">
+                    {r.type === "BLOCK" ? "Block request" : "Delete request"} · {r.patientName}
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {hospital?.name || r.hospitalId} · requested by {r.requestedBy}
+                    {r.createdAt ? ` · ${r.createdAt.slice(0, 16).replace("T", " ")}` : ""}
+                  </p>
+                  <p className="text-xs text-slate-700 mt-1">“{r.comment}”</p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onReviewAccessRequest?.(r.id, "APPROVED")}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-1.5 rounded text-xs font-bold"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onReviewAccessRequest?.(r.id, "REJECTED")}
+                    className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-3 py-1.5 rounded text-xs font-bold"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       <div className="bg-white p-6 border rounded-xl shadow-xs space-y-4">
@@ -172,7 +237,7 @@ export default function PlatformConsoleView({
                               <button
                                 type="button"
                                 onClick={async () => {
-                                  if (!window.confirm(`Remove ${s.name} after resignation from ${h.name}? They will no longer appear in Practice Manager or login for this clinic.`)) return;
+                                  if (!window.confirm(`Remove ${s.name} from ${h.name}? They will disappear from Practice Manager, this clinic’s booking lists, and the Suwasiri app.`)) return;
                                   await onRemoveStaff({ staffId: s.id, hospitalId: h.id });
                                 }}
                                 className="text-[10px] font-bold text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-1 rounded"

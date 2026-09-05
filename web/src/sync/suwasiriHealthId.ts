@@ -80,21 +80,55 @@ function ageFromDob(raw?: string): number {
   return Math.max(0, age);
 }
 
-function displayName(data: Record<string, unknown>, intake: Record<string, unknown>): string {
-  const fromIntake = str(intake.fullName);
-  if (fromIntake) return fromIntake;
-  const n = str(data.name);
-  if (n && n.toLowerCase() !== "patient") return n;
+export function isPlaceholderPatientName(name?: string | null): boolean {
+  const n = (name || "").trim().toLowerCase();
+  return (
+    !n ||
+    n === "patient" ||
+    n === "suwasiri patient" ||
+    n === "unknown" ||
+    n === "unknown patient"
+  );
+}
+
+function namesFromClinicRegistrations(data: Record<string, unknown>): string[] {
+  const regs = asRecord(data.clinicRegistrations);
+  const names: string[] = [];
+  for (const value of Object.values(regs)) {
+    const row = asRecord(value);
+    const n = str(row.fullName) || str(row.name);
+    if (n && !isPlaceholderPatientName(n)) names.push(n);
+  }
+  return names;
+}
+
+/** Real patient name from the Suwasiri `users` file — never the Auth placeholder "Patient". */
+export function displayName(data: Record<string, unknown>, intake: Record<string, unknown>): string {
+  const candidates = [
+    str(intake.fullName),
+    str(data.fullName),
+    ...namesFromClinicRegistrations(data),
+    str(data.name),
+    str(data.displayName),
+  ].filter((n) => n && !isPlaceholderPatientName(n));
+  if (candidates[0]) return candidates[0];
   const email = str(data.email);
   const local = email.split("@")[0].replace(/[._]+/g, " ").trim();
-  if (local) {
+  if (local && !isPlaceholderPatientName(local) && !local.includes("phone.suwasiri")) {
     return local
       .split(/\s+/)
       .filter(Boolean)
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
       .join(" ");
   }
-  return n || "Suwasiri patient";
+  return "";
+}
+
+export function pickRealPatientName(...names: Array<string | undefined | null>): string {
+  for (const n of names) {
+    if (n && !isPlaceholderPatientName(n)) return n.trim();
+  }
+  return "";
 }
 
 function genderFromIntake(data: Record<string, unknown>, intake: Record<string, unknown>): string {
@@ -289,9 +323,24 @@ export function mapUserDocToPatient(id: string, data: Record<string, unknown>): 
   };
 }
 
+async function nameFromAppointments(patientId: string): Promise<string> {
+  try {
+    const snap = await getDocs(
+      query(collection(getFirebaseDb(), "appointments"), where("patientId", "==", patientId))
+    );
+    for (const d of snap.docs) {
+      const n = str((d.data() as Record<string, unknown>).patientName);
+      if (n && !isPlaceholderPatientName(n)) return n;
+    }
+  } catch (err) {
+    console.warn("Appointment name for Unique Health ID:", err);
+  }
+  return "";
+}
+
 async function enrichPatient(id: string, data: Record<string, unknown>): Promise<Patient> {
   const base = mapUserDocToPatient(id, data);
-  const [labs, vaccines] = await Promise.all([
+  const [labs, vaccines, bookedName] = await Promise.all([
     fetchLabs(id).catch((err) => {
       console.warn("Unique Health ID labs:", err);
       return [] as LabResult[];
@@ -300,9 +349,11 @@ async function enrichPatient(id: string, data: Record<string, unknown>): Promise
       console.warn("Unique Health ID vaccines:", err);
       return [] as VaccineRecord[];
     }),
+    isPlaceholderPatientName(base.name) ? nameFromAppointments(id) : Promise.resolve(""),
   ]);
   return {
     ...base,
+    name: pickRealPatientName(base.name, bookedName) || base.name,
     labResults: labs,
     vaccineRecords: mergeVaccines(vaccines, base.vaccineRecords || []),
   };

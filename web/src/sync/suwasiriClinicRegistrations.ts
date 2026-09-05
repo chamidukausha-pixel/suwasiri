@@ -12,6 +12,7 @@ import {
   HOSPITAL_SOUTHERN,
 } from "../tenancy";
 import type { Patient } from "../types";
+import { pickRealPatientName } from "./suwasiriHealthId";
 
 export interface ClinicRegistrationPatch {
   docId: string;
@@ -174,7 +175,7 @@ export function mergeRegistrationWithLiveFile(fromReg: Patient, fromUser?: Patie
   return {
     ...fromUser,
     ...fromReg,
-    name: fromReg.name || fromUser.name,
+    name: pickRealPatientName(fromReg.name, fromUser.name) || fromReg.name || fromUser.name,
     email: fromReg.email || fromUser.email,
     phone: fromReg.phone || fromUser.phone,
     suwasiriBarcode: fromUser.suwasiriBarcode || fromReg.suwasiriBarcode,

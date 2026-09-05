@@ -121,6 +121,7 @@ import {
   looksLikeUniqueHealthId,
   loadSuwasiriUserFile,
   patientVisibleAtHospital,
+  pickRealPatientName,
 } from "./sync/suwasiriHealthId";
 import { saveConsultationNote } from "./sync/suwasiriConsultSync";
 import {
@@ -150,6 +151,7 @@ import {
   publishClinicDoctorToSuwasiri,
   republishStaffDoctorsToSuwasiri,
   subscribeClinicDoctors,
+  unpublishClinicDoctorFromSuwasiri,
   doctorWorksAtClinic,
 } from "./sync/suwasiriClinicDoctors";
 import DoctorDaySlotsPanel from "./components/DoctorDaySlotsPanel";
@@ -545,6 +547,7 @@ export default function App() {
   const [accessActionType, setAccessActionType] = useState<"DELETE" | "BLOCK">("DELETE");
   const [accessActionComment, setAccessActionComment] = useState("");
   const [loading, setLoading] = useState<boolean>(true);
+  const pendingAccessRequestCount = patientAccessRequests.filter((r) => r.status === "PENDING").length;
 
   const staffMatch = authUser && !loading ? staffForAuthUser(authUser, staffUsers) : undefined;
   const sessionUser = staffMatch || staffUsers.find((u) => u.id === sessionUserId);
@@ -880,11 +883,19 @@ export default function App() {
   useEffect(() => {
     if (activeTab !== "platform" || !isFirebaseConfigured()) return;
     for (const h of hospitals) {
+      const hospitalBranches = branches.filter((b) => b.hospitalId === h.id);
+      void publishClinicCenterToSuwasiri({
+        hospitalId: h.id,
+        name: h.name,
+        region: h.district || "Colombo",
+        address: hospitalBranches[0]?.address,
+        branchName: hospitalBranches[0]?.name,
+      });
       void republishStaffDoctorsToSuwasiri({
         staff: staffDirectory.filter((s) => s.hospitalId === h.id),
         hospitalName: h.name,
         hospitalId: h.id,
-        branches: branches.filter((b) => b.hospitalId === h.id),
+        branches: hospitalBranches,
         region: h.district || "Colombo",
       });
     }
@@ -1645,9 +1656,15 @@ export default function App() {
   ) => {
     const hid = opts?.hospitalId || sessionHospitalId || HOSPITAL_PRIMECARE;
     const bid = opts?.branchId || sessionBranchId || BRANCH_COLOMBO;
+    const fromBookings = [...suwasiriAppointments, ...clinicAppointments]
+      .filter((a) => a.patientId === patient.id)
+      .map((a) => a.patientName);
+    const realName =
+      pickRealPatientName(patient.name, ...fromBookings, patient.email?.split("@")[0]) ||
+      patient.name;
     return {
       id: patient.id,
-      name: patient.name,
+      name: realName,
       age: patient.age,
       gender: patient.gender,
       bloodType: patient.bloodType,
@@ -1695,6 +1712,7 @@ export default function App() {
     const saved = {
       ...patient,
       ...(data.patient || {}),
+      name: pickRealPatientName(patient.name, data.patient?.name) || data.patient?.name || patient.name,
       labResults: patient.labResults?.length ? patient.labResults : (data.patient?.labResults || []),
       vaccineRecords: patient.vaccineRecords?.length ? patient.vaccineRecords : (data.patient?.vaccineRecords || []),
     } as Patient;
@@ -1759,16 +1777,25 @@ export default function App() {
     setHealthIdLookupError("");
     try {
       const barcode = patient.suwasiriBarcode || barcodeSearchText.trim().toUpperCase();
-      const saved = await persistLookedUpHealthId(patient, barcode);
-      setHealthIdPreview({
+      const named = {
         ...patient,
+        name:
+          pickRealPatientName(
+            patient.name,
+            ...suwasiriAppointments.filter((a) => a.patientId === patient.id).map((a) => a.patientName)
+          ) || patient.name,
+      };
+      const saved = await persistLookedUpHealthId(named, barcode);
+      setHealthIdPreview({
+        ...named,
         ...saved,
-        labResults: saved.labResults?.length ? saved.labResults : patient.labResults,
-        vaccineRecords: saved.vaccineRecords?.length ? saved.vaccineRecords : patient.vaccineRecords,
+        name: pickRealPatientName(named.name, saved.name) || named.name,
+        labResults: saved.labResults?.length ? saved.labResults : named.labResults,
+        vaccineRecords: saved.vaccineRecords?.length ? saved.vaccineRecords : named.vaccineRecords,
       });
       setHealthIdSaved(true);
       setFocusedSearchPatientId(saved.id);
-      setSearchQuery(saved.name || patient.name);
+      setSearchQuery(pickRealPatientName(named.name, saved.name) || named.name);
     } catch (err: any) {
       setHealthIdLookupError("Could not save this Unique Health ID file: " + (err.message || err));
     } finally {
@@ -2510,15 +2537,28 @@ export default function App() {
           comment: accessActionComment.trim(),
           requestedBy: sessionUser?.name || currentRole,
           hospitalId: sessionHospitalId,
+          patientSnapshot: {
+            id: accessActionPatient.id,
+            name: accessActionPatient.name,
+            age: accessActionPatient.age,
+            gender: accessActionPatient.gender,
+            phone: accessActionPatient.phone,
+            email: accessActionPatient.email,
+            hospitalId: accessActionPatient.hospitalId || sessionHospitalId,
+            branchId: accessActionPatient.branchId || sessionBranchId,
+            suwasiriBarcode: accessActionPatient.suwasiriBarcode,
+          },
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Request failed");
       if (data.state?.patients) setPatients(data.state.patients);
       if (data.state?.patientAccessRequests) setPatientAccessRequests(data.state.patientAccessRequests);
+      if (data.state?.notifications) setNotifications(data.state.notifications);
+      if (data.state?.clinicMessages) setClinicMessages(data.state.clinicMessages);
       setAccessActionPatient(null);
       setAccessActionComment("");
-      alert("Sent to admin for approval. The patient stays visible until an administrator reviews this request.");
+      alert("Sent to the Operations & Governance portal. Platform Console will show a notification for Super Admin to approve or reject.");
     } catch (err: any) {
       alert(err.message || "Could not submit request.");
     }
@@ -2534,6 +2574,7 @@ export default function App() {
       const data = await res.json();
       if (data.state?.patients) setPatients(data.state.patients);
       if (data.state?.patientAccessRequests) setPatientAccessRequests(data.state.patientAccessRequests);
+      if (data.state?.notifications) setNotifications(data.state.notifications);
     } catch (err) {
       console.error(err);
     }
@@ -3381,6 +3422,11 @@ export default function App() {
             >
               <ShieldAlert className="w-4 h-4 mr-3 text-amber-600" />
               <span className="text-[13px] font-medium">Platform Console</span>
+              {pendingAccessRequestCount > 0 && (
+                <span className="ml-auto bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">
+                  {pendingAccessRequestCount}
+                </span>
+              )}
             </button>
           )}
 
@@ -4383,7 +4429,7 @@ export default function App() {
                 {/* Grids list */}
                 {(isPlatformSA || Boolean(activeRole?.canManageUsers)) && patientAccessRequests.filter((r) => r.status === "PENDING" && r.hospitalId === sessionHospitalId).length > 0 && (
                   <div className="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-2">
-                    <h3 className="text-xs font-bold text-amber-900 uppercase">Admin approval — delete / block requests</h3>
+                    <h3 className="text-xs font-bold text-amber-900 uppercase">Also queued on Operations & Governance (Platform Console)</h3>
                     {patientAccessRequests.filter((r) => r.status === "PENDING" && r.hospitalId === sessionHospitalId).map((r) => (
                       <div key={r.id} className="bg-white border rounded p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
                         <div>
@@ -5986,6 +6032,8 @@ export default function App() {
                 roles={roleDefs}
                 branches={branches}
                 staffDirectory={staffDirectory}
+                accessRequests={patientAccessRequests}
+                onReviewAccessRequest={(id, status) => void reviewPatientAccessRequest(id, status)}
                 onCreateHospital={async (name, district) => {
                   const res = await fetch("/api/tenancy/hospitals", {
                     method: "POST",
@@ -5998,15 +6046,21 @@ export default function App() {
                     if (data.roles) setRoleDefs((prev) => [...prev, ...data.roles]);
                     if (data.branch) setBranches((prev) => [...prev, data.branch]);
                     try {
-                      await publishClinicCenterToSuwasiri({
+                      const synced = await publishClinicCenterToSuwasiri({
                         hospitalId: data.hospital.id,
                         name: data.hospital.name,
                         region: data.hospital.district || district || "Colombo",
                         address: data.branch?.address,
                         branchName: data.branch?.name,
                       });
+                      if (synced) {
+                        alert(`${data.hospital.name} is on the Suwasiri app. Patients can search this clinic name on Doctors and book after you add a doctor.`);
+                      } else {
+                        alert("Clinic saved here, but it did not reach the Suwasiri app. Sign in with Firebase staff email and try again.");
+                      }
                     } catch (err) {
                       console.warn("Could not publish clinic centre to Suwasiri:", err);
+                      alert("Clinic saved here, but Suwasiri sync failed. Check the Firebase connection and try again.");
                     }
                   }
                 }}
@@ -6044,11 +6098,11 @@ export default function App() {
                     const branch = branches.find((b) => payload.branchIds?.includes(b.id))
                       || branches.find((b) => b.hospitalId === payload.hospitalId);
                     try {
-                      await publishClinicDoctorToSuwasiri({
+                      const doctorSynced = await publishClinicDoctorToSuwasiri({
                         staffId: data.staff.id,
                         name: payload.name,
                         specialty: payload.specialty || data.staff.specialty || "General Practitioner",
-                        hospitalName: branch?.name || hospital?.name || "GP Care Clinic",
+                        hospitalName: hospital?.name || "GP Care Clinic",
                         hospitalId: payload.hospitalId,
                         branchName: branch?.name,
                         branchId: branch?.id,
@@ -6065,12 +6119,19 @@ export default function App() {
                         address: branch?.address,
                         branchName: branch?.name,
                       });
+                      if (doctorSynced) {
+                        alert(`${payload.name} is listed at ${hospital?.name || "this clinic"} in the Suwasiri app. Patients can search the clinic or doctor and book available times (booked slots stay locked).`);
+                      } else {
+                        alert("Doctor saved here, but they did not reach the Suwasiri app. Sign in with Firebase staff email and try again.");
+                      }
                     } catch (err) {
                       console.warn("Could not publish clinic doctor to Suwasiri:", err);
+                      alert("Doctor saved here, but Suwasiri sync failed. Check the Firebase connection and try again.");
                     }
                   }
                 }}
                 onRemoveStaff={async ({ staffId, hospitalId }) => {
+                  const leaving = staffDirectory.find((s) => s.id === staffId);
                   const res = await fetch(`/api/tenancy/staff/${encodeURIComponent(staffId)}`, {
                     method: "DELETE",
                     headers: { "Content-Type": "application/json" },
@@ -6083,6 +6144,18 @@ export default function App() {
                   }
                   if (data.staffDirectory) setStaffDirectory(data.staffDirectory);
                   if (data.memberships) setMemberships(data.memberships);
+                  if (leaving && /doctor|medical officer/i.test(leaving.role || "")) {
+                    try {
+                      await unpublishClinicDoctorFromSuwasiri({
+                        staffId: leaving.id,
+                        doctorName: leaving.name,
+                        hospitalId,
+                      });
+                    } catch (err) {
+                      console.warn("Could not hide clinic doctor on Suwasiri:", err);
+                    }
+                  }
+                  alert(`${leaving?.name || "Staff"} has been removed from this clinic and will no longer appear in Practice Manager, booking lists, or the Suwasiri app.`);
                 }}
               />
             )}
@@ -6460,7 +6533,7 @@ export default function App() {
               {accessActionType === "BLOCK" ? "Block" : "Delete"} {accessActionPatient.name}
             </h3>
             <p className="text-xs text-slate-600">
-              Reception must explain what happened. An administrator at this clinic must approve before the file is removed or blocked.
+              Reception must explain what happened. This request is sent to the <strong>Operations & Governance</strong> portal (Platform Console) as a notification. Super Admin must approve before the file is removed or blocked.
             </p>
             <textarea
               rows={4}
@@ -6474,7 +6547,7 @@ export default function App() {
                 Cancel
               </button>
               <button type="button" onClick={() => void submitPatientAccessRequest()} className="px-3 py-1.5 text-xs font-bold bg-[#00334f] text-white rounded">
-                Send to admin
+                Send to Operations portal
               </button>
             </div>
           </div>

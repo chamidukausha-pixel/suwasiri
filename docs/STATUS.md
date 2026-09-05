@@ -94,7 +94,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Telehealth right rail is the clinical consultation room (not Active GP room); View Clinical Hub opens history and syncs to that patient’s Suwasiri file
 - [x] Telehealth e-Rx: view, download, and print after medicines are issued; still writes Suwasiri Call E-Prescription
 - [x] Unique Health ID Sync to Portal is clinic-scoped (PrimeCare vs other hospitals); Chamidu `SW3C6F5B5A27` / Sakuni `SW6CF9340271`; hashed dummy barcode patients are purged and never generated
-- [x] Reception delete/block patient requires a comment and admin approval
+- [x] Reception **Delete** / **Block** on Patient Clinical Records needs a comment and is sent to **Operations & Governance** (Platform Console) as a notification. Super Admin approves or rejects there. The file stays until approved.
 - [x] Receipts & Invoices: **Cash Settle** on booked (and issued) invoices writes a clinic bill and Firestore `paymentStatus: SETTLED` / `paymentMethod: Cash` so status shows **Settled**. Suwasiri app card/debit or manual bank slip writes `paidBySuwasiri` so status shows **Paid by Suwasiri App**. Reception clicks a PDF or photo slip to view it. Age and gender sit under the patient name on Lobby, Patient Clinical Records, Unique Health ID sync, and invoices (from the clinic file or the booking).
 - [x] Sample Dispatch Hub delete with yes/no confirm; Team Secure Chat is shared by all clinic staff
 - [x] Telehealth: day’s video bookings only; click name → Active Clinical Consultation Room; Call start from 2 minutes before the slot
@@ -110,7 +110,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Clinical calculators save vitals/details onto that patient’s visit history
 - [x] Telehealth: click booked name fills Active Clinical Consultation Room (replaces generic “Patient”); View Clinical Hub opens that file
 - [x] Receipts & Invoices: calendar date lists that day’s booked patients; the billing panel scrolls; unpaid invoices are highlighted (amber / overdue red) and listed first
-- [x] Platform Console: doctor specialty required; published to Suwasiri Doctors tab under clinic + category
+- [x] Platform Console: new medical centre + doctor (with specialty) sync to Suwasiri Doctors (`clinic_centers` / `clinic_doctors`). Patients search clinic or doctor name, then book available vs booked times. **Remove (resigned)** deletes the doctor from GP Care and hides them on Suwasiri.
 - [x] Doctor Dashboard: Appointments / Waiting / Telehealth colourful cards stay on the doctor page (do not open receptionist Lobby); Completed Consultations uses a matching green gradient; Pathology, Recalls, Documents, Clinical Alerts, Lobby Active Queue, and Check In removed
 - [x] GP Exam Room: Clinical Record tabs (Summary through Billing) sit under the patient name; View Clinical Hub banner and vitals-notes box removed; e-Rx panel kept below
 - [x] GP Exam Room: colourful left-nav boxes (no Summary / Medications / My Health Record); click opens that section on the right; allergies and other file updates show under the patient name and persist; doctor can book from Appointments onto the clinic calendar

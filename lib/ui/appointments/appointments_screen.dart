@@ -42,6 +42,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     super.didUpdateWidget(oldWidget);
     if (widget.isActive && !oldWidget.isActive) {
       _applyPendingIntent();
+      _refresh();
     }
   }
 
@@ -71,7 +72,10 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
 
   List<Doctor> get _doctorsForView {
     Iterable<Doctor> list = _doctors;
-    if (_category != 'all') {
+    final nameQ = _nameCtrl.text.trim().toLowerCase();
+    final clinicQ = _clinicCtrl.text.trim().toLowerCase();
+    final searching = nameQ.isNotEmpty || clinicQ.isNotEmpty;
+    if (_category != 'all' && !searching) {
       list = list.where(
         (d) =>
             !d.isClinicOnly &&
@@ -79,8 +83,6 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       );
     }
 
-    final nameQ = _nameCtrl.text.trim().toLowerCase();
-    final clinicQ = _clinicCtrl.text.trim().toLowerCase();
     final district = _district;
 
     list = list.where((d) {
@@ -89,7 +91,8 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       }
       if (clinicQ.isNotEmpty &&
           !d.hospital.toLowerCase().contains(clinicQ) &&
-          !d.address.toLowerCase().contains(clinicQ)) {
+          !d.address.toLowerCase().contains(clinicQ) &&
+          !d.name.toLowerCase().contains(clinicQ)) {
         return false;
       }
       if (district != null &&
@@ -190,7 +193,9 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
           const SizedBox(height: 8),
           TextField(
             controller: _nameCtrl,
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => setState(() {
+              if (_nameCtrl.text.trim().isNotEmpty) _category = 'all';
+            }),
             decoration: InputDecoration(
               labelText: l.t('searchByClinician'),
               hintText: l.t('clinicianHint'),
@@ -202,7 +207,9 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
           const SizedBox(height: 10),
           TextField(
             controller: _clinicCtrl,
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => setState(() {
+              if (_clinicCtrl.text.trim().isNotEmpty) _category = 'all';
+            }),
             decoration: InputDecoration(
               labelText: l.t('searchByClinicName'),
               hintText: l.t('clinicNameHint'),
