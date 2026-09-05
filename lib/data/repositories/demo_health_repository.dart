@@ -633,6 +633,7 @@ class DemoHealthRepository implements HealthRepository {
       patientAge: patientAge,
       patientGender: patientGender,
     );
+    final all = await _allAppointments();
     final next = [...all, appt];
     await _prefs.setString(
       _kAppts,
