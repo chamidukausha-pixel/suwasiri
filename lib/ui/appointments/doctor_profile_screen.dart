@@ -8,6 +8,7 @@ import '../../localization/app_localizations.dart';
 import 'clinic_practice.dart';
 import 'doctor_booking_flow.dart';
 import 'doctor_booking_shared.dart';
+import 'doctor_slot_board.dart';
 import 'practice_availability.dart';
 
 class DoctorProfileScreen extends StatefulWidget {
@@ -37,20 +38,26 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
   }
 
   Future<void> _loadNext() async {
-    final health = context.read<HealthRepository>();
-    final next = await nextSlotForDoctor(health, widget.doctor);
-    if (!mounted) return;
-    setState(() {
-      _nextSlot = next;
-      _loading = false;
-    });
+    try {
+      final health = context.read<HealthRepository>();
+      final next = await nextSlotForDoctor(health, widget.doctor);
+      if (!mounted) return;
+      setState(() {
+        _nextSlot = next;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
   }
 
-  Future<void> _book() async {
+  Future<void> _book({DateTime? slot}) async {
     await startDoctorBooking(
       context,
       doctor: widget.doctor,
       initialVisitReason: widget.initialVisitReason,
+      initialSlot: slot,
     );
     if (mounted) await _loadNext();
   }
@@ -132,11 +139,9 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          BookAppointmentButton(onPressed: _book),
+          BookAppointmentButton(onPressed: () => _book()),
           const SizedBox(height: 10),
-          if (_loading)
-            const Center(child: CircularProgressIndicator())
-          else if (_nextSlot != null)
+          if (_nextSlot != null)
             Text(
               '${l.t('appointmentsAvailableFrom')} ${formatNextAvailable(_nextSlot!)}',
               textAlign: TextAlign.center,
@@ -144,7 +149,17 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                 color: AppColors.trustBlueDark,
                 fontSize: 13,
               ),
+            )
+          else if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
             ),
+          const SizedBox(height: 18),
+          DoctorSlotBoard(
+            doctor: d,
+            onSelectSlot: (slot) => _book(slot: slot),
+          ),
           const Divider(height: 32),
           if (widget.practice.placeLabel.isNotEmpty) ...[
             ClinicContactRow(

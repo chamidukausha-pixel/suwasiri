@@ -38,9 +38,11 @@ class _ClinicHubScreenState extends State<ClinicHubScreen> {
   Future<void> _loadAvailability() async {
     final health = context.read<HealthRepository>();
     final map = <String, DateTime?>{};
-    for (final d in widget.practice.practitioners) {
-      map[d.id] = await nextSlotForDoctor(health, d);
-    }
+    try {
+      for (final d in widget.practice.practitioners) {
+        map[d.id] = await nextSlotForDoctor(health, d);
+      }
+    } catch (_) {}
     if (!mounted) return;
     setState(() {
       _nextByDoctor

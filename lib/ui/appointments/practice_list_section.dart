@@ -7,11 +7,10 @@ import '../../data/models/appointment.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
-import 'booking_checkout_flow.dart';
 import 'clinic_hub_screen.dart';
 import 'clinic_practice.dart';
+import 'doctor_booking_flow.dart';
 import 'doctor_booking_shared.dart';
-import 'patient_type_sheet.dart';
 import 'practice_availability.dart';
 
 class PracticeListSection extends StatefulWidget {
@@ -32,7 +31,6 @@ class PracticeListSection extends StatefulWidget {
 
 class _PracticeListSectionState extends State<PracticeListSection> {
   final _previewByKey = <String, PracticeSlotPreview?>{};
-  bool _loading = true;
 
   List<ClinicPractice> get _practices => groupDoctorsIntoPractices(widget.doctors);
 
@@ -51,18 +49,18 @@ class _PracticeListSectionState extends State<PracticeListSection> {
   }
 
   Future<void> _loadPreviews() async {
-    setState(() => _loading = true);
     final health = context.read<HealthRepository>();
     final map = <String, PracticeSlotPreview?>{};
-    for (final p in _practices) {
-      map[p.key] = await nextAvailabilityForPractice(health, p);
-    }
+    try {
+      for (final p in _practices) {
+        map[p.key] = await nextAvailabilityForPractice(health, p);
+      }
+    } catch (_) {}
     if (!mounted) return;
     setState(() {
       _previewByKey
         ..clear()
         ..addAll(map);
-      _loading = false;
     });
   }
 
@@ -78,9 +76,7 @@ class _PracticeListSectionState extends State<PracticeListSection> {
   }
 
   Future<void> _bookSlot(PracticeSlotPreview preview) async {
-    final visitType = await showPatientTypeSheet(context, doctor: preview.doctor);
-    if (visitType == null || !mounted) return;
-    await showBookingCheckoutFlow(
+    await startDoctorBooking(
       context,
       doctor: preview.doctor,
       initialVisitReason: widget.initialVisitReason,
@@ -132,11 +128,6 @@ class _PracticeListSectionState extends State<PracticeListSection> {
         const SizedBox(height: 8),
         if (practices.isEmpty)
           EmptyHint(l.t('noDoctorsFound'))
-        else if (_loading)
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(child: CircularProgressIndicator()),
-          )
         else
           ...practices.map(
             (p) => Padding(

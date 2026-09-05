@@ -175,7 +175,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
   late DateTime _selectedDate;
   late TimeOfDay _selectedTime;
   bool _paying = false;
-  bool _slotsLoading = true;
+  bool _slotsLoading = false;
   List<DateTime> _bookedSlots = const [];
   StreamSubscription<List<DateTime>>? _bookedSub;
   String _visitReason = 'Follow up';
@@ -263,6 +263,9 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
         _slotsLoading = false;
         _ensureSelectedTimeAvailable();
       });
+    }, onError: (_) {
+      if (!mounted) return;
+      setState(() => _slotsLoading = false);
     });
   }
 

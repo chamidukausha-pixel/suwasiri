@@ -998,6 +998,11 @@ export default function App() {
     };
     publishedClinicDoctors.forEach(add);
     workingDoctors.forEach(add);
+    if (list.length === 0) {
+      publishedClinicDoctors.forEach((d) => {
+        if (d?.name && d.active !== false) list.push(d);
+      });
+    }
     return list;
   })();
   const tenantAppointments = appointments.filter((a) => {
@@ -1110,10 +1115,16 @@ export default function App() {
     setSelectedClinicDate(dateKey);
     setNewAptDate(dateKey);
   };
+  const calendarDoctors =
+    registeredDoctors.length > 0
+      ? registeredDoctors
+      : publishedClinicDoctors.filter((d) => d?.name && d.active !== false);
   const calendarSlotDoctor =
     sessionDoctor && !isFrontDeskStaff
       ? sessionDoctor
-      : registeredDoctors.find((d) => d.id === calendarDoctorId) || registeredDoctors[0];
+      : calendarDoctors.find((d) => d.id === calendarDoctorId) ||
+        calendarDoctors[0] ||
+        (!isFrontDeskStaff ? staffUserAsDoctor(sessionUser, sessionHospitalId) : undefined);
   const clinicCalendar = (
     <div className="space-y-3">
       <ClinicMonthCalendar
@@ -1126,32 +1137,30 @@ export default function App() {
         onChangeMonth={(year, month) => setCalendarMonth({ year, month })}
         onJumpToToday={jumpToToday}
       />
-      {calendarSlotDoctor && (
-        <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-xs space-y-2">
-          {!(sessionDoctor && !isFrontDeskStaff) && registeredDoctors.length > 1 && (
-            <select
-              value={calendarSlotDoctor.id}
-              onChange={(e) => setCalendarDoctorId(e.target.value)}
-              className="w-full p-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
-            >
-              {registeredDoctors.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          )}
-          <p className="text-[10px] text-slate-500 font-semibold">
-            Click a date to see available and booked times (Suwasiri App + GP Care).
-          </p>
-          <DoctorDaySlotsPanel
-            doctor={calendarSlotDoctor}
-            dateKey={selectedClinicDate}
-            appointments={appointments}
-            selectable={false}
-          />
-        </div>
-      )}
+      <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-xs space-y-2">
+        {!(sessionDoctor && !isFrontDeskStaff) && calendarDoctors.length > 1 && (
+          <select
+            value={calendarSlotDoctor?.id || ""}
+            onChange={(e) => setCalendarDoctorId(e.target.value)}
+            className="w-full p-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
+          >
+            {calendarDoctors.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <p className="text-[10px] text-slate-500 font-semibold">
+          Click a date to see available and booked times (Suwasiri App + GP Care).
+        </p>
+        <DoctorDaySlotsPanel
+          doctor={calendarSlotDoctor}
+          dateKey={selectedClinicDate}
+          appointments={appointments}
+          selectable={false}
+        />
+      </div>
     </div>
   );
 

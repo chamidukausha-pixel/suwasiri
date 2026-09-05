@@ -22,7 +22,6 @@ class AppointmentsScreen extends StatefulWidget {
 }
 
 class _AppointmentsScreenState extends State<AppointmentsScreen> {
-  final _searchCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
   final _clinicCtrl = TextEditingController();
   List<Doctor> _doctors = [];
@@ -80,7 +79,6 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       );
     }
 
-    final combined = _searchCtrl.text.trim().toLowerCase();
     final nameQ = _nameCtrl.text.trim().toLowerCase();
     final clinicQ = _clinicCtrl.text.trim().toLowerCase();
     final district = _district;
@@ -99,12 +97,6 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
           d.region.toLowerCase() != district.toLowerCase()) {
         return false;
       }
-      if (combined.isNotEmpty) {
-        final hay =
-            '${d.name} ${d.hospital} ${d.region} ${d.address} ${d.specialty}'
-                .toLowerCase();
-        if (!hay.contains(combined)) return false;
-      }
       return true;
     });
 
@@ -122,7 +114,6 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
 
   @override
   void dispose() {
-    _searchCtrl.dispose();
     _nameCtrl.dispose();
     _clinicCtrl.dispose();
     super.dispose();
@@ -152,10 +143,6 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
                       ),
                 ),
               ),
-              TextButton(
-                onPressed: _showAllCategories,
-                child: Text(l.t('seeAll')),
-              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -163,10 +150,18 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
             height: 132,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              itemCount: DoctorCatalog.browseCategories.length,
+              itemCount: DoctorCatalog.browseCategories.length + 1,
               separatorBuilder: (_, _) => const SizedBox(width: 12),
               itemBuilder: (context, i) {
-                final cat = DoctorCatalog.browseCategories[i];
+                if (i == 0) {
+                  final selected = _category == 'all';
+                  return _SeeAllCategoryTile(
+                    label: l.t('seeAll'),
+                    selected: selected,
+                    onTap: _showAllCategories,
+                  );
+                }
+                final cat = DoctorCatalog.browseCategories[i - 1];
                 final selected = _category == cat.id;
                 return _CategoryTile(
                   label: l.t(cat.labelKey),
@@ -241,17 +236,6 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
             ],
             onChanged: (v) => setState(() => _district = v),
           ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _searchCtrl,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              hintText: l.t('searchDoctorClinicRegion'),
-              prefixIcon: const Icon(Icons.search_rounded),
-              filled: true,
-              fillColor: AppColors.surface,
-            ),
-          ),
           const SizedBox(height: 20),
           if (_loading)
             const Padding(
@@ -267,6 +251,56 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
               initialVisitReason: _pendingVisitReason,
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _SeeAllCategoryTile extends StatelessWidget {
+  const _SeeAllCategoryTile({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Ink(
+          width: 102,
+          height: 128,
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.trustBlueSoft
+                : const Color(0xFFF4F5F9),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: selected
+                  ? AppColors.trustBlue.withValues(alpha: 0.65)
+                  : AppColors.border,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.trustBlueDark,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

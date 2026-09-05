@@ -1,3 +1,4 @@
+import '../models/clinic_patient_registration.dart';
 import '../models/app_notification.dart';
 import '../models/appointment.dart';
 import '../models/sos_location.dart';
@@ -16,6 +17,12 @@ abstract class HealthRepository {
   Stream<List<VaccineHistoryEntry>> watchVaccineHistory(String patientId);
   Future<void> syncLankaLab(String patientId);
   Future<void> syncGpCare(String patientId);
+
+  /// New-patient clinic registration questionnaire → Firestore + GP Care profile sync.
+  Future<void> registerPatientAtClinic({
+    required String patientId,
+    required ClinicPatientRegistration registration,
+  });
 
   /// GP issues e-prescription during a telehealth session (Lanka GP Care sync).
   Future<List<Prescription>> issueTelehealthPrescription({

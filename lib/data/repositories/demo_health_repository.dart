@@ -11,6 +11,7 @@ import '../catalogs/patient_health_samples.dart';
 import '../catalogs/vaccine_catalog.dart';
 import '../models/app_notification.dart';
 import '../models/appointment.dart';
+import '../models/clinic_patient_registration.dart';
 import '../models/sos_location.dart';
 import '../models/vaccine_models.dart';
 import '../models/vault_report.dart';
@@ -351,11 +352,19 @@ class DemoHealthRepository implements HealthRepository {
         id: _uuid.v4(),
         title: 'Lanka GP Care sync',
         body:
-            'Vaccine history sent to Sri Lankan GP Care. Doctor-issued e-prescriptions stay in Vault → E-Prescription.',
+            'Patient profile, vaccines, allergies, pathology and imaging synced to GP Care.',
         timestamp: DateTime.now(),
         type: NotificationPayloadType.sync,
       ),
     );
+  }
+
+  @override
+  Future<void> registerPatientAtClinic({
+    required String patientId,
+    required ClinicPatientRegistration registration,
+  }) async {
+    await syncGpCare(patientId);
   }
 
   @override

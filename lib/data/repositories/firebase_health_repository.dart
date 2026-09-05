@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -11,6 +9,7 @@ import '../catalogs/patient_health_samples.dart';
 import '../catalogs/vaccine_catalog.dart';
 import '../models/app_notification.dart';
 import '../models/appointment.dart';
+import '../models/clinic_patient_registration.dart';
 import '../models/sos_location.dart';
 import '../models/vaccine_models.dart';
 import '../models/vault_report.dart';
@@ -331,16 +330,43 @@ class FirebaseHealthRepository implements HealthRepository {
         'syncedAt': now,
       }, SetOptions(merge: true));
     }
+    try {
+      final vaultSnap =
+          await _vault.where('patientId', isEqualTo: patientId).get();
+      for (final doc in vaultSnap.docs) {
+        await doc.reference.set({
+          'gpCareSyncedAt': now,
+          'source': doc.data()['source'] ?? 'suwasiri_app',
+        }, SetOptions(merge: true));
+      }
+    } catch (_) {}
     await pushNotification(
       AppNotification(
         id: _uuid.v4(),
         title: 'Lanka GP Care sync',
         body:
-            'Vaccine history sent to Sri Lankan GP Care. Doctor-issued e-prescriptions stay in Vault → E-Prescription.',
+            'Patient profile, vaccine history, allergies, pathology and imaging reports synced to Sri Lankan GP Care.',
         timestamp: DateTime.now(),
         type: NotificationPayloadType.sync,
       ),
     );
+  }
+
+  @override
+  Future<void> registerPatientAtClinic({
+    required String patientId,
+    required ClinicPatientRegistration registration,
+  }) async {
+    final key = registration.hospitalId.isNotEmpty
+        ? registration.hospitalId
+        : registration.hospitalName
+            .toLowerCase()
+            .replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+    await _db.collection('users').doc(patientId).set({
+      'clinicRegistrations': {key: registration.toMap()},
+      'gpCareProfileSyncedAt': DateTime.now().toIso8601String(),
+    }, SetOptions(merge: true));
+    await syncGpCare(patientId);
   }
 
   @override
@@ -636,17 +662,21 @@ class FirebaseHealthRepository implements HealthRepository {
     String doctorId, {
     String doctorName = '',
   }) async {
-    final snap = await _appointments.get();
-    QuerySnapshot<Map<String, dynamic>>? locks;
     try {
-      locks = await _appointmentSlots.get();
-    } catch (_) {}
-    return _bookedForDoctor(
-      doctorId: doctorId,
-      doctorName: doctorName,
-      appointmentDocs: snap.docs,
-      lockDocs: locks?.docs ?? const [],
-    );
+      final snap = await _appointments.get();
+      QuerySnapshot<Map<String, dynamic>>? locks;
+      try {
+        locks = await _appointmentSlots.get();
+      } catch (_) {}
+      return _bookedForDoctor(
+        doctorId: doctorId,
+        doctorName: doctorName,
+        appointmentDocs: snap.docs,
+        lockDocs: locks?.docs ?? const [],
+      );
+    } catch (_) {
+      return const [];
+    }
   }
 
   @override
@@ -654,46 +684,18 @@ class FirebaseHealthRepository implements HealthRepository {
     String doctorId, {
     String doctorName = '',
   }) {
-    late StreamController<List<DateTime>> controller;
-    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? apptSub;
-    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? lockSub;
-    QuerySnapshot<Map<String, dynamic>>? appts;
-    QuerySnapshot<Map<String, dynamic>>? locks;
-
-    void emit() {
-      if (controller.isClosed) return;
-      controller.add(
-        _bookedForDoctor(
-          doctorId: doctorId,
-          doctorName: doctorName,
-          appointmentDocs: appts?.docs ?? const [],
-          lockDocs: locks?.docs ?? const [],
-        ),
+    return _appointments.snapshots().asyncMap((snap) async {
+      QuerySnapshot<Map<String, dynamic>>? locks;
+      try {
+        locks = await _appointmentSlots.get();
+      } catch (_) {}
+      return _bookedForDoctor(
+        doctorId: doctorId,
+        doctorName: doctorName,
+        appointmentDocs: snap.docs,
+        lockDocs: locks?.docs ?? const [],
       );
-    }
-
-    controller = StreamController<List<DateTime>>(
-      onListen: () {
-        apptSub = _appointments.snapshots().listen((snap) {
-          appts = snap;
-          emit();
-        }, onError: (_) {
-          emit();
-        });
-        lockSub = _appointmentSlots.snapshots().listen((snap) {
-          locks = snap;
-          emit();
-        }, onError: (_) {
-          locks = null;
-          emit();
-        });
-      },
-      onCancel: () async {
-        await apptSub?.cancel();
-        await lockSub?.cancel();
-      },
-    );
-    return controller.stream;
+    });
   }
 
   @override

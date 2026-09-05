@@ -343,18 +343,7 @@ class BookingConfirmStep extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
-                if (slotsLoading)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: coral,
-                      ),
-                    ),
-                  )
-                else
-                  GridView.builder(
+                GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: times.length,
@@ -429,7 +418,7 @@ class BookingConfirmStep extends StatelessWidget {
                     },
                   ),
                 const SizedBox(height: 16),
-                if (!slotsLoading && times.any(_taken)) ...[
+                if (times.any(_taken)) ...[
                   const Text(
                     'BOOKED TIMES',
                     style: TextStyle(
