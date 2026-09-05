@@ -177,46 +177,32 @@ class _HomeScreenState extends State<HomeScreen> {
             height: 132,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              itemCount: 4,
+              itemCount: 3,
               separatorBuilder: (_, _) => const SizedBox(width: 12),
               itemBuilder: (context, i) {
                 switch (i) {
                   case 0:
                     return _ServiceNeedCard(
-                      icon: Icons.medication_outlined,
-                      iconColor: const Color(0xFF334155),
-                      accent: const Color(0xFF22C55E),
+                      icon: Icons.medication_rounded,
+                      iconBg: const Color(0xFF22C55E),
                       label: l.t('repeatPrescription'),
-                      highlight: true,
                       onTap: () => _openDoctorsForService(
                         visitReasonKey: 'visitReasonRepeatPrescription',
                       ),
                     );
                   case 1:
                     return _ServiceNeedCard(
-                      icon: Icons.description_outlined,
-                      iconColor: AppColors.trustBlueDark,
-                      accent: AppColors.trustBlue,
+                      icon: Icons.description_rounded,
+                      iconBg: AppColors.trustBlue,
                       label: l.t('medicalCertificate'),
                       onTap: () => _openDoctorsForService(
                         visitReasonKey: 'visitReasonMedicalCertificate',
                       ),
                     );
-                  case 2:
-                    return _ServiceNeedCard(
-                      icon: Icons.group_outlined,
-                      iconColor: AppColors.trustBlueDark,
-                      accent: const Color(0xFF22C55E),
-                      label: l.t('specialistReferral'),
-                      onTap: () => _openDoctorsForService(
-                        visitReasonKey: 'visitReasonSpecialistReferral',
-                      ),
-                    );
                   default:
                     return _ServiceNeedCard(
-                      icon: Icons.analytics_outlined,
-                      iconColor: AppColors.trustBlueDark,
-                      accent: AppColors.trustBlue,
+                      icon: Icons.analytics_rounded,
+                      iconBg: const Color(0xFF8B5CF6),
                       label: l.t('reviewResults'),
                       onTap: () => _openDoctorsForService(
                         visitReasonKey: 'visitReasonReviewResults',
@@ -319,19 +305,15 @@ class _HomeScreenState extends State<HomeScreen> {
 class _ServiceNeedCard extends StatelessWidget {
   const _ServiceNeedCard({
     required this.icon,
-    required this.iconColor,
-    required this.accent,
+    required this.iconBg,
     required this.label,
     required this.onTap,
-    this.highlight = false,
   });
 
   final IconData icon;
-  final Color iconColor;
-  final Color accent;
+  final Color iconBg;
   final String label;
   final VoidCallback onTap;
-  final bool highlight;
 
   @override
   Widget build(BuildContext context) {
@@ -351,18 +333,18 @@ class _ServiceNeedCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: AppColors.trustBlueSoft.withValues(alpha: 0.65),
-                  shape: BoxShape.circle,
+                  color: iconBg.withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(icon, color: highlight ? accent : iconColor, size: 24),
+                child: Icon(icon, color: Colors.white, size: 24),
               ),
               const Spacer(),
               Text(
                 label,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: highlight ? AppColors.trustBlue : AppColors.trustBlueDark,
+                style: const TextStyle(
+                  color: AppColors.trustBlueDark,
                   fontWeight: FontWeight.w800,
                   fontSize: 13,
                   height: 1.2,

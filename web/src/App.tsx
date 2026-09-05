@@ -104,6 +104,7 @@ import {
   subscribeSuwasiriAppointments,
   suwasiriDoctorCatalogId,
   updateSuwasiriAppointmentStatus,
+  updateSuwasiriAppointmentPayment,
   doctorIdentityIds,
   doctorPersonKey,
   matchSessionDoctor,
@@ -126,7 +127,19 @@ import {
   subscribeSuwasiriPatientCharts,
   type SuwasiriChartPatch,
 } from "./sync/suwasiriPatientChart";
+import {
+  appointmentAgeGender,
+  invoiceAppointmentId,
+  invoicePaymentLabel,
+  isInvoiceSettled,
+  isPdfReceipt,
+} from "./sync/suwasiriBilling";
 import { subscribeSuwasiriVaccinePatients } from "./sync/suwasiriVaccinations";
+import {
+  applyClinicRegistration,
+  subscribeClinicRegistrations,
+  type ClinicRegistrationPatch,
+} from "./sync/suwasiriClinicRegistrations";
 import { pushSuwasiriNotification } from "./sync/suwasiriNotifications";
 import { syncPatientAllergiesToSuwasiri } from "./sync/suwasiriAllergies";
 import { sampleCategoryForTest } from "./catalogs/pathologyInvestigations";
@@ -484,13 +497,17 @@ export default function App() {
   const [suwasiriPatients, setSuwasiriPatients] = useState<Patient[]>([]);
   const [suwasiriVaccinePatients, setSuwasiriVaccinePatients] = useState<Patient[]>([]);
   const [suwasiriCharts, setSuwasiriCharts] = useState<Record<string, SuwasiriChartPatch>>({});
+  const [suwasiriRegistrations, setSuwasiriRegistrations] = useState<
+    Record<string, ClinicRegistrationPatch>
+  >({});
   const patients = useMemo(
     () =>
       mergePatients(
         clinicPatients,
         mergePatients(suwasiriPatients, suwasiriVaccinePatients)
       ).map((p) => {
-        const patched = applySuwasiriChart(p, suwasiriCharts[p.id]);
+        let patched = applySuwasiriChart(p, suwasiriCharts[p.id]);
+        patched = applyClinicRegistration(patched, suwasiriRegistrations[p.id]);
         if (!patched.labResults?.length) return patched;
         return {
           ...patched,
@@ -506,7 +523,7 @@ export default function App() {
           }),
         };
       }),
-    [clinicPatients, suwasiriPatients, suwasiriVaccinePatients, suwasiriCharts, reviewedLabKeys, criticalLabKeys]
+    [clinicPatients, suwasiriPatients, suwasiriVaccinePatients, suwasiriCharts, suwasiriRegistrations, reviewedLabKeys, criticalLabKeys]
   );
   const appointments = useMemo(
     () => mergeAppointments(clinicAppointments, suwasiriAppointments),
@@ -890,10 +907,14 @@ export default function App() {
     const unsubDocs = subscribeClinicDoctors((docs) => {
       setPublishedClinicDoctors(docs);
     });
+    const unsubRegs = subscribeClinicRegistrations((patientId, patch) => {
+      setSuwasiriRegistrations((prev) => ({ ...prev, [patientId]: patch }));
+    });
     return () => {
       unsubAppt?.();
       unsubVax?.();
       unsubDocs?.();
+      unsubRegs?.();
     };
   }, [authUser?.uid]);
 
@@ -1051,34 +1072,42 @@ export default function App() {
     for (const apt of dayBookedAppointments) {
       const match = billing.find(
         (inv) =>
+          (inv.appointmentId && inv.appointmentId === apt.id) ||
           (inv.patientId && inv.patientId === apt.patientId) ||
           inv.patientName === apt.patientName
       );
       const p = patients.find((x) => x.id === apt.patientId);
       const name = apt.patientName || p?.name || "Patient";
+      const cashSettled = /^cash$/i.test(String(match?.paymentMethod || apt.paymentMethod || ""));
+      const paidViaApp = Boolean((match?.paidBySuwasiri || apt.paidBySuwasiri) && !cashSettled);
+      const settled = isInvoiceSettled(match || {}) || isInvoiceSettled(apt) || paidViaApp;
       if (match) {
         used.add(match.id);
         rows.push({
           ...match,
           patientName: match.patientName || name,
           appointmentTime: apt.time,
+          appointmentId: match.appointmentId || apt.id,
           suwasiriReceiptUrl: match.suwasiriReceiptUrl || apt.suwasiriReceiptUrl,
-          paidBySuwasiri: match.paidBySuwasiri || apt.paidBySuwasiri,
-          paymentMethod: match.paymentMethod || (apt.paymentMethod as Billing["paymentMethod"]),
+          paidBySuwasiri: paidViaApp,
+          paymentMethod: cashSettled
+            ? "Cash"
+            : (match.paymentMethod || (apt.paymentMethod as Billing["paymentMethod"])),
+          status: settled ? (isInvoiceSettled(match) ? match.status : "PAID") : match.status,
         });
       } else {
-        const paid = String(apt.paymentStatus || "").toUpperCase() === "PAID";
         rows.push({
           id: `booked-${apt.id}`,
           patientName: name,
           patientId: apt.patientId,
           amount: apt.feeAmount || 3500,
           service: apt.reason || (apt.isTelehealth ? "GP Video Consult" : "GP Consultation"),
-          status: paid ? "PAID" : "PENDING",
+          status: settled ? "PAID" : "PENDING",
           date: apt.date,
           appointmentTime: apt.time,
+          appointmentId: apt.id,
           paymentMethod: apt.paymentMethod as Billing["paymentMethod"],
-          paidBySuwasiri: apt.paidBySuwasiri,
+          paidBySuwasiri: paidViaApp,
           suwasiriReceiptUrl: apt.suwasiriReceiptUrl,
         });
       }
@@ -1087,14 +1116,13 @@ export default function App() {
       if (!used.has(inv.id)) rows.push(inv);
     }
     return rows.sort((a, b) => {
-      const unpaid = (row: typeof a) => row.status !== "PAID" && row.status !== "BULK_BILLED";
-      const au = unpaid(a) ? 0 : 1;
-      const bu = unpaid(b) ? 0 : 1;
+      const au = isInvoiceSettled(a) ? 1 : 0;
+      const bu = isInvoiceSettled(b) ? 1 : 0;
       if (au !== bu) return au - bu;
       return String(a.appointmentTime || a.date || "").localeCompare(String(b.appointmentTime || b.date || ""));
     });
   })();
-  const dayUnsettledCount = dayInvoiceRows.filter((r) => r.status !== "PAID" && r.status !== "BULK_BILLED").length;
+  const dayUnsettledCount = dayInvoiceRows.filter((r) => !isInvoiceSettled(r)).length;
   const jumpToBillingToday = () => {
     const n = new Date();
     setBillingCalendarMonth({ year: n.getFullYear(), month: n.getMonth() });
@@ -1446,6 +1474,8 @@ export default function App() {
       specialty: opts.specialty,
       consultMode: opts.consultMode || "clinic",
       isTelehealth: video,
+      patientAge: patient?.age,
+      patientGender: patient?.gender,
     });
     if (slotResult.ok === false) {
       throw new Error(slotResult.reason);
@@ -1471,6 +1501,8 @@ export default function App() {
       patientEmail: patient?.email,
       patientPhone: patient?.phone,
       specialty: opts.specialty,
+      patientAge: patient?.age,
+      patientGender: patient?.gender,
     };
     setSuwasiriAppointments((prev) =>
       prev.some((a) => a.id === optimistic.id) ? prev : [optimistic, ...prev]
@@ -2170,38 +2202,119 @@ export default function App() {
     }
   };
 
-  // Bill settling
-  const handleSettleReceipt = async (id: string, status: "PAID" | "PENDING") => {
+  const handleSettleByCash = async (invoice: Billing) => {
+    const appointmentId = invoiceAppointmentId(invoice);
     try {
-      const res = await fetch(`/api/billing/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status })
-      });
-      const data = await res.json();
-      setBilling(data.state.billing);
+      if (String(invoice.id).startsWith("booked-")) {
+        const res = await fetch("/api/billing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            patientName: invoice.patientName,
+            patientId: invoice.patientId,
+            amount: invoice.amount,
+            service: invoice.service,
+            status: "PAID",
+            date: invoice.date,
+            paymentMethod: "Cash",
+            paidBySuwasiri: false,
+            appointmentId,
+          }),
+        });
+        if (!res.ok) throw new Error("Could not create cash receipt");
+        const data = await res.json();
+        setBilling(data.state.billing);
+      } else {
+        const res = await fetch(`/api/billing/${invoice.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "PAID", paidBySuwasiri: false, paymentMethod: "Cash" }),
+        });
+        if (!res.ok) throw new Error("Could not settle invoice");
+        const data = await res.json();
+        setBilling(data.state.billing);
+      }
+      if (appointmentId) {
+        await updateSuwasiriAppointmentPayment(appointmentId, {
+          paymentStatus: "SETTLED",
+          paymentMethod: "Cash",
+          paidBySuwasiri: false,
+        });
+        const patch = { paymentStatus: "SETTLED", paymentMethod: "Cash", paidBySuwasiri: false };
+        setSuwasiriAppointments((prev) =>
+          prev.map((a) => (a.id === appointmentId ? { ...a, ...patch } : a))
+        );
+        setAppointments((prev) =>
+          prev.map((a) => (a.id === appointmentId ? { ...a, ...patch } : a))
+        );
+      }
     } catch (err) {
       console.error(err);
+      alert("Could not settle by cash. Try again.");
     }
   };
 
-  const handleUploadReceipt = async (invoiceId: string, file: File) => {
+  const handleUploadReceipt = async (invoice: Billing, file: File) => {
+    const appointmentId = invoiceAppointmentId(invoice);
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64data = reader.result as string;
-        const res = await fetch(`/api/billing/${invoiceId}/upload-receipt`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            receiptUrl: base64data,
-            paidBySuwasiri: true
-          })
-        });
-        if (!res.ok) throw new Error("Upload failed");
-        const data = await res.json();
-        setBilling(data.state.billing);
-        alert("Receipt uploaded successfully & verified under Suwasiri app record!");
+        let billingId = invoice.id;
+        if (String(invoice.id).startsWith("booked-")) {
+          const created = await fetch("/api/billing", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              patientName: invoice.patientName,
+              patientId: invoice.patientId,
+              amount: invoice.amount,
+              service: invoice.service,
+              status: "PAID",
+              date: invoice.date,
+              paymentMethod: "Suwasiri Manual",
+              paidBySuwasiri: true,
+              suwasiriReceiptUrl: base64data,
+              appointmentId,
+            }),
+          });
+          if (!created.ok) throw new Error("Could not save receipt");
+          const createdData = await created.json();
+          billingId = createdData.bill?.id || billingId;
+          setBilling(createdData.state.billing);
+        } else {
+          const res = await fetch(`/api/billing/${billingId}/upload-receipt`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              receiptUrl: base64data,
+              paidBySuwasiri: true,
+            }),
+          });
+          if (!res.ok) throw new Error("Upload failed");
+          const data = await res.json();
+          setBilling(data.state.billing);
+        }
+        if (appointmentId) {
+          await updateSuwasiriAppointmentPayment(appointmentId, {
+            paymentStatus: "PAID",
+            paymentMethod: "Suwasiri Manual",
+            paidBySuwasiri: true,
+            suwasiriReceiptUrl: base64data,
+          });
+          const patch = {
+            paymentStatus: "PAID",
+            paymentMethod: "Suwasiri Manual",
+            paidBySuwasiri: true,
+            suwasiriReceiptUrl: base64data,
+          };
+          setSuwasiriAppointments((prev) =>
+            prev.map((a) => (a.id === appointmentId ? { ...a, ...patch } : a))
+          );
+          setAppointments((prev) =>
+            prev.map((a) => (a.id === appointmentId ? { ...a, ...patch } : a))
+          );
+        }
       };
       reader.readAsDataURL(file);
     } catch (err: any) {
@@ -3691,7 +3804,10 @@ export default function App() {
                                         <span>{appointmentPatientName(apt, p)}</span>
                                         <Stethoscope className="w-3.5 h-3.5 text-sky-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                                       </div>
-                                      <PatientSexAgeBadge gender={p?.gender} age={p?.age} />
+                                      <PatientSexAgeBadge
+                                        gender={appointmentAgeGender(apt, p).gender}
+                                        age={appointmentAgeGender(apt, p).age}
+                                      />
                                       {p ? <PatientCriticalAlertBadge patient={p} /> : null}
                                       <div className="text-[10px] text-slate-500 flex items-center gap-2 mt-0.5 flex-wrap">
                                         <span className="font-mono bg-slate-100 px-1 rounded">ID: {apt.patientId}</span>
@@ -4048,6 +4164,10 @@ export default function App() {
                                       <p className="font-serif font-bold text-slate-900 group-hover:text-[#00334f] group-hover:underline">
                                         {appointmentPatientName(apt, p)}
                                       </p>
+                                      <PatientSexAgeBadge
+                                        gender={appointmentAgeGender(apt, p).gender}
+                                        age={appointmentAgeGender(apt, p).age}
+                                      />
                                       <p className="text-[10px] text-slate-400">
                                         <span className="font-mono font-bold text-slate-500">[{apt.patientId}]</span>
                                         {apt.source === "suwasiri_app" && (
@@ -5537,7 +5657,7 @@ export default function App() {
                     onJumpToToday={jumpToBillingToday}
                   />
                   <p className="text-[11px] text-slate-500 mt-2 px-1">
-                    Click a date to show invoices only for patients booked that day. Reception can view and download bank slips uploaded from the Suwasiri app.
+                    Click a date to show invoices for patients booked that day. <strong>Cash Settle</strong> marks payment as Settled. App card/debit or a bank slip shows <strong>Paid by Suwasiri App</strong>. Click a PDF or photo slip to view it.
                   </p>
                 </div>
               <div className="xl:col-span-8 bg-white p-6 border rounded space-y-4 min-h-0">
@@ -5587,8 +5707,14 @@ export default function App() {
                         </tr>
                       )}
                       {dayInvoiceRows.map(invoice => {
-                        const notSettled = invoice.status !== "PAID" && invoice.status !== "BULK_BILLED";
-                        const overdue = invoice.status === "OVERDUE";
+                        const notSettled = !isInvoiceSettled(invoice);
+                        const overdue = invoice.status === "OVERDUE" && notSettled;
+                        const payLabel = overdue ? "Overdue — not settled" : invoicePaymentLabel(invoice);
+                        const bookedPatient = patients.find((x) => x.id === invoice.patientId);
+                        const bookedApt = tenantAppointments.find((a) => a.id === invoiceAppointmentId(invoice));
+                        const demographics = bookedApt
+                          ? appointmentAgeGender(bookedApt, bookedPatient)
+                          : { age: bookedPatient?.age, gender: bookedPatient?.gender };
                         return (
                         <tr
                           key={invoice.id}
@@ -5614,30 +5740,39 @@ export default function App() {
                                   className="w-10 h-10 border-2 border-emerald-500 rounded overflow-hidden hover:opacity-85 transition-opacity relative cursor-pointer shadow active:scale-95 group bg-slate-100"
                                   title="Click to view bank slip"
                                 >
-                                  <img
-                                    src={invoice.suwasiriReceiptUrl}
-                                    alt="Suwasiri Receipt"
-                                    className="w-full h-full object-cover"
-                                    referrerPolicy="no-referrer"
-                                  />
+                                  {isPdfReceipt(invoice.suwasiriReceiptUrl) ? (
+                                    <div className="w-full h-full flex flex-col items-center justify-center bg-rose-50 text-rose-800">
+                                      <FileText className="w-4 h-4" />
+                                      <span className="text-[7px] font-black leading-none">PDF</span>
+                                    </div>
+                                  ) : (
+                                    <img
+                                      src={invoice.suwasiriReceiptUrl}
+                                      alt="Suwasiri Receipt"
+                                      className="w-full h-full object-cover"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  )}
                                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[7px] font-bold text-white transition-opacity uppercase font-sans">
                                     VIEW
                                   </div>
                                 </button>
                                 <a
                                   href={invoice.suwasiriReceiptUrl}
-                                  download={`suwasiri-slip-${invoice.id}`}
+                                  download={`suwasiri-slip-${invoice.id}${isPdfReceipt(invoice.suwasiriReceiptUrl) ? ".pdf" : ""}`}
                                   className="text-[8px] font-bold text-sky-800 hover:underline"
                                   onClick={(e) => e.stopPropagation()}
+                                  target="_blank"
+                                  rel="noreferrer"
                                 >
-                                  Download slip
+                                  {isPdfReceipt(invoice.suwasiriReceiptUrl) ? "Open PDF" : "Download slip"}
                                 </a>
                                 </div>
                               ) : (
-                                <div className={`flex flex-col gap-0.5 items-center justify-center w-10 h-10 border rounded shrink-0 relative ${invoice.paidBySuwasiri ? 'border-dashed border-rose-400 bg-rose-50 text-rose-500 animate-pulse' : 'border-dashed border-slate-300 bg-slate-50 text-slate-400'}`} title={invoice.paidBySuwasiri ? "Suwasiri Paid - upload receipt required!" : "No receipt uploaded"}>
+                                <div className={`flex flex-col gap-0.5 items-center justify-center w-10 h-10 border rounded shrink-0 relative ${invoice.paidBySuwasiri ? 'border-dashed border-rose-400 bg-rose-50 text-rose-500' : 'border-dashed border-slate-300 bg-slate-50 text-slate-400'}`} title={invoice.paidBySuwasiri ? "Paid in Suwasiri — no slip attached" : "No receipt uploaded"}>
                                   <Upload className="w-3.5 h-3.5 text-current" />
                                   <span className="text-[6px] uppercase font-sans tracking-tighter text-center font-black leading-none bg-white p-0.5 border rounded shadow-xs">
-                                    {invoice.paidBySuwasiri ? "UPLOAD" : "NO REC"}
+                                    {invoice.paidBySuwasiri ? "APP PAY" : "NO REC"}
                                   </span>
                                 </div>
                               )}
@@ -5646,68 +5781,25 @@ export default function App() {
                                 <span className={`font-bold ${notSettled ? "text-amber-950" : "text-slate-700"}`}>
                                   {invoice.patientName}
                                 </span>
+                                <PatientSexAgeBadge gender={demographics.gender} age={demographics.age} />
                                 {invoice.appointmentTime && (
                                   <span className="text-[10px] text-slate-500 font-medium">{invoice.appointmentTime}</span>
                                 )}
                                 <div className="flex flex-wrap gap-1.5 items-center">
-                                  {invoice.paidBySuwasiri && invoice.suwasiriReceiptUrl && (
-                                    <span className="inline-flex bg-sky-700 text-white text-[8px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                                      Paid by manual via Suwasiri
-                                    </span>
-                                  )}
-                                  {invoice.paidBySuwasiri && !invoice.suwasiriReceiptUrl && (
-                                    <span className="inline-flex bg-emerald-600 text-white text-[8px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                                      ⚡ Paid by Suwasiri
-                                    </span>
-                                  )}
-                                  {invoice.paymentMethod === "Suwasiri Pay" && !invoice.paidBySuwasiri && (
-                                    <span className="inline-flex bg-emerald-600 text-white text-[8px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                                      ⚡ Paid by Suwasiri
-                                    </span>
-                                  )}
-                                  
-                                  {/* Upload triggers */}
-                                  <div className="flex items-center gap-1">
-                                    <label className="text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-300 px-1.5 py-0.5 rounded text-[8px] font-bold cursor-pointer transition-all flex items-center gap-0.5 shadow-sm hover:text-slate-800">
-                                      <Upload className="w-2.5 h-2.5" />
-                                      <span>Upload Receipt</span>
-                                      <input
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={(e) => {
-                                          if (e.target.files && e.target.files[0]) {
-                                            handleUploadReceipt(invoice.id, e.target.files[0]);
-                                          }
-                                        }}
-                                      />
-                                    </label>
-
-                                    {!invoice.suwasiriReceiptUrl && (
-                                      <button
-                                        type="button"
-                                        onClick={async () => {
-                                          const mockReceiptUrl = "https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?q=80&w=260&auto=format&fit=crop";
-                                          const res = await fetch(`/api/billing/${invoice.id}/upload-receipt`, {
-                                            method: "POST",
-                                            headers: { "Content-Type": "application/json" },
-                                            body: JSON.stringify({
-                                              receiptUrl: mockReceiptUrl,
-                                              paidBySuwasiri: true
-                                            })
-                                          });
-                                          if (res.ok) {
-                                            const data = await res.json();
-                                            setBilling(data.state.billing);
-                                            alert(`⚡ Receipt auto-generated & uploaded under Suwasiri app records for ${invoice.patientName}!`);
-                                          }
-                                        }}
-                                        className="text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-1 py-0.5 rounded text-[8px] font-black tracking-tight cursor-pointer transition-colors"
-                                      >
-                                        [Mock Upload]
-                                      </button>
-                                    )}
-                                  </div>
+                                  <label className="text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-300 px-1.5 py-0.5 rounded text-[8px] font-bold cursor-pointer transition-all flex items-center gap-0.5 shadow-sm hover:text-slate-800">
+                                    <Upload className="w-2.5 h-2.5" />
+                                    <span>Upload Receipt</span>
+                                    <input
+                                      type="file"
+                                      accept="image/*,.pdf,application/pdf"
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        if (e.target.files && e.target.files[0]) {
+                                          handleUploadReceipt(invoice, e.target.files[0]);
+                                        }
+                                      }}
+                                    />
+                                  </label>
                                 </div>
                               </div>
                             </div>
@@ -5718,13 +5810,13 @@ export default function App() {
                           <td className="p-3">
                             <div className="flex flex-col items-start gap-1">
                             <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                              invoice.status === "PAID" || invoice.status === "BULK_BILLED"
+                              !notSettled
                                 ? "bg-emerald-100 text-emerald-800 border-emerald-200 border"
                                 : overdue
                                 ? "bg-rose-600 text-white border-rose-700 border"
                                 : "bg-amber-200 text-amber-950 border-amber-400 border"
                             }`}>
-                              {notSettled ? (overdue ? "OVERDUE — not settled" : "NOT SETTLED") : invoice.status}
+                              {payLabel}
                             </span>
                             {notSettled && (
                               <span className={`text-[9px] font-extrabold uppercase tracking-wide ${overdue ? "text-rose-800" : "text-amber-800"}`}>
@@ -5735,40 +5827,17 @@ export default function App() {
                           </td>
                           <td className="p-3">
                             <div className="flex items-center justify-end gap-1.5">
-                              {String(invoice.id).startsWith("booked-") ? (
-                                <span className="text-[9px] text-slate-500 italic font-medium">Booked — settle after consult</span>
-                              ) : invoice.status === "PENDING" ? (
-                                <>
-                                  <button
-                                    onClick={() => handleSettleReceipt(invoice.id, "PAID")}
-                                    className="bg-[#00334f] hover:bg-[#002235] text-white px-2 py-1 text-[9px] font-bold rounded transition-colors cursor-pointer"
-                                  >
-                                    Cash Settle
-                                  </button>
-                                  <button
-                                    onClick={async () => {
-                                      try {
-                                        const res = await fetch(`/api/billing/${invoice.id}/sync-suwasiri`, { method: "POST" });
-                                        if (!res.ok) throw new Error("Synchronization refused or gateway is busy");
-                                        const data = await res.json();
-                                        setBilling(data.state.billing);
-                                        alert(`⚡ Suwasiri App Confirmed Payment Recieved! Received automatic callback sync for invoice: ${invoice.id}. Marked as paid by Suwasiri.`);
-                                      } catch (err: any) {
-                                        alert("Error syncing Suwasiri payment: " + err.message);
-                                      }
-                                    }}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 text-[9px] font-bold rounded flex items-center gap-1 transition-colors cursor-pointer"
-                                  >
-                                    Sync Suwasiri
-                                  </button>
-                                </>
+                              {notSettled ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSettleByCash(invoice)}
+                                  className="bg-[#00334f] hover:bg-[#002235] text-white px-2 py-1 text-[9px] font-bold rounded transition-colors cursor-pointer"
+                                >
+                                  Cash Settle
+                                </button>
                               ) : (
                                 <span className="text-emerald-700 font-extrabold text-[10px] flex items-center gap-1">
-                                  ✓ Settled {invoice.paidBySuwasiri && invoice.suwasiriReceiptUrl
-                                    ? <span className="text-[10px] text-sky-700 italic font-medium font-sans">(manual via Suwasiri)</span>
-                                    : invoice.paidBySuwasiri
-                                    ? <span className="text-[10px] text-emerald-600 italic font-medium font-sans">(Suwasiri)</span>
-                                    : null}
+                                  ✓ {payLabel}
                                 </span>
                               )}
                             </div>
@@ -6299,7 +6368,7 @@ export default function App() {
       {/* MODAL: VIEW SUWASIRI PAYMENT RECEIPT */}
       {selectedReceiptUrl && (
         <div className="fixed inset-0 bg-slate-900/70 flex items-center justify-center z-50 p-4 animate-in fade-in">
-          <div className="bg-white border rounded shadow-2xl max-w-lg w-full p-6 relative flex flex-col max-h-[85vh]">
+          <div className={`bg-white border rounded shadow-2xl w-full p-6 relative flex flex-col max-h-[85vh] ${isPdfReceipt(selectedReceiptUrl) ? "max-w-3xl" : "max-w-lg"}`}>
             <button
               onClick={() => setSelectedReceiptUrl(null)}
               className="absolute top-4 right-4 bg-slate-100 p-1.5 rounded-full hover:bg-slate-200 transition-colors cursor-pointer text-slate-700"
@@ -6314,12 +6383,20 @@ export default function App() {
               Patient: <span className="text-[#00334f] font-bold">{selectedReceiptPatientName}</span>
             </p>
             <div className="flex-1 overflow-auto border bg-slate-50 p-2 rounded flex items-center justify-center min-h-[300px]">
-              <img
-                src={selectedReceiptUrl}
-                alt="Suwasiri Payment Receipt"
-                className="max-w-full max-h-[50vh] object-contain rounded shadow"
-                referrerPolicy="no-referrer"
-              />
+              {isPdfReceipt(selectedReceiptUrl) ? (
+                <iframe
+                  src={selectedReceiptUrl}
+                  title="Suwasiri bank slip PDF"
+                  className="w-full min-h-[50vh] rounded bg-white"
+                />
+              ) : (
+                <img
+                  src={selectedReceiptUrl}
+                  alt="Suwasiri Payment Receipt"
+                  className="max-w-full max-h-[50vh] object-contain rounded shadow"
+                  referrerPolicy="no-referrer"
+                />
+              )}
             </div>
             <div className="mt-4 flex gap-2 justify-end">
               <button
@@ -6331,7 +6408,7 @@ export default function App() {
               </button>
               <a
                 href={selectedReceiptUrl}
-                download={`receipt_${selectedReceiptPatientName.replace(/\s+/g, '_')}.png`}
+                download={`receipt_${selectedReceiptPatientName.replace(/\s+/g, '_')}${isPdfReceipt(selectedReceiptUrl) ? ".pdf" : ".jpg"}`}
                 className="bg-[#00334f] hover:bg-[#002235] text-white px-4 py-1.5 rounded text-xs font-bold transition-all text-center flex items-center gap-1 cursor-pointer"
                 target="_blank"
                 rel="noreferrer"

@@ -504,6 +504,56 @@ class AppLocalizations {
       'si': 'ප්‍රතිඵල සමාලෝචන',
       'ta': 'முடிவுகள் மதிப்பாய்வு',
     },
+    'reasonForVisit': {
+      'en': 'Reason for visit',
+      'si': 'සංචාරයේ හේතුව',
+      'ta': 'வருகைக்கான காரணம்',
+    },
+    'bookingReasonFollowUp': {
+      'en': 'Follow up',
+      'si': 'නැවත පරීක්ෂාව',
+      'ta': 'பின்தொடர்தல்',
+    },
+    'bookingReasonNewSymptom': {
+      'en': 'New symptom',
+      'si': 'නව ලක්ෂණ',
+      'ta': 'புதிய அறிகுறி',
+    },
+    'bookingReasonFever': {
+      'en': 'Fever',
+      'si': 'උෂ්ණත්වය',
+      'ta': 'காய்ச்சல்',
+    },
+    'bookingReasonTestResults': {
+      'en': 'Test results',
+      'si': 'පරීක්ෂණ ප්‍රතිඵල',
+      'ta': 'சோதனை முடிவுகள்',
+    },
+    'bookingReasonPrescription': {
+      'en': 'Prescription',
+      'si': 'බෙහෙත්',
+      'ta': 'மருந்து',
+    },
+    'bookingReasonRepeatPrescription': {
+      'en': 'Repeat prescription',
+      'si': 'නැවත බෙහෙත්',
+      'ta': 'மீண்டும் மருந்து',
+    },
+    'bookingReasonMedicalCertificate': {
+      'en': 'Medical certificate',
+      'si': 'වෛද්‍ය සහතිකය',
+      'ta': 'மருத்துவ சான்றிதழ்',
+    },
+    'bookingReasonSpecialistReferral': {
+      'en': 'Specialist referral',
+      'si': 'විශේෂඥ යොමු',
+      'ta': 'சிறப்பு மருத்துவ பரிந்துரை',
+    },
+    'bookingReasonReviewResults': {
+      'en': 'Review results',
+      'si': 'ප්‍රතිඵල සමාලෝචන',
+      'ta': 'முடிவுகள் மதிப்பாய்வு',
+    },
     'searchDoctorClinicRegion': {
       'en': 'Search doctor, clinic or region',
       'si': 'වෛද්‍ය, සායන හෝ ප්‍රදේශය සොයන්න',

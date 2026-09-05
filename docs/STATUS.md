@@ -95,7 +95,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Telehealth e-Rx: view, download, and print after medicines are issued; still writes Suwasiri Call E-Prescription
 - [x] Unique Health ID Sync to Portal is clinic-scoped (PrimeCare vs other hospitals); Chamidu `SW3C6F5B5A27` / Sakuni `SW6CF9340271`; hashed dummy barcode patients are purged and never generated
 - [x] Reception delete/block patient requires a comment and admin approval
-- [x] Receipts: Paid by Suwasiri vs paid by manual via Suwasiri (view/download slip)
+- [x] Receipts & Invoices: **Cash Settle** on booked (and issued) invoices writes a clinic bill and Firestore `paymentStatus: SETTLED` / `paymentMethod: Cash` so status shows **Settled**. Suwasiri app card/debit or manual bank slip writes `paidBySuwasiri` so status shows **Paid by Suwasiri App**. Reception clicks a PDF or photo slip to view it. Age and gender sit under the patient name on Lobby, Patient Clinical Records, Unique Health ID sync, and invoices (from the clinic file or the booking).
 - [x] Sample Dispatch Hub delete with yes/no confirm; Team Secure Chat is shared by all clinic staff
 - [x] Telehealth: day’s video bookings only; click name → Active Clinical Consultation Room; Call start from 2 minutes before the slot
 - [x] Telehealth e-Rx matches GP Exam Room (formulary + Sinhala meal timing); attached prescription image removed
@@ -163,7 +163,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [ ] Tighten `notifications` rules to owner-scoped (`userId == auth.uid`)
 - [ ] Deploy updated `firestore.rules` (vault **read** for Unique Health ID lab sync + GP Care immunisations + allergy merge + `clinic_centers`) if not already: `firebase deploy --only firestore:rules`
 - [ ] Telehealth/Call: live WebRTC to GP Care is wired (STUN); a TURN server may be needed on some mobile networks
-- [ ] Web + mobile sync: appointments, Unique Health ID lookup, telehealth notes/chat, e-Rx, medical certificates, clinical calculator snapshots, GP Care–published `clinic_doctors`, **exam-room consult notes / immunisations / allergies / pathology / imaging / certificates**, and GP Care–issued e-Rx (Vault vs Call by session) are on Firestore; Vault → GP Care sync is **vaccine history only**. Remaining GP EMR charts still use the web JSON store. Tenancy/RBAC is in the web JSON store; tenancy collections are documented, not deployed.
+- [ ] Web + mobile sync: appointments (including **payment status / bank slips** and **patientAge / patientGender**), Unique Health ID lookup, telehealth notes/chat, e-Rx, medical certificates, clinical calculator snapshots, GP Care–published `clinic_doctors`, **exam-room consult notes / immunisations / allergies / pathology / imaging / certificates**, and GP Care–issued e-Rx (Vault vs Call by session) are on Firestore; Vault → GP Care sync is **vaccine history only**. Remaining GP EMR charts still use the web JSON store. Tenancy/RBAC is in the web JSON store; tenancy collections are documented, not deployed.
 
 ## Known caveats
 
@@ -171,6 +171,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 2. **Clinics / doctors / vaccine protocols** are curated in-code lists plus Firestore `clinic_doctors` published from GP Care Platform Console.
 3. **Widget tests** must use `AppServices.forTesting`, not `bootstrap()`.
 4. PowerShell may need `firebase.cmd` if script policy blocks `firebase.ps1`.
+5. Bank-slip PDFs need Storage rules live: `firebase deploy --only storage`.
 
 ## Doc map
 

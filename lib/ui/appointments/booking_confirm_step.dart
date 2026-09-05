@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../data/catalogs/doctor_schedule_slots.dart';
 import '../../data/models/appointment.dart';
+import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
 
 /// Booking confirm UI matching the product mockup (dates, times, reason, CTA).
@@ -77,11 +78,23 @@ class BookingConfirmStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final money = NumberFormat('#,###');
     final summaryDate =
         '${DateFormat('EEE d MMMM').format(selectedDate)} at ${_fmtTime24(selectedTime)}';
     final modeLabel =
         mode == ConsultMode.video ? 'Video consult' : 'Clinic visit';
+    final reasons = [
+      (l.t('bookingReasonFollowUp'), Icons.sync_rounded),
+      (l.t('bookingReasonNewSymptom'), Icons.favorite_border_rounded),
+      (l.t('bookingReasonFever'), Icons.thermostat_rounded),
+      (l.t('bookingReasonTestResults'), Icons.science_outlined),
+      (l.t('bookingReasonPrescription'), Icons.medical_services_outlined),
+      (l.t('bookingReasonRepeatPrescription'), Icons.medication_outlined),
+      (l.t('bookingReasonMedicalCertificate'), Icons.description_outlined),
+      (l.t('bookingReasonSpecialistReferral'), Icons.group_outlined),
+      (l.t('bookingReasonReviewResults'), Icons.analytics_outlined),
+    ];
 
     return ColoredBox(
       color: bg,
@@ -455,9 +468,9 @@ class BookingConfirmStep extends StatelessWidget {
                   const SizedBox(height: 8),
                 ],
                 const SizedBox(height: 6),
-                const Text(
-                  'REASON FOR VISIT',
-                  style: TextStyle(
+                Text(
+                  l.t('reasonForVisit').toUpperCase(),
+                  style: const TextStyle(
                     color: muted,
                     fontWeight: FontWeight.w700,
                     fontSize: 11,
@@ -469,30 +482,13 @@ class BookingConfirmStep extends StatelessWidget {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    _ReasonChip(
-                      label: 'Follow up',
-                      icon: Icons.sync_rounded,
-                      selected: visitReason == 'Follow up',
-                      onTap: () => onReason('Follow up'),
-                    ),
-                    _ReasonChip(
-                      label: 'New symptom',
-                      icon: Icons.favorite_border_rounded,
-                      selected: visitReason == 'New symptom',
-                      onTap: () => onReason('New symptom'),
-                    ),
-                    _ReasonChip(
-                      label: 'Test results',
-                      icon: Icons.science_outlined,
-                      selected: visitReason == 'Test results',
-                      onTap: () => onReason('Test results'),
-                    ),
-                    _ReasonChip(
-                      label: 'Prescription',
-                      icon: Icons.medical_services_outlined,
-                      selected: visitReason == 'Prescription',
-                      onTap: () => onReason('Prescription'),
-                    ),
+                    for (final (label, icon) in reasons)
+                      _ReasonChip(
+                        label: label,
+                        icon: icon,
+                        selected: visitReason == label,
+                        onTap: () => onReason(label),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 8),

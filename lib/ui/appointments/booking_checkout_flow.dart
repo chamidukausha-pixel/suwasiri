@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:file_selector/file_selector.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -19,6 +23,13 @@ import '../widgets/common_widgets.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/sheet_close_bar.dart';
 import 'booking_confirm_step.dart';
+
+String _sexLabel(String? raw) {
+  final g = (raw ?? '').trim().toLowerCase();
+  if (g.startsWith('f')) return 'Female';
+  if (g.startsWith('m')) return 'Male';
+  return (raw ?? '').trim();
+}
 
 enum _CheckoutStep { confirm, pay }
 
@@ -178,7 +189,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
   bool _slotsLoading = false;
   List<DateTime> _bookedSlots = const [];
   StreamSubscription<List<DateTime>>? _bookedSub;
-  String _visitReason = 'Follow up';
+  String _visitReason = '';
 
   static const _venueFee = 350;
 
@@ -233,6 +244,8 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
     final reason = widget.initialVisitReason?.trim();
     if (reason != null && reason.isNotEmpty) {
       _visitReason = reason;
+    } else if (mounted) {
+      _visitReason = AppLocalizations.of(context).t('bookingReasonFollowUp');
     }
     if (widget.initialSlot != null) {
       final slot = widget.initialSlot!;
@@ -307,6 +320,9 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
         paymentStatus: paymentStatus,
         paidBySuwasiri: paidBySuwasiri,
         suwasiriReceiptUrl: suwasiriReceiptUrl,
+        visitReason: _visitReason,
+        patientAge: user.ageYears,
+        patientGender: _sexLabel(user.healthIntake?.sex),
       );
       if (!mounted) return;
       await context.read<NotificationCubit>().load();
@@ -434,6 +450,7 @@ class _PaymentChannelStepState extends State<_PaymentChannelStep> {
   final _cardExpiry = TextEditingController();
   final _cardCvv = TextEditingController();
   String? _slipDataUrl;
+  String? _slipName;
   bool _picking = false;
 
   @override
@@ -445,19 +462,60 @@ class _PaymentChannelStepState extends State<_PaymentChannelStep> {
     super.dispose();
   }
 
+  Future<String> _storeSlip(Uint8List bytes, String mime, String patientHint) async {
+    try {
+      final ext = mime.contains('pdf') ? 'pdf' : 'jpg';
+      final uid = FirebaseAuth.instance.currentUser?.uid ?? patientHint;
+      final ref = FirebaseStorage.instance.ref().child(
+            'appointment_receipts/${uid}_${DateTime.now().millisecondsSinceEpoch}.$ext',
+          );
+      await ref.putData(bytes, SettableMetadata(contentType: mime));
+      return await ref.getDownloadURL();
+    } catch (_) {
+      if (bytes.length > 700000) {
+        throw Exception('That file is too large. Choose a smaller PDF or photo.');
+      }
+      return 'data:$mime;base64,${base64Encode(bytes)}';
+    }
+  }
+
   Future<void> _pickSlip() async {
     setState(() => _picking = true);
     try {
-      final file = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1280,
-        imageQuality: 72,
+      const typeGroup = XTypeGroup(
+        label: 'Bank slip',
+        extensions: ['pdf', 'png', 'jpg', 'jpeg', 'webp'],
       );
-      if (file == null) return;
-      final bytes = await file.readAsBytes();
+      final file = await openFile(acceptedTypeGroups: [typeGroup]);
+      Uint8List? bytes;
+      var name = 'slip.jpg';
+      if (file != null) {
+        bytes = await file.readAsBytes();
+        name = file.name;
+      } else {
+        final picked = await ImagePicker().pickImage(
+          source: ImageSource.gallery,
+          maxWidth: 1280,
+          imageQuality: 72,
+        );
+        if (picked == null) return;
+        bytes = await picked.readAsBytes();
+        name = picked.name;
+      }
+      final lower = name.toLowerCase();
+      final mime = lower.endsWith('.pdf')
+          ? 'application/pdf'
+          : lower.endsWith('.png')
+              ? 'image/png'
+              : 'image/jpeg';
+      final url = await _storeSlip(bytes, mime, 'suwasiri');
       setState(() {
-        _slipDataUrl = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+        _slipDataUrl = url;
+        _slipName = name;
       });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       if (mounted) setState(() => _picking = false);
     }
@@ -485,6 +543,7 @@ class _PaymentChannelStepState extends State<_PaymentChannelStep> {
         await widget.onConfirm(
           paymentMethod: l.t('onlineDebitCard'),
           paymentStatus: 'PAID',
+          paidBySuwasiri: true,
         );
         return;
       case _PayChannel.slip:
@@ -768,8 +827,8 @@ class _PaymentChannelStepState extends State<_PaymentChannelStep> {
                   const SizedBox(height: 8),
                   Text(
                     _slipDataUrl == null
-                        ? l.t('attachReceiptSlip')
-                        : 'Receipt attached',
+                        ? '${l.t('attachReceiptSlip')} (photo or PDF)'
+                        : (_slipName ?? 'Receipt attached'),
                     style: const TextStyle(
                       color: AppColors.trustBlue,
                       fontWeight: FontWeight.w800,

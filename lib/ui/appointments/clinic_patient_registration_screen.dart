@@ -215,6 +215,13 @@ class _ClinicPatientRegistrationScreenState
     setState(() => _saving = true);
     try {
       final intake = _toHealthIntake(reg);
+      final regKey = reg.hospitalId.isNotEmpty
+          ? reg.hospitalId
+          : reg.hospitalName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+      final existingRegs = Map<String, dynamic>.from(
+        user.clinicRegistrations ?? const {},
+      );
+      existingRegs[regKey] = reg.toMap();
       final updated = user
           .copyWith(
             name: reg.fullName,
@@ -228,15 +235,20 @@ class _ClinicPatientRegistrationScreenState
             ],
             healthIntake: intake,
             clinicAllergies: reg.hasAllergies ? reg.allergyDetails : 'NKDA',
+            clinicRegistrations: existingRegs,
           )
           .withEnsuredBarcode();
 
       final health = context.read<HealthRepository>();
       await auth.updateProfile(updated);
-      await health.registerPatientAtClinic(
-        patientId: user.id,
-        registration: reg,
-      );
+      try {
+        await health.registerPatientAtClinic(
+          patientId: user.id,
+          registration: reg,
+        );
+      } catch (_) {
+        // Profile is saved; clinic registration doc may retry on next booking.
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_t('saved'))),

@@ -21,15 +21,20 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isSignedIn();
       allow delete: if isOwner(userId) || isHouseholdPatient(userId);
-      allow create: if isOwner(userId) || isHouseholdPatient(userId)
-        || (isSignedIn()
-            && request.resource.data.keys().hasOnly(['clinicAllergies', 'healthIntake', 'allergiesUpdatedAt']));
-      // Patients own the full profile. GP Care staff may merge allergy fields
-      // so they appear under the name on the Suwasiri Unique Health ID card.
-      allow update: if isOwner(userId) || isHouseholdPatient(userId)
+      // Household patients (main + family profiles) may create/update their full doc.
+      allow create, update: if isOwner(userId) || isHouseholdPatient(userId)
         || (isSignedIn()
             && request.resource.data.diff(resource.data).affectedKeys()
                 .hasOnly(['clinicAllergies', 'healthIntake', 'allergiesUpdatedAt']));
+    }
+
+    // Suwasiri App new-patient registration at a clinic — GP Care clinical record sync.
+    match /clinic_patient_registrations/{regId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && isHouseholdPatient(request.resource.data.patientId);
+      allow delete: if isSignedIn()
+        && isHouseholdPatient(resource.data.patientId);
     }
 
     match /vault/{reportId} {

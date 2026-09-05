@@ -187,6 +187,9 @@ class Appointment extends Equatable {
     this.paymentStatus = 'PAID',
     this.paidBySuwasiri = false,
     this.suwasiriReceiptUrl,
+    this.visitReason = '',
+    this.patientAge,
+    this.patientGender = '',
   });
 
   final String id;
@@ -210,6 +213,9 @@ class Appointment extends Equatable {
   final String paymentStatus;
   final bool paidBySuwasiri;
   final String? suwasiriReceiptUrl;
+  final String visitReason;
+  final int? patientAge;
+  final String patientGender;
 
   bool get isVideo => consultMode == ConsultMode.video;
 
@@ -249,9 +255,11 @@ class Appointment extends Equatable {
         'timeSlot': timeSlot.toIso8601String(),
         'date': gpCareDateKey(timeSlot),
         'time': gpCareTimeLabel(timeSlot),
-        'reason': isVideo
-            ? 'Video consultation · $specialty'
-            : 'Clinic visit · $specialty',
+        'reason': visitReason.trim().isNotEmpty
+            ? visitReason.trim()
+            : (isVideo
+                ? 'Video consultation · $specialty'
+                : 'Clinic visit · $specialty'),
         'type': isVideo ? 'Telehealth Video' : 'Standard GP Consult',
         'isTelehealth': isVideo,
         'status': status.name,
@@ -266,6 +274,8 @@ class Appointment extends Equatable {
         'paymentMethod': paymentMethod,
         'paidBySuwasiri': paidBySuwasiri,
         'suwasiriReceiptUrl': suwasiriReceiptUrl,
+        if (patientAge != null) 'patientAge': patientAge,
+        if (patientGender.isNotEmpty) 'patientGender': patientGender,
         'feeAmount': feeLkr,
         'bookedAt': (bookedAt ?? DateTime.now()).toIso8601String(),
       };
@@ -309,6 +319,9 @@ class Appointment extends Equatable {
       paymentStatus: map['paymentStatus'] as String? ?? 'PAID',
       paidBySuwasiri: map['paidBySuwasiri'] == true,
       suwasiriReceiptUrl: map['suwasiriReceiptUrl'] as String?,
+      visitReason: map['reason'] as String? ?? '',
+      patientAge: (map['patientAge'] as num?)?.toInt(),
+      patientGender: map['patientGender'] as String? ?? '',
     );
   }
 
@@ -335,5 +348,8 @@ class Appointment extends Equatable {
         paymentStatus,
         paidBySuwasiri,
         suwasiriReceiptUrl,
+        visitReason,
+        patientAge,
+        patientGender,
       ];
 }

@@ -441,6 +441,8 @@ export interface Appointment {
   paymentStatus?: string;
   paidBySuwasiri?: boolean;
   suwasiriReceiptUrl?: string;
+  patientAge?: number;
+  patientGender?: string;
   /** Reception lobby queue position (1 = next). Independent of booked `time`. */
   queuePlace?: number;
 }
@@ -475,6 +477,7 @@ export interface Billing {
   paymentMethod?: "Medicare Bulk Bill" | "EFTPOS" | "Credit Card" | "Cash" | "Suwasiri Pay" | "Suwasiri Manual" | "DVA";
   paidBySuwasiri?: boolean;
   suwasiriReceiptUrl?: string;
+  appointmentId?: string;
   claimId?: string;
 }
 

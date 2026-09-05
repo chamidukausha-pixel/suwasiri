@@ -17,6 +17,7 @@ class UserProfile extends Equatable {
     this.barcodeNumber,
     this.healthIntake,
     this.clinicAllergies,
+    this.clinicRegistrations,
   });
 
   final String id;
@@ -34,6 +35,8 @@ class UserProfile extends Equatable {
   final PatientHealthIntake? healthIntake;
   /// GP Care–recorded allergies (shown under the name on the Unique Health ID card).
   final String? clinicAllergies;
+  /// Per-clinic new-patient registration forms from Suwasiri booking.
+  final Map<String, dynamic>? clinicRegistrations;
 
   DateTime? get effectiveDateOfBirth =>
       dateOfBirth ?? healthIntake?.dateOfBirth;
@@ -105,6 +108,7 @@ class UserProfile extends Equatable {
     String? barcodeNumber,
     PatientHealthIntake? healthIntake,
     String? clinicAllergies,
+    Map<String, dynamic>? clinicRegistrations,
   }) {
     return UserProfile(
       id: id ?? this.id,
@@ -120,6 +124,7 @@ class UserProfile extends Equatable {
       barcodeNumber: barcodeNumber ?? this.barcodeNumber,
       healthIntake: healthIntake ?? this.healthIntake,
       clinicAllergies: clinicAllergies ?? this.clinicAllergies,
+      clinicRegistrations: clinicRegistrations ?? this.clinicRegistrations,
     );
   }
 
@@ -150,6 +155,8 @@ class UserProfile extends Equatable {
         if (healthIntake != null) 'healthIntake': healthIntake!.toMap(),
         if (clinicAllergies != null && clinicAllergies!.isNotEmpty)
           'clinicAllergies': clinicAllergies,
+        if (clinicRegistrations != null && clinicRegistrations!.isNotEmpty)
+          'clinicRegistrations': clinicRegistrations,
       };
 
   factory UserProfile.fromMap(String id, Map<String, dynamic> map) {
@@ -175,6 +182,9 @@ class UserProfile extends Equatable {
           ? PatientHealthIntake.fromMap(intakeRaw)
           : null,
       clinicAllergies: map['clinicAllergies'] as String?,
+      clinicRegistrations: map['clinicRegistrations'] is Map
+          ? Map<String, dynamic>.from(map['clinicRegistrations'] as Map)
+          : null,
     );
   }
 
@@ -193,5 +203,6 @@ class UserProfile extends Equatable {
         barcodeNumber,
         healthIntake,
         clinicAllergies,
+        clinicRegistrations,
       ];
 }

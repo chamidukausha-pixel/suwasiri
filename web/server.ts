@@ -2265,19 +2265,42 @@ app.delete("/api/alerts/:id", (req, res) => {
 app.patch("/api/billing/:id", (req, res) => {
   const store = getStore();
   const { id } = req.params;
-  const { status, paidBySuwasiri } = req.body;
+  const { status, paidBySuwasiri, paymentMethod, suwasiriReceiptUrl } = req.body;
 
   const billIndex = store.billing.findIndex(b => b.id === id);
   if (billIndex === -1) {
     return res.status(404).json({ error: "Invoice not found" });
   }
 
-  store.billing[billIndex].status = status;
+  if (status) store.billing[billIndex].status = status;
   if (paidBySuwasiri !== undefined) {
     store.billing[billIndex].paidBySuwasiri = paidBySuwasiri;
   }
+  if (paymentMethod) store.billing[billIndex].paymentMethod = paymentMethod;
+  if (suwasiriReceiptUrl) store.billing[billIndex].suwasiriReceiptUrl = suwasiriReceiptUrl;
   saveStore(store);
   res.json({ bill: store.billing[billIndex], state: store });
+});
+
+// Create a clinic invoice (Cash Settle on a booked appointment with no bill yet)
+app.post("/api/billing", (req, res) => {
+  const store = getStore();
+  const bill = {
+    id: req.body.id || `bill-${Date.now()}`,
+    patientName: req.body.patientName || "Patient",
+    patientId: req.body.patientId,
+    amount: Number(req.body.amount) || 3500,
+    service: req.body.service || "GP Consultation",
+    status: req.body.status || "PENDING",
+    date: req.body.date || new Date().toISOString().slice(0, 10),
+    paymentMethod: req.body.paymentMethod,
+    paidBySuwasiri: req.body.paidBySuwasiri === true,
+    suwasiriReceiptUrl: req.body.suwasiriReceiptUrl,
+    appointmentId: req.body.appointmentId,
+  };
+  store.billing.push(bill);
+  saveStore(store);
+  res.status(201).json({ bill, state: store });
 });
 
 // Sync payment via Suwasiri App

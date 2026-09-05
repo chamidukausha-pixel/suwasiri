@@ -371,6 +371,8 @@ class AuthCubit extends Cubit<AuthState> {
       final merged = current.copyWith(
         clinicAllergies: updated.clinicAllergies ?? current.clinicAllergies,
         healthIntake: updated.healthIntake ?? current.healthIntake,
+        clinicRegistrations:
+            updated.clinicRegistrations ?? current.clinicRegistrations,
       );
       final members = [
         for (final m in state.familyMembers)

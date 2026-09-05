@@ -362,11 +362,22 @@ class FirebaseHealthRepository implements HealthRepository {
         : registration.hospitalName
             .toLowerCase()
             .replaceAll(RegExp(r'[^a-z0-9]+'), '-');
-    await _db.collection('users').doc(patientId).set({
-      'clinicRegistrations': {key: registration.toMap()},
-      'gpCareProfileSyncedAt': DateTime.now().toIso8601String(),
+    final regId = '${patientId}_$key';
+    await _db.collection('clinic_patient_registrations').doc(regId).set({
+      'patientId': patientId,
+      'patientName': registration.fullName,
+      'hospitalId': registration.hospitalId,
+      'hospitalName': registration.hospitalName,
+      'branchId': registration.branchId,
+      'registration': registration.toMap(),
+      'source': 'suwasiri_app',
+      'registeredAt': DateTime.now().toIso8601String(),
     }, SetOptions(merge: true));
-    await syncGpCare(patientId);
+    try {
+      await syncGpCare(patientId);
+    } catch (_) {
+      // Profile saved; sync can retry from Vault → Sync GP Care.
+    }
   }
 
   @override
@@ -711,6 +722,9 @@ class FirebaseHealthRepository implements HealthRepository {
     String paymentStatus = 'PAID',
     bool paidBySuwasiri = false,
     String? suwasiriReceiptUrl,
+    String visitReason = '',
+    int? patientAge,
+    String patientGender = '',
   }) async {
     final gp = GpCareClinicMap.resolve(doctor.hospital);
     final apptId = _uuid.v4();
@@ -744,6 +758,9 @@ class FirebaseHealthRepository implements HealthRepository {
       paymentStatus: paymentStatus,
       paidBySuwasiri: paidBySuwasiri,
       suwasiriReceiptUrl: suwasiriReceiptUrl,
+      visitReason: visitReason,
+      patientAge: patientAge,
+      patientGender: patientGender,
     );
 
     final lockRef = _appointmentSlots.doc(lockId);

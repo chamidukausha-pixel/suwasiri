@@ -200,6 +200,8 @@ export function mapFirestoreAppointment(
     paymentStatus: data.paymentStatus ? String(data.paymentStatus) : undefined,
     paidBySuwasiri: data.paidBySuwasiri === true,
     suwasiriReceiptUrl: data.suwasiriReceiptUrl ? String(data.suwasiriReceiptUrl) : undefined,
+    patientAge: typeof data.patientAge === "number" ? data.patientAge : Number(data.patientAge) || undefined,
+    patientGender: data.patientGender ? String(data.patientGender) : undefined,
     queuePlace: typeof data.queuePlace === "number" ? data.queuePlace : undefined,
   };
 }
@@ -224,12 +226,16 @@ export function appointmentPatientName(apt: Appointment, patient?: Patient | nul
 /** Keep the Suwasiri booking name on the clinic file (e.g. Chamidu Kaushal Rathnayake). */
 export function overlayBookingIdentity(apt: Appointment, patient: Patient): Patient {
   const displayName = appointmentPatientName(apt, patient);
+  const fileGender = (patient.gender || "").trim();
+  const genderOk = Boolean(fileGender) && !/^(unknown|not recorded)$/i.test(fileGender);
   return {
     ...patient,
     name: displayName,
     phone: patient.phone || apt.patientPhone || "",
     email: patient.email || apt.patientEmail || "",
     medicalCenter: patient.medicalCenter || apt.clinicName,
+    age: patient.age > 0 ? patient.age : (apt.patientAge && apt.patientAge > 0 ? apt.patientAge : patient.age),
+    gender: genderOk ? patient.gender : (apt.patientGender || patient.gender),
   };
 }
 
@@ -237,8 +243,8 @@ export function stubPatientFromBooking(apt: Appointment): Patient {
   return {
     id: apt.patientId,
     name: appointmentPatientName(apt),
-    age: 0,
-    gender: "Unknown",
+    age: apt.patientAge && apt.patientAge > 0 ? apt.patientAge : 0,
+    gender: apt.patientGender || "Unknown",
     bloodType: "—",
     allergies: "NKDA",
     phone: apt.patientPhone || "",
@@ -281,6 +287,11 @@ export function mergePatients(clinic: Patient[], mobile: Patient[]): Patient[] {
         name,
         phone: p.phone || existing.phone,
         email: p.email || existing.email,
+        age: existing.age > 0 ? existing.age : p.age,
+        gender:
+          existing.gender && !/^(unknown|not recorded)$/i.test(existing.gender)
+            ? existing.gender
+            : p.gender || existing.gender,
       });
     }
   }
@@ -400,6 +411,25 @@ export async function updateSuwasiriAppointmentStatus(
   if (!isFirebaseConfigured() || !appointmentId) return;
   const db = getFirebaseDb();
   await updateDoc(doc(db, "appointments", appointmentId), { status });
+}
+
+export async function updateSuwasiriAppointmentPayment(
+  appointmentId: string,
+  patch: {
+    paymentStatus: string;
+    paymentMethod?: string;
+    paidBySuwasiri?: boolean;
+    suwasiriReceiptUrl?: string;
+  }
+): Promise<void> {
+  if (!isFirebaseConfigured() || !appointmentId) return;
+  const db = getFirebaseDb();
+  await updateDoc(doc(db, "appointments", appointmentId), {
+    paymentStatus: patch.paymentStatus,
+    ...(patch.paymentMethod ? { paymentMethod: patch.paymentMethod } : {}),
+    ...(patch.paidBySuwasiri !== undefined ? { paidBySuwasiri: patch.paidBySuwasiri } : {}),
+    ...(patch.suwasiriReceiptUrl ? { suwasiriReceiptUrl: patch.suwasiriReceiptUrl } : {}),
+  });
 }
 
 /** Map GP Care staff id / name → Suwasiri doctor catalog id (shared slot locks). */
@@ -663,6 +693,8 @@ export async function bookGpCareSlotToFirestore(opts: {
   specialty?: string;
   consultMode?: "clinic" | "video";
   isTelehealth?: boolean;
+  patientAge?: number;
+  patientGender?: string;
 }): Promise<{ ok: true; appointmentId: string } | { ok: false; reason: string }> {
   if (!isFirebaseConfigured()) {
     return { ok: false, reason: "Firebase not configured" };
@@ -727,6 +759,8 @@ export async function bookGpCareSlotToFirestore(opts: {
     source: "gp_care",
     token: `TKN-${Date.now() % 10000}`,
     paymentStatus: "PENDING",
+    patientAge: opts.patientAge,
+    patientGender: opts.patientGender || "",
     bookedAt: new Date().toISOString(),
   });
   return { ok: true, appointmentId };

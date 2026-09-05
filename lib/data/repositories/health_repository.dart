@@ -94,6 +94,9 @@ abstract class HealthRepository {
     String paymentStatus = 'PAID',
     bool paidBySuwasiri = false,
     String? suwasiriReceiptUrl,
+    String visitReason = '',
+    int? patientAge,
+    String patientGender = '',
   });
 
   Future<List<AppNotification>> getNotifications({String? patientId});

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import type { FormEvent } from "react";
 import type { Patient } from "../types";
+import PatientSexAgeBadge from "./PatientSexAgeBadge";
 
 function dash(value?: string | number | null): string {
   if (value == null) return "—";
@@ -139,6 +140,7 @@ export default function UniqueHealthIdSyncPanel({
             <div>
               <p className="text-[9px] uppercase tracking-wider font-bold text-emerald-700">Suwasiri patient file</p>
               <h4 className="font-serif font-bold text-sm text-[#00334f]">{preview.name}</h4>
+              <PatientSexAgeBadge gender={preview.gender} age={preview.age} />
               {preview.suwasiriBarcode && (
                 <p className="text-[10px] font-mono font-bold text-emerald-700 mt-0.5">
                   {preview.suwasiriBarcode}
