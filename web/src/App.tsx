@@ -1659,9 +1659,23 @@ export default function App() {
     const fromBookings = [...suwasiriAppointments, ...clinicAppointments]
       .filter((a) => a.patientId === patient.id)
       .map((a) => a.patientName);
-    const realName =
-      pickRealPatientName(patient.name, ...fromBookings, patient.email?.split("@")[0]) ||
-      patient.name;
+    const fromRegs = Object.values(suwasiriRegistrations)
+      .filter((r) => r.patient?.id === patient.id)
+      .map((r) => r.patient?.name);
+    const emailLocal = (patient.email || "").includes("phone.suwasiri")
+      ? ""
+      : patient.email?.split("@")[0];
+    const realName = pickRealPatientName(
+      patient.name,
+      ...fromRegs,
+      ...fromBookings,
+      emailLocal
+    );
+    if (!realName) {
+      throw new Error(
+        "This Unique Health ID has no personal name yet. Ask the patient to complete their name on the Suwasiri Unique Health ID / health profile, then Sync again."
+      );
+    }
     return {
       id: patient.id,
       name: realName,
@@ -1712,7 +1726,7 @@ export default function App() {
     const saved = {
       ...patient,
       ...(data.patient || {}),
-      name: pickRealPatientName(patient.name, data.patient?.name) || data.patient?.name || patient.name,
+      name: pickRealPatientName(patient.name, data.patient?.name) || patient.name,
       labResults: patient.labResults?.length ? patient.labResults : (data.patient?.labResults || []),
       vaccineRecords: patient.vaccineRecords?.length ? patient.vaccineRecords : (data.patient?.vaccineRecords || []),
     } as Patient;
@@ -1753,7 +1767,12 @@ export default function App() {
         return;
       }
       const barcode = patient.suwasiriBarcode || input.toUpperCase();
-      setHealthIdPreview({ ...patient, suwasiriBarcode: barcode });
+      const registeredName = suwasiriRegistrations[patient.id]?.patient?.name;
+      setHealthIdPreview({
+        ...patient,
+        suwasiriBarcode: barcode,
+        name: pickRealPatientName(patient.name, registeredName) || patient.name,
+      });
     } catch (err: any) {
       const message = String(err?.message || err);
       if (message.toLowerCase().includes("sign in")) {
@@ -1782,9 +1801,15 @@ export default function App() {
         name:
           pickRealPatientName(
             patient.name,
+            suwasiriRegistrations[patient.id]?.patient?.name,
             ...suwasiriAppointments.filter((a) => a.patientId === patient.id).map((a) => a.patientName)
           ) || patient.name,
       };
+      if (!pickRealPatientName(named.name)) {
+        throw new Error(
+          "This Unique Health ID has no personal name yet. Ask the patient to complete their name on the Suwasiri Unique Health ID / health profile, then Sync again."
+        );
+      }
       const saved = await persistLookedUpHealthId(named, barcode);
       setHealthIdPreview({
         ...named,

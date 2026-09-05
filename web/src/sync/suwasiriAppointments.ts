@@ -11,6 +11,7 @@ import { getFirebaseDb, isFirebaseConfigured } from "../firebase";
 import { HOSPITAL_PRIMECARE, BRANCH_COLOMBO } from "../tenancy";
 import type { Appointment, Patient, StaffProvider } from "../types";
 import { suwasiriDoctorDocId } from "./suwasiriClinicDoctors";
+import { isPlaceholderPatientName, pickRealPatientName } from "./suwasiriHealthId";
 
 /** Sri Lanka has no DST; clinic wall-clock is always UTC+05:30. */
 function colomboWallTime(dateKey: string, hours: number, minutes: number): Date {
@@ -207,20 +208,17 @@ export function mapFirestoreAppointment(
 }
 
 export function appointmentPatientName(apt: Appointment, patient?: Patient | null): string {
-  const fromApt = (apt.patientName || "").trim();
-  if (fromApt && fromApt.toLowerCase() !== "suwasiri patient") return fromApt;
-  const fromPat = (patient?.name || "").trim();
-  if (fromPat && fromPat.toLowerCase() !== "suwasiri patient") return fromPat;
   const email = (apt.patientEmail || patient?.email || "").split("@")[0].trim();
-  if (email) {
-    return email
-      .replace(/[._]+/g, " ")
-      .split(" ")
-      .filter(Boolean)
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
-  }
-  return "Patient";
+  const fromEmail =
+    email && !email.includes("phone.suwasiri")
+      ? email
+          .replace(/[._]+/g, " ")
+          .split(" ")
+          .filter(Boolean)
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ")
+      : "";
+  return pickRealPatientName(apt.patientName, patient?.name, fromEmail);
 }
 
 /** Keep the Suwasiri booking name on the clinic file (e.g. Chamidu Kaushal Rathnayake). */
@@ -280,20 +278,18 @@ export function mergePatients(clinic: Patient[], mobile: Patient[]): Patient[] {
       byId.set(p.id, p);
       continue;
     }
-    const name = (p.name || "").trim();
-    if (name && name.toLowerCase() !== "suwasiri patient") {
-      byId.set(p.id, {
-        ...existing,
-        name,
-        phone: p.phone || existing.phone,
-        email: p.email || existing.email,
-        age: existing.age > 0 ? existing.age : p.age,
-        gender:
-          existing.gender && !/^(unknown|not recorded)$/i.test(existing.gender)
-            ? existing.gender
-            : p.gender || existing.gender,
-      });
-    }
+    const name = pickRealPatientName(existing.name, p.name) || existing.name || p.name;
+    byId.set(p.id, {
+      ...existing,
+      name,
+      phone: existing.phone || p.phone,
+      email: existing.email || p.email,
+      age: existing.age > 0 ? existing.age : p.age,
+      gender:
+        existing.gender && !/^(unknown|not recorded)$/i.test(existing.gender)
+          ? existing.gender
+          : p.gender || existing.gender,
+    });
   }
   return [...byId.values()];
 }

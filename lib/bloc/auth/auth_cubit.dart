@@ -369,6 +369,13 @@ class AuthCubit extends Cubit<AuthState> {
       final current = state.user;
       if (current == null || current.id != updated.id) return;
       final merged = current.copyWith(
+        name: () {
+          final fromIntake = updated.healthIntake?.fullName.trim();
+          if (fromIntake != null && fromIntake.isNotEmpty) return fromIntake;
+          final n = updated.name.trim();
+          if (n.isNotEmpty && n.toLowerCase() != 'patient') return n;
+          return current.name;
+        }(),
         clinicAllergies: updated.clinicAllergies ?? current.clinicAllergies,
         healthIntake: updated.healthIntake ?? current.healthIntake,
         clinicRegistrations:

@@ -46,7 +46,18 @@ class FirebaseAuthRepository implements AuthRepository {
   Future<UserProfile> _loadProfile(User user) async {
     final snap = await _users.doc(user.uid).get();
     if (snap.exists && snap.data() != null) {
-      return UserProfile.fromMap(user.uid, snap.data()!);
+      var profile = UserProfile.fromMap(user.uid, snap.data()!);
+      final resolved = profile.displayName.trim();
+      if (resolved.isNotEmpty &&
+          resolved.toLowerCase() != 'patient' &&
+          profile.name.trim().toLowerCase() == 'patient') {
+        profile = profile.copyWith(name: resolved);
+        await _users.doc(user.uid).set({'name': resolved}, SetOptions(merge: true));
+        if (user.displayName != resolved) {
+          await user.updateDisplayName(resolved);
+        }
+      }
+      return profile;
     }
     final profile = UserProfile(
       id: user.uid,

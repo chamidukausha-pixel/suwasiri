@@ -1506,8 +1506,6 @@ function applySuwasiriDemographics(target: any, body: any) {
   } = body;
   if (name && !isPlaceholderClinicName(name)) {
     target.name = name;
-  } else if (name && isPlaceholderClinicName(target.name)) {
-    target.name = name;
   }
   if (age !== undefined && age !== null && age !== "") target.age = parseInt(String(age), 10) || 0;
   if (gender) target.gender = gender;
@@ -1598,8 +1596,8 @@ app.post("/api/patients", (req, res) => {
   const store = getStore();
   const { name, age, medicalCenter, hospitalId, branchId, id: requestedId, suwasiriBarcode } = req.body;
 
-  if (!name) {
-    res.status(400).json({ error: "Missing name" });
+  if (!name || isPlaceholderClinicName(name)) {
+    res.status(400).json({ error: "A real patient name is required. Look up the Unique Health ID again so the Suwasiri file shows the person’s name, not “Patient”." });
     return;
   }
 

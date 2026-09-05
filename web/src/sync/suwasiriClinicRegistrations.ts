@@ -211,6 +211,7 @@ export function applyClinicRegistration(
   const fromReg = patch.patient;
   return {
     ...patient,
+    name: pickRealPatientName(fromReg?.name, patient.name) || patient.name,
     ...(fromReg
       ? {
           age: patient.age > 0 ? patient.age : fromReg.age,

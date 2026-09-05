@@ -106,10 +106,14 @@ function namesFromClinicRegistrations(data: Record<string, unknown>): string[] {
 export function displayName(data: Record<string, unknown>, intake: Record<string, unknown>): string {
   const candidates = [
     str(intake.fullName),
+    str(intake.name),
+    str(intake.givenName),
+    str(intake.preferredName),
     str(data.fullName),
     ...namesFromClinicRegistrations(data),
     str(data.name),
     str(data.displayName),
+    str(data.patientName),
   ].filter((n) => n && !isPlaceholderPatientName(n));
   if (candidates[0]) return candidates[0];
   const email = str(data.email);
@@ -338,9 +342,26 @@ async function nameFromAppointments(patientId: string): Promise<string> {
   return "";
 }
 
+async function nameFromRegistrations(patientId: string): Promise<string> {
+  try {
+    const snap = await getDocs(
+      query(collection(getFirebaseDb(), "clinic_patient_registrations"), where("patientId", "==", patientId))
+    );
+    for (const d of snap.docs) {
+      const data = d.data() as Record<string, unknown>;
+      const reg = asRecord(data.registration);
+      const n = str(data.patientName) || str(reg.fullName) || str(reg.name);
+      if (n && !isPlaceholderPatientName(n)) return n;
+    }
+  } catch (err) {
+    console.warn("Clinic registration name for Unique Health ID:", err);
+  }
+  return "";
+}
+
 async function enrichPatient(id: string, data: Record<string, unknown>): Promise<Patient> {
   const base = mapUserDocToPatient(id, data);
-  const [labs, vaccines, bookedName] = await Promise.all([
+  const [labs, vaccines, bookedName, registeredName] = await Promise.all([
     fetchLabs(id).catch((err) => {
       console.warn("Unique Health ID labs:", err);
       return [] as LabResult[];
@@ -349,11 +370,12 @@ async function enrichPatient(id: string, data: Record<string, unknown>): Promise
       console.warn("Unique Health ID vaccines:", err);
       return [] as VaccineRecord[];
     }),
-    isPlaceholderPatientName(base.name) ? nameFromAppointments(id) : Promise.resolve(""),
+    nameFromAppointments(id),
+    nameFromRegistrations(id),
   ]);
   return {
     ...base,
-    name: pickRealPatientName(base.name, bookedName) || base.name,
+    name: pickRealPatientName(base.name, registeredName, bookedName) || base.name,
     labResults: labs,
     vaccineRecords: mergeVaccines(vaccines, base.vaccineRecords || []),
   };

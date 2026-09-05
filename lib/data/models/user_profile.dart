@@ -57,16 +57,18 @@ class UserProfile extends Equatable {
     final fromIntake = healthIntake?.fullName.trim();
     if (fromIntake != null && fromIntake.isNotEmpty) return fromIntake;
     final n = name.trim();
-    if (n.isNotEmpty && n.toLowerCase() != 'patient') return n;
+    if (n.isNotEmpty && n.toLowerCase() != 'patient' && n.toLowerCase() != 'suwasiri patient') {
+      return n;
+    }
     final local = email.split('@').first.replaceAll(RegExp(r'[._]+'), ' ').trim();
-    if (local.isNotEmpty) {
+    if (local.isNotEmpty && !local.contains('phone.suwasiri') && !RegExp(r'^\+?\d+$').hasMatch(local)) {
       return local
           .split(RegExp(r'\s+'))
           .where((w) => w.isNotEmpty)
           .map((w) => '${w[0].toUpperCase()}${w.substring(1)}')
           .join(' ');
     }
-    return n.isNotEmpty ? n : 'Patient';
+    return n.isNotEmpty && n.toLowerCase() != 'patient' ? n : '';
   }
 
   /// Allergies under the Unique Health ID name: GP Care first, then intake.

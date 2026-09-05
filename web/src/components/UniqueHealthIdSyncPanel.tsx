@@ -145,7 +145,11 @@ export default function UniqueHealthIdSyncPanel({
           <div className="flex items-start justify-between gap-2">
             <div>
               <p className="text-[9px] uppercase tracking-wider font-bold text-emerald-700">Suwasiri patient file</p>
-              <h4 className="font-serif font-bold text-sm text-[#00334f]">{preview.name}</h4>
+              <h4 className="font-serif font-bold text-sm text-[#00334f]">
+                {preview.name && preview.name.trim().toLowerCase() !== "patient"
+                  ? preview.name
+                  : "Name not on this Unique Health ID yet"}
+              </h4>
               <PatientSexAgeBadge gender={preview.gender} age={preview.age} />
               {preview.suwasiriBarcode && (
                 <p className="text-[10px] font-mono font-bold text-emerald-700 mt-0.5">

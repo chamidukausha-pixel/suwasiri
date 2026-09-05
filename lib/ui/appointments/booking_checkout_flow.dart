@@ -322,7 +322,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
         doctor: widget.doctor,
         slot: _slotDateTime,
         consultMode: _mode,
-        patientName: user.displayName,
+        patientName: user.displayName.isNotEmpty ? user.displayName : user.name,
         patientEmail: user.email,
         patientPhone: user.mobileNo,
         paymentMethod: paymentMethod,
