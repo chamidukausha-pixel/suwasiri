@@ -190,6 +190,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
   List<DateTime> _bookedSlots = const [];
   StreamSubscription<List<DateTime>>? _bookedSub;
   String _visitReason = '';
+  bool _depsReady = false;
 
   static const _venueFee = 350;
 
@@ -244,8 +245,6 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
     final reason = widget.initialVisitReason?.trim();
     if (reason != null && reason.isNotEmpty) {
       _visitReason = reason;
-    } else if (mounted) {
-      _visitReason = AppLocalizations.of(context).t('bookingReasonFollowUp');
     }
     if (widget.initialSlot != null) {
       final slot = widget.initialSlot!;
@@ -262,6 +261,16 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
           ? firstTimes.first
           : DoctorScheduleSlots.times.first;
       _pickFirstOpenDate();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_depsReady) return;
+    _depsReady = true;
+    if (_visitReason.isEmpty) {
+      _visitReason = AppLocalizations.of(context).t('bookingReasonFollowUp');
     }
     _bookedSub = context
         .read<HealthRepository>()
