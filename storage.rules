@@ -6,5 +6,11 @@ service firebase.storage {
       allow write: if request.auth != null
         && request.resource.size < 8 * 1024 * 1024;
     }
+
+    match /clinic_media/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 5 * 1024 * 1024;
+    }
   }
 }

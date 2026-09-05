@@ -856,6 +856,18 @@ function getStore() {
     if (!Array.isArray(data.feeSchedule) || data.feeSchedule.length === 0) {
       data.feeSchedule = DEFAULT_FEE_SCHEDULE;
       mutated = true;
+    } else {
+      const have = new Set(
+        (data.feeSchedule as any[])
+          .map((f) => String(f.suwasiriService || ""))
+          .filter(Boolean)
+      );
+      for (const item of DEFAULT_FEE_SCHEDULE) {
+        if (item.suwasiriService && !have.has(item.suwasiriService)) {
+          data.feeSchedule.push(item);
+          mutated = true;
+        }
+      }
     }
     if (!Array.isArray(data.recalls)) {
       data.recalls = INITIAL_STATE.recalls;
@@ -1193,7 +1205,7 @@ app.put("/api/tenancy/memberships", (req, res) => {
 
 app.post("/api/tenancy/staff", (req, res) => {
   const store = getStore();
-  const { hospitalId, name, email, roleName, branchIds, phone, specialty } = req.body || {};
+  const { hospitalId, name, email, roleName, branchIds, phone, specialty, photoUrl } = req.body || {};
   if (!hospitalId || !name || !email || !roleName) {
     return res.status(400).json({ error: "hospitalId, name, email, and roleName required" });
   }
@@ -1234,6 +1246,7 @@ app.post("/api/tenancy/staff", (req, res) => {
     email,
     phone: phone || "",
     assignedRoom: roleName === "Receptionist" ? "Front Desk Reception" : "Consultation Room 1",
+    photoUrl: photoUrl || "",
     roster: { monday: true, tuesday: true, wednesday: true, thursday: true, friday: true, saturday: false, sunday: false },
     rosterHours: {
       monday: { start: "09:00", end: "17:00" },
@@ -1266,17 +1279,23 @@ app.delete("/api/tenancy/staff/:id", (req, res) => {
 
 app.put("/api/fee-schedule", (req, res) => {
   const store = getStore();
-  const { feeSchedule } = req.body || {};
+  const { feeSchedule, hospitalId } = req.body || {};
   if (!Array.isArray(feeSchedule)) {
     return res.status(400).json({ error: "feeSchedule[] required" });
   }
-  store.feeSchedule = feeSchedule.map((item: any) => ({
+  const mapped = feeSchedule.map((item: any) => ({
     ...item,
     bulkBillable: false,
     gapFee: Number(item.privateFee || 0) - Number(item.mbsBenefit || 0),
+    suwasiriService: item.suwasiriService || "",
   }));
+  store.feeSchedule = mapped;
+  if (hospitalId) {
+    store.feeSchedules = store.feeSchedules || {};
+    store.feeSchedules[hospitalId] = mapped;
+  }
   saveStore(store);
-  res.json({ success: true, feeSchedule: store.feeSchedule });
+  res.json({ success: true, feeSchedule: mapped });
 });
 
 app.put("/api/recalls", (req, res) => {
@@ -1324,11 +1343,11 @@ app.patch("/api/tenancy/hospitals/:id", (req, res) => {
 
 app.post("/api/tenancy/hospitals", (req, res) => {
   const store = getStore();
-  const { name, district } = req.body || {};
+  const { name, district, logoUrl } = req.body || {};
   if (!name) return res.status(400).json({ error: "name required" });
   const id = `hosp-${Date.now()}`;
   const region = String(district || "Colombo").trim() || "Colombo";
-  const hospital = { id, name, status: "ACTIVE", district: region };
+  const hospital = { id, name, status: "ACTIVE", district: region, logoUrl: logoUrl || "" };
   const branch = {
     id: `branch-${Date.now()}`,
     hospitalId: id,
@@ -1576,13 +1595,13 @@ function absorbClinicFile(target: any, source: any) {
 
 function foldDuplicateSuwasiriFiles(store: any, canonical: any) {
   const barcode = String(canonical.suwasiriBarcode || "").trim().toUpperCase();
-  const email = String(canonical.email || "").trim().toLowerCase();
   const kept: any[] = [];
   for (const p of store.patients || []) {
     if (!p || p.id === canonical.id) continue;
+    const sameId = String(p.id || "") === String(canonical.id || "");
     const sameBarcode = barcode && String(p.suwasiriBarcode || "").trim().toUpperCase() === barcode;
-    const sameEmail = email && String(p.email || "").trim().toLowerCase() === email;
-    if (!sameBarcode && !sameEmail) {
+    // Do NOT merge household members who share an email or NIC (Manel vs Kalyani).
+    if (!sameId && !sameBarcode) {
       kept.push(p);
       continue;
     }
@@ -1655,14 +1674,11 @@ app.post("/api/patients", (req, res) => {
   };
   applySuwasiriDemographics(newPatient, req.body);
 
-  const email = String(newPatient.email || "").trim().toLowerCase();
   const barcode = String(newPatient.suwasiriBarcode || "").trim().toUpperCase();
-  const nic = String(newPatient.nic || "").trim().toLowerCase();
   const sameFile = store.patients.find((p: any) => {
     if (!p || isDummySuwasiriImport(p)) return false;
-    if (email && String(p.email || "").trim().toLowerCase() === email) return true;
+    if (p.id && p.id === newPatient.id) return true;
     if (barcode && String(p.suwasiriBarcode || "").trim().toUpperCase() === barcode) return true;
-    if (nic && String(p.nic || p.ihiNumber || "").trim().toLowerCase() === nic) return true;
     return false;
   });
   if (sameFile && sameFile.id !== newPatient.id) {

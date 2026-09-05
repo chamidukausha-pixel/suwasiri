@@ -9,6 +9,7 @@ import '../catalogs/patient_health_samples.dart';
 import '../catalogs/vaccine_catalog.dart';
 import '../models/app_notification.dart';
 import '../models/appointment.dart';
+import '../models/clinic_fee_item.dart';
 import '../models/clinic_patient_registration.dart';
 import '../models/sos_location.dart';
 import '../models/vaccine_models.dart';
@@ -514,8 +515,19 @@ class FirebaseHealthRepository implements HealthRepository {
     } catch (_) {
       // Catalog-only fallback if clinic_doctors is unavailable.
     }
+    final logos = <String, String>{};
     try {
       final centers = await _db.collection('clinic_centers').get();
+      for (final doc in centers.docs) {
+        final data = doc.data();
+        if (data['active'] == false) continue;
+        final logo = (data['logoUrl'] as String?)?.trim() ?? '';
+        final hid = (data['hospitalId'] as String?)?.trim() ?? doc.id;
+        if (logo.isNotEmpty) logos[hid] = logo;
+        if (logo.isNotEmpty) logos[doc.id] = logo;
+        final name = (data['name'] as String? ?? '').trim();
+        if (name.isNotEmpty) logos['name:${name.toLowerCase()}'] = logo;
+      }
       final hospitals = merged.map((d) => d.hospital.toLowerCase()).toSet();
       for (final doc in centers.docs) {
         final data = doc.data();
@@ -524,6 +536,7 @@ class FirebaseHealthRepository implements HealthRepository {
         if (name.isEmpty) continue;
         if (hospitals.contains(name.toLowerCase())) continue;
         hospitals.add(name.toLowerCase());
+        final logo = (data['logoUrl'] as String?)?.trim();
         merged.add(
           Doctor(
             id: 'center-${doc.id}',
@@ -534,6 +547,8 @@ class FirebaseHealthRepository implements HealthRepository {
             region: data['region'] as String? ?? 'Colombo',
             address: data['address'] as String? ?? '',
             hospitalId: data['hospitalId'] as String? ?? '',
+            logoUrl: (logo != null && logo.isNotEmpty) ? logo : null,
+            photoUrl: (logo != null && logo.isNotEmpty) ? logo : null,
             bio:
                 'GP Care medical centre. Doctors appear here after they are added in Platform Console.',
             feeLkr: 0,
@@ -541,7 +556,7 @@ class FirebaseHealthRepository implements HealthRepository {
         );
       }
     } catch (_) {}
-    final deduped = _mergeDoctors(merged);
+    final deduped = _applyClinicLogos(_mergeDoctors(merged), logos);
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return deduped;
     final tokens = q.split(RegExp(r'\s+')).where((t) => t.isNotEmpty);
@@ -552,6 +567,31 @@ class FirebaseHealthRepository implements HealthRepository {
       if (hay.contains(q)) return true;
       return tokens.every((t) => hay.contains(t));
     }).toList();
+  }
+
+  @override
+  Future<List<ClinicFeeItem>> getClinicFeeSchedule({String hospitalId = ''}) async {
+    List<ClinicFeeItem> parse(Map<String, dynamic>? data) {
+      final raw = data?['items'];
+      if (raw is! List) return const [];
+      return raw
+          .whereType<Map>()
+          .map((item) => ClinicFeeItem.fromMap(Map<String, dynamic>.from(item)))
+          .where((item) => item.privateFeeLkr > 0)
+          .toList();
+    }
+
+    try {
+      if (hospitalId.trim().isNotEmpty) {
+        final doc = await _db.collection('clinic_fee_schedules').doc(hospitalId).get();
+        final items = parse(doc.data());
+        if (items.isNotEmpty) return items;
+      }
+      final global = await _db.collection('clinic_fee_schedules').doc('global').get();
+      return parse(global.data());
+    } catch (_) {
+      return const [];
+    }
   }
 
   static String _normDoctorName(String name) => name
@@ -599,9 +639,29 @@ class FirebaseHealthRepository implements HealthRepository {
             : existing.nextAvailable,
         feeLkr: d.feeLkr > 0 ? d.feeLkr : existing.feeLkr,
         address: d.address.isNotEmpty ? d.address : existing.address,
+        photoUrl: (d.photoUrl != null && d.photoUrl!.trim().isNotEmpty)
+            ? d.photoUrl
+            : existing.photoUrl,
+        logoUrl: (d.logoUrl != null && d.logoUrl!.trim().isNotEmpty)
+            ? d.logoUrl
+            : existing.logoUrl,
       );
     }
     return byKey.values.toList();
+  }
+
+  static List<Doctor> _applyClinicLogos(
+    List<Doctor> doctors,
+    Map<String, String> logos,
+  ) {
+    if (logos.isEmpty) return doctors;
+    return doctors.map((d) {
+      final logo = logos[d.hospitalId] ??
+          logos['name:${d.hospital.toLowerCase()}'] ??
+          d.logoUrl;
+      if (logo == null || logo.isEmpty || d.logoUrl == logo) return d;
+      return d.copyWith(logoUrl: logo);
+    }).toList();
   }
 
   @override
@@ -723,6 +783,7 @@ class FirebaseHealthRepository implements HealthRepository {
     bool paidBySuwasiri = false,
     String? suwasiriReceiptUrl,
     String visitReason = '',
+    int? feeLkr,
     int? patientAge,
     String patientGender = '',
   }) async {
@@ -754,7 +815,7 @@ class FirebaseHealthRepository implements HealthRepository {
       hospitalId: hospitalId,
       branchId: branchId,
       paymentMethod: paymentMethod,
-      feeLkr: doctor.feeLkr,
+      feeLkr: feeLkr ?? doctor.feeLkr,
       paymentStatus: paymentStatus,
       paidBySuwasiri: paidBySuwasiri,
       suwasiriReceiptUrl: suwasiriReceiptUrl,

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -28,16 +30,11 @@ class DoctorAvatar extends StatelessWidget {
     final letter = initial.isNotEmpty ? initial[0].toUpperCase() : 'D';
     final size = radius * 2;
 
-    Widget image = Image.network(
-      doctor.displayPhotoUrl,
+    Widget image = ClinicMediaImage(
+      url: doctor.displayPhotoUrl,
       width: size,
       height: size,
-      fit: BoxFit.cover,
-      loadingBuilder: (_, child, progress) {
-        if (progress == null) return child;
-        return _fallback(size, letter);
-      },
-      errorBuilder: (_, _, _) => _fallback(size, letter),
+      fallback: _fallback(size, letter),
     );
 
     if (circular) {
@@ -178,21 +175,90 @@ String clinicPhoneForRegion(String region) {
 }
 
 class ClinicLogoPlaceholder extends StatelessWidget {
-  const ClinicLogoPlaceholder({super.key, this.size = 56});
+  const ClinicLogoPlaceholder({super.key, this.size = 56, this.imageUrl});
 
   final double size;
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: AppColors.trustBlueSoft,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.border),
+    final url = imageUrl?.trim() ?? '';
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: url.isEmpty
+            ? Container(
+                decoration: BoxDecoration(
+                  color: AppColors.trustBlueSoft,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: const Icon(
+                  Icons.local_hospital_outlined,
+                  color: AppColors.trustBlue,
+                ),
+              )
+            : ClinicMediaImage(
+                url: url,
+                width: size,
+                height: size,
+                fallback: Container(
+                  color: AppColors.trustBlueSoft,
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    Icons.local_hospital_outlined,
+                    color: AppColors.trustBlue,
+                  ),
+                ),
+              ),
       ),
-      child: const Icon(Icons.local_hospital_outlined, color: AppColors.trustBlue),
+    );
+  }
+}
+
+/// Network URL or `data:image/...;base64,` from GP Care when Storage is unavailable.
+class ClinicMediaImage extends StatelessWidget {
+  const ClinicMediaImage({
+    super.key,
+    required this.url,
+    required this.width,
+    required this.height,
+    required this.fallback,
+  });
+
+  final String url;
+  final double width;
+  final double height;
+  final Widget fallback;
+
+  @override
+  Widget build(BuildContext context) {
+    if (url.startsWith('data:image')) {
+      try {
+        final b64 = url.split(',').last;
+        return Image.memory(
+          base64Decode(b64),
+          width: width,
+          height: height,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => fallback,
+        );
+      } catch (_) {
+        return fallback;
+      }
+    }
+    return Image.network(
+      url,
+      width: width,
+      height: height,
+      fit: BoxFit.cover,
+      loadingBuilder: (_, child, progress) {
+        if (progress == null) return child;
+        return fallback;
+      },
+      errorBuilder: (_, _, _) => fallback,
     );
   }
 }

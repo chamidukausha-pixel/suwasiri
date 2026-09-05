@@ -517,24 +517,9 @@ export function suwasiriPatientIdForClinicFile(
   if (!patient?.id) return "";
   if (looksLikeSuwasiriUid(patient.id)) return patient.id;
   const pool = extras.filter((p) => p.id !== patient.id && looksLikeSuwasiriUid(p.id));
-  const email = (patient.email || "").trim().toLowerCase();
-  if (email) {
-    const hit = pool.find((p) => (p.email || "").trim().toLowerCase() === email);
-    if (hit) return hit.id;
-  }
   const barcode = (patient.suwasiriBarcode || "").trim().toUpperCase();
   if (barcode) {
     const hit = pool.find((p) => (p.suwasiriBarcode || "").trim().toUpperCase() === barcode);
-    if (hit) return hit.id;
-  }
-  const phone = (patient.phone || "").replace(/\D/g, "");
-  const name = (patient.name || "").trim().toLowerCase();
-  if (phone.length >= 8 && name) {
-    const hit = pool.find(
-      (p) =>
-        (p.name || "").trim().toLowerCase() === name &&
-        (p.phone || "").replace(/\D/g, "").slice(-8) === phone.slice(-8)
-    );
     if (hit) return hit.id;
   }
   return patient.id;
@@ -542,10 +527,8 @@ export function suwasiriPatientIdForClinicFile(
 
 export function appointmentBelongsToPatient(apt: Appointment, patient: Patient): boolean {
   if (apt.patientId === patient.id) return true;
-  const email = (patient.email || "").trim().toLowerCase();
-  if (email && (apt.patientEmail || "").trim().toLowerCase() === email) return true;
-  const name = (patient.name || "").trim().toLowerCase();
-  if (name && (apt.patientName || "").trim().toLowerCase() === name) return true;
+  const barcode = (patient.suwasiriBarcode || "").trim().toUpperCase();
+  if (barcode && (apt.patientId || "").toUpperCase() === barcode) return true;
   return false;
 }
 

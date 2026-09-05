@@ -3,6 +3,7 @@ import { Bell, Building2, Plus, ShieldAlert, UserCheck, Users } from "lucide-rea
 import type { Branch, Hospital, PatientAccessRequest, RoleDefinition, StaffMembership, StaffProvider, StaffUser } from "../types";
 import { DOCTOR_SPECIALTIES } from "../catalogs/doctorSpecialties";
 import { SRI_LANKA_DISTRICTS } from "../catalogs/sriLankaDistricts";
+import ClinicImageField from "./ClinicImageField";
 
 interface Props {
   hospitals: Hospital[];
@@ -11,8 +12,9 @@ interface Props {
   roles: RoleDefinition[];
   branches: Branch[];
   staffDirectory: StaffProvider[];
-  onCreateHospital: (name: string, district: string) => void;
+  onCreateHospital: (name: string, district: string, logoUrl?: string) => void;
   onToggleHospitalStatus: (hospitalId: string, status: "ACTIVE" | "SUSPENDED") => void;
+  onUpdateHospitalLogo: (hospitalId: string, logoUrl: string) => Promise<void> | void;
   onCreateStaff: (payload: {
     hospitalId: string;
     name: string;
@@ -21,7 +23,9 @@ interface Props {
     branchIds: string[];
     phone?: string;
     specialty?: string;
+    photoUrl?: string;
   }) => Promise<void> | void;
+  onUpdateStaffPhoto: (payload: { staffId: string; hospitalId: string; photoUrl: string }) => Promise<void> | void;
   onRemoveStaff: (payload: { staffId: string; hospitalId: string }) => Promise<void> | void;
   accessRequests?: PatientAccessRequest[];
   onReviewAccessRequest?: (id: string, status: "APPROVED" | "REJECTED") => void;
@@ -38,13 +42,16 @@ export default function PlatformConsoleView({
   staffDirectory,
   onCreateHospital,
   onToggleHospitalStatus,
+  onUpdateHospitalLogo,
   onCreateStaff,
+  onUpdateStaffPhoto,
   onRemoveStaff,
   accessRequests = [],
   onReviewAccessRequest,
 }: Props) {
   const [newName, setNewName] = useState("");
   const [newDistrict, setNewDistrict] = useState("Colombo");
+  const [newLogoUrl, setNewLogoUrl] = useState("");
   const [openHospitalId, setOpenHospitalId] = useState<string | null>(null);
   const [staffName, setStaffName] = useState("");
   const [staffEmail, setStaffEmail] = useState("");
@@ -52,6 +59,7 @@ export default function PlatformConsoleView({
   const [staffRole, setStaffRole] = useState("Doctor");
   const [staffSpecialty, setStaffSpecialty] = useState<string>("Cardiologist");
   const [staffBranches, setStaffBranches] = useState<string[]>([]);
+  const [staffPhotoUrl, setStaffPhotoUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const pendingAccess = accessRequests.filter((r) => r.status === "PENDING");
 
@@ -145,8 +153,9 @@ export default function PlatformConsoleView({
             onSubmit={(e) => {
               e.preventDefault();
               if (!newName.trim()) return;
-              onCreateHospital(newName.trim(), newDistrict);
+              onCreateHospital(newName.trim(), newDistrict, newLogoUrl || undefined);
               setNewName("");
+              setNewLogoUrl("");
             }}
           >
             <input
@@ -164,6 +173,12 @@ export default function PlatformConsoleView({
                 <option key={d} value={d}>{d}</option>
               ))}
             </select>
+            <ClinicImageField
+              label="Centre logo"
+              value={newLogoUrl}
+              storagePath={`clinic_media/pending/logo-${Date.now()}.jpg`}
+              onChange={setNewLogoUrl}
+            />
             <button type="submit" className="bg-[#00334f] text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1">
               <Plus className="w-3.5 h-3.5" />
               Create hospital
@@ -187,12 +202,21 @@ export default function PlatformConsoleView({
                 <div className="p-4 flex flex-wrap items-center justify-between gap-3">
                   <button
                     type="button"
-                    className="text-left"
+                    className="text-left flex items-start gap-3 min-w-0"
                     onClick={() => {
                       setOpenHospitalId(open ? null : h.id);
                       setStaffBranches(hospitalBranches.map((b) => b.id));
+                      setStaffPhotoUrl("");
                     }}
                   >
+                    {h.logoUrl ? (
+                      <img src={h.logoUrl} alt="" className="w-12 h-12 rounded-lg object-cover border bg-white shrink-0" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg border bg-slate-50 flex items-center justify-center shrink-0">
+                        <Building2 className="w-5 h-5 text-slate-400" />
+                      </div>
+                    )}
+                    <div>
                     <p className="font-bold text-sm text-slate-900 hover:underline">{h.name}</p>
                     <p className="text-[11px] text-slate-500 font-mono">{h.id}{h.district ? ` · ${h.district}` : ""}</p>
                     <p className="text-[11px] text-slate-600 mt-1 flex items-center gap-1">
@@ -203,8 +227,15 @@ export default function PlatformConsoleView({
                       <Users className="w-3.5 h-3.5" />
                       {hospitalStaff.length} employees · click name to add or remove staff
                     </p>
+                    </div>
                   </button>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ClinicImageField
+                      label="Centre logo"
+                      value={h.logoUrl || ""}
+                      storagePath={`clinic_media/hospitals/${h.id}/logo.jpg`}
+                      onChange={(url) => void onUpdateHospitalLogo(h.id, url)}
+                    />
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                       h.status === "ACTIVE" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
                     }`}>
@@ -230,20 +261,37 @@ export default function PlatformConsoleView({
                         <div className="grid gap-1.5">
                           {hospitalStaff.map((s) => (
                             <div key={s.id} className="bg-white border rounded-lg px-3 py-2 text-xs flex flex-wrap items-center justify-between gap-2">
-                              <div>
-                                <span className="font-bold text-slate-900">{s.name}</span>
-                                <span className="text-slate-500 ml-2">{s.role}{s.specialty ? ` · ${s.specialty}` : ""} · {s.email}</span>
+                              <div className="flex items-center gap-2 min-w-0">
+                                {s.photoUrl ? (
+                                  <img src={s.photoUrl} alt="" className="w-9 h-9 rounded-full object-cover border shrink-0" />
+                                ) : (
+                                  <div className="w-9 h-9 rounded-full bg-slate-100 border shrink-0" />
+                                )}
+                                <div>
+                                  <span className="font-bold text-slate-900">{s.name}</span>
+                                  <span className="text-slate-500 ml-2">{s.role}{s.specialty ? ` · ${s.specialty}` : ""} · {s.email}</span>
+                                </div>
                               </div>
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  if (!window.confirm(`Remove ${s.name} from ${h.name}? They will disappear from Practice Manager, this clinic’s booking lists, and the Suwasiri app.`)) return;
-                                  await onRemoveStaff({ staffId: s.id, hospitalId: h.id });
-                                }}
-                                className="text-[10px] font-bold text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-1 rounded"
-                              >
-                                Remove (resigned)
-                              </button>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {/doctor|medical officer/i.test(s.role || "") && (
+                                  <ClinicImageField
+                                    label="Doctor photo"
+                                    value={s.photoUrl || ""}
+                                    storagePath={`clinic_media/doctors/${s.id}/photo.jpg`}
+                                    onChange={(url) => void onUpdateStaffPhoto({ staffId: s.id, hospitalId: h.id, photoUrl: url })}
+                                  />
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (!window.confirm(`Remove ${s.name} from ${h.name}? They will disappear from Practice Manager, this clinic’s booking lists, and the Suwasiri app.`)) return;
+                                    await onRemoveStaff({ staffId: s.id, hospitalId: h.id });
+                                  }}
+                                  className="text-[10px] font-bold text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-1 rounded"
+                                >
+                                  Remove (resigned)
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -269,10 +317,12 @@ export default function PlatformConsoleView({
                             branchIds: staffBranches.length ? staffBranches : hospitalBranches.map((b) => b.id),
                             phone: staffPhone.trim() || undefined,
                             specialty: staffRole === "Doctor" ? staffSpecialty : undefined,
+                            photoUrl: staffRole === "Doctor" ? staffPhotoUrl || undefined : undefined,
                           });
                           setStaffName("");
                           setStaffEmail("");
                           setStaffPhone("");
+                          setStaffPhotoUrl("");
                         } finally {
                           setSaving(false);
                         }
@@ -309,6 +359,7 @@ export default function PlatformConsoleView({
                           ))}
                         </select>
                         {staffRole === "Doctor" && (
+                          <>
                           <select
                             value={staffSpecialty}
                             onChange={(e) => setStaffSpecialty(e.target.value)}
@@ -319,6 +370,15 @@ export default function PlatformConsoleView({
                               <option key={spec} value={spec}>{spec}</option>
                             ))}
                           </select>
+                          <div className="sm:col-span-2">
+                            <ClinicImageField
+                              label="Doctor photo (shown in Suwasiri)"
+                              value={staffPhotoUrl}
+                              storagePath={`clinic_media/pending/doctor-${Date.now()}.jpg`}
+                              onChange={setStaffPhotoUrl}
+                            />
+                          </div>
+                          </>
                         )}
                       </div>
                       <div className="flex flex-wrap gap-1">

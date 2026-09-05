@@ -17,6 +17,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/map_launcher.dart';
 import '../../data/catalogs/doctor_schedule_slots.dart';
 import '../../data/models/appointment.dart';
+import '../../data/models/clinic_fee_item.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
@@ -191,6 +192,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
   StreamSubscription<List<DateTime>>? _bookedSub;
   String _visitReason = '';
   bool _depsReady = false;
+  List<ClinicFeeItem> _fees = const [];
 
   static const _venueFee = 350;
 
@@ -200,8 +202,15 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
         booked: _bookedSlots,
       );
 
-  int get _consultFee => widget.doctor.feeLkr;
-  int get _total => _consultFee + _venueFee;
+  int get _consultFee => consultFeeForVisit(
+        visitReason: _visitReason,
+        doctorFeeLkr: widget.doctor.feeLkr,
+        fees: _fees,
+      );
+
+  bool get _serviceOnlyFee => isServiceOnlyFee(_visitReason, _fees);
+
+  int get _total => _serviceOnlyFee ? _consultFee : _consultFee + _venueFee;
 
   List<DateTime> get _dates => DoctorScheduleSlots.upcomingDates();
 
@@ -272,6 +281,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
     if (_visitReason.isEmpty) {
       _visitReason = AppLocalizations.of(context).t('bookingReasonFollowUp');
     }
+    unawaited(_loadFees());
     _bookedSub = context
         .read<HealthRepository>()
         .watchDoctorBookedSlots(
@@ -295,6 +305,16 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
   void dispose() {
     unawaited(_bookedSub?.cancel());
     super.dispose();
+  }
+
+  Future<void> _loadFees() async {
+    try {
+      final fees = await context.read<HealthRepository>().getClinicFeeSchedule(
+            hospitalId: widget.doctor.hospitalId,
+          );
+      if (!mounted) return;
+      setState(() => _fees = fees);
+    } catch (_) {}
   }
 
   Future<void> _completeBooking({
@@ -330,6 +350,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
         paidBySuwasiri: paidBySuwasiri,
         suwasiriReceiptUrl: suwasiriReceiptUrl,
         visitReason: _visitReason,
+        feeLkr: _total,
         patientAge: user.ageYears,
         patientGender: _sexLabel(user.healthIntake?.sex),
       );
@@ -411,6 +432,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
                 doctor: widget.doctor,
                 slot: _slotDateTime,
                 total: _total,
+                feeLabel: _serviceOnlyFee ? _visitReason : null,
                 paying: _paying,
                 onBack: () => setState(() => _step = _CheckoutStep.confirm),
                 onClose: () => Navigator.pop(context),
@@ -427,6 +449,7 @@ class _PaymentChannelStep extends StatefulWidget {
     required this.doctor,
     required this.slot,
     required this.total,
+    this.feeLabel,
     required this.paying,
     required this.onBack,
     required this.onClose,
@@ -436,6 +459,7 @@ class _PaymentChannelStep extends StatefulWidget {
   final Doctor doctor;
   final DateTime slot;
   final int total;
+  final String? feeLabel;
   final bool paying;
   final VoidCallback onBack;
   final VoidCallback onClose;
@@ -674,7 +698,9 @@ class _PaymentChannelStepState extends State<_PaymentChannelStep> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      l.t('consultationSessionFee'),
+                      widget.feeLabel?.trim().isNotEmpty == true
+                          ? widget.feeLabel!
+                          : l.t('consultationSessionFee'),
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,

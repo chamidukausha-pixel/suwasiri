@@ -11,6 +11,7 @@ import '../catalogs/patient_health_samples.dart';
 import '../catalogs/vaccine_catalog.dart';
 import '../models/app_notification.dart';
 import '../models/appointment.dart';
+import '../models/clinic_fee_item.dart';
 import '../models/clinic_patient_registration.dart';
 import '../models/sos_location.dart';
 import '../models/vaccine_models.dart';
@@ -510,6 +511,11 @@ class DemoHealthRepository implements HealthRepository {
         .toList();
   }
 
+  @override
+  Future<List<ClinicFeeItem>> getClinicFeeSchedule({String hospitalId = ''}) async {
+    return const [];
+  }
+
   Future<List<Appointment>> _allAppointments() async {
     final raw = _prefs.getString(_kAppts);
     if (raw == null) return const [];
@@ -595,6 +601,7 @@ class DemoHealthRepository implements HealthRepository {
     bool paidBySuwasiri = false,
     String? suwasiriReceiptUrl,
     String visitReason = '',
+    int? feeLkr,
     int? patientAge,
     String patientGender = '',
   }) async {
@@ -625,7 +632,7 @@ class DemoHealthRepository implements HealthRepository {
       hospitalId: gp.hospitalId,
       branchId: gp.branchId,
       paymentMethod: paymentMethod,
-      feeLkr: doctor.feeLkr,
+      feeLkr: feeLkr ?? doctor.feeLkr,
       paymentStatus: paymentStatus,
       paidBySuwasiri: paidBySuwasiri,
       suwasiriReceiptUrl: suwasiriReceiptUrl,

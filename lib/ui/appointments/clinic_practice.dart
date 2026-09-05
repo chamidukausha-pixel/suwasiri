@@ -13,6 +13,7 @@ class ClinicPractice {
     this.latitude,
     this.longitude,
     this.clinicOnly = false,
+    this.logoUrl,
   });
 
   final String key;
@@ -25,6 +26,7 @@ class ClinicPractice {
   final double? latitude;
   final double? longitude;
   final bool clinicOnly;
+  final String? logoUrl;
 
   List<Doctor> get practitioners =>
       doctors.where((d) => !d.isClinicOnly).toList();
@@ -72,6 +74,9 @@ List<ClinicPractice> groupDoctorsIntoPractices(List<Doctor> doctors) {
       orElse: () => list.first,
     );
     final clinicOnly = list.every((d) => d.isClinicOnly);
+    final logo = list
+        .map((d) => d.logoUrl)
+        .firstWhere((u) => u != null && u.trim().isNotEmpty, orElse: () => null);
     practices.add(
       ClinicPractice(
         key: entry.key,
@@ -84,6 +89,7 @@ List<ClinicPractice> groupDoctorsIntoPractices(List<Doctor> doctors) {
         latitude: anchor.latitude,
         longitude: anchor.longitude,
         clinicOnly: clinicOnly,
+        logoUrl: logo,
       ),
     );
   }

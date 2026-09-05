@@ -225,8 +225,17 @@ export interface StaffProvider {
   };
   /** Per-day clinic hours, e.g. Monday 16:00–18:00. Editable after save. */
   rosterHours?: Partial<Record<RosterWeekday, RosterDayHours>>;
+  /** Doctor portrait shown in Suwasiri booking. */
+  photoUrl?: string;
   active: boolean;
 }
+
+export type SuwasiriFeeService =
+  | ""
+  | "standard"
+  | "medical_certificate"
+  | "repeat_prescription"
+  | "review_results";
 
 export interface FeeScheduleItem {
   id: string;
@@ -238,6 +247,8 @@ export interface FeeScheduleItem {
   privateFee: number;
   gapFee: number;
   bulkBillable: boolean;
+  /** Maps this private fee onto a Suwasiri booking reason (certificate / repeat Rx / review). */
+  suwasiriService?: SuwasiriFeeService;
 }
 
 export interface Patient {
@@ -694,6 +705,8 @@ export interface Hospital {
   name: string;
   status: "ACTIVE" | "SUSPENDED";
   district?: string;
+  /** Medical centre logo shown in the Suwasiri app. */
+  logoUrl?: string;
 }
 
 export interface Branch {

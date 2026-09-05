@@ -1,4 +1,4 @@
-import type { FeeScheduleItem } from "../types";
+import type { FeeScheduleItem, SuwasiriFeeService } from "../types";
 
 export const FEE_CATEGORIES: FeeScheduleItem["category"][] = [
   "Standard Consult",
@@ -8,6 +8,14 @@ export const FEE_CATEGORIES: FeeScheduleItem["category"][] = [
   "Mental Health",
   "Procedure",
   "After Hours",
+];
+
+export const SUWASIRI_FEE_SERVICES: { value: SuwasiriFeeService; label: string }[] = [
+  { value: "", label: "Not a Suwasiri special fee" },
+  { value: "standard", label: "Suwasiri: Standard consultation" },
+  { value: "medical_certificate", label: "Suwasiri: Medical certificate" },
+  { value: "repeat_prescription", label: "Suwasiri: Repeat prescription" },
+  { value: "review_results", label: "Suwasiri: Review results" },
 ];
 
 export const DEFAULT_FEE_SCHEDULE: FeeScheduleItem[] = [
@@ -76,5 +84,41 @@ export const DEFAULT_FEE_SCHEDULE: FeeScheduleItem[] = [
     privateFee: 2400.0,
     gapFee: 1800.0,
     bulkBillable: false,
+  },
+  {
+    id: "fee-mc",
+    mbsItemNumber: "SL-MC-01",
+    description: "Medical Certificate (sick leave / fitness)",
+    category: "Procedure",
+    mbsScheduleFee: 1000.0,
+    mbsBenefit: 0.0,
+    privateFee: 1000.0,
+    gapFee: 1000.0,
+    bulkBillable: false,
+    suwasiriService: "medical_certificate",
+  },
+  {
+    id: "fee-rx",
+    mbsItemNumber: "SL-RX-01",
+    description: "Repeat Prescription (no full consult)",
+    category: "Standard Consult",
+    mbsScheduleFee: 800.0,
+    mbsBenefit: 0.0,
+    privateFee: 800.0,
+    gapFee: 800.0,
+    bulkBillable: false,
+    suwasiriService: "repeat_prescription",
+  },
+  {
+    id: "fee-rr",
+    mbsItemNumber: "SL-RR-01",
+    description: "Review Results / investigation follow-up",
+    category: "Standard Consult",
+    mbsScheduleFee: 1200.0,
+    mbsBenefit: 0.0,
+    privateFee: 1200.0,
+    gapFee: 1200.0,
+    bulkBillable: false,
+    suwasiriService: "review_results",
   },
 ];

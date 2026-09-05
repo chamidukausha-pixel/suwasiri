@@ -225,7 +225,7 @@ class _PracticeCard extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const ClinicLogoPlaceholder(size: 52),
+                  ClinicLogoPlaceholder(size: 52, imageUrl: practice.logoUrl),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(

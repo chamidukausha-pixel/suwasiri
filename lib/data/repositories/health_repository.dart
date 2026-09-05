@@ -1,6 +1,7 @@
 import '../models/clinic_patient_registration.dart';
 import '../models/app_notification.dart';
 import '../models/appointment.dart';
+import '../models/clinic_fee_item.dart';
 import '../models/sos_location.dart';
 import '../models/vaccine_models.dart';
 import '../models/vault_report.dart';
@@ -67,6 +68,7 @@ abstract class HealthRepository {
   Future<void> syncMoh();
 
   Future<List<Doctor>> getDoctors({String query = ''});
+  Future<List<ClinicFeeItem>> getClinicFeeSchedule({String hospitalId = ''});
   Future<List<Appointment>> getAppointments(String patientId);
   Stream<List<Appointment>> watchAppointments(String patientId);
   Stream<List<AppNotification>> watchNotifications(String patientId);
@@ -95,6 +97,7 @@ abstract class HealthRepository {
     bool paidBySuwasiri = false,
     String? suwasiriReceiptUrl,
     String visitReason = '',
+    int? feeLkr,
     int? patientAge,
     String patientGender = '',
   });

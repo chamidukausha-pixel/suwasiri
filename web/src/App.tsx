@@ -88,6 +88,7 @@ import {
   tabAllowed,
 } from "./tenancy";
 import { isFirebaseConfigured } from "./firebase";
+import { promoteClinicImage } from "./utils/clinicMedia";
 import { signOutFirebase, staffForAuthUser, subscribeAuth } from "./firebaseAuth";
 import type { User } from "firebase/auth";
 import {
@@ -890,6 +891,7 @@ export default function App() {
         region: h.district || "Colombo",
         address: hospitalBranches[0]?.address,
         branchName: hospitalBranches[0]?.name,
+        logoUrl: h.logoUrl || "",
       });
       void republishStaffDoctorsToSuwasiri({
         staff: staffDirectory.filter((s) => s.hospitalId === h.id),
@@ -1282,6 +1284,156 @@ export default function App() {
       branches: branches.filter((b) => b.hospitalId === hospitalId),
       region: hospital?.district || "Colombo",
     });
+  };
+
+  const updateHospitalLogo = async (hospitalId: string, logoUrl: string) => {
+    const promoted = logoUrl
+      ? await promoteClinicImage(logoUrl, `clinic_media/hospitals/${hospitalId}/logo.jpg`)
+      : "";
+    const res = await fetch(`/api/tenancy/hospitals/${hospitalId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ logoUrl: promoted }),
+    });
+    const data = await res.json();
+    if (data.hospital) {
+      setHospitals((prev) => prev.map((h) => (h.id === data.hospital.id ? data.hospital : h)));
+    } else {
+      setHospitals((prev) => prev.map((h) => (h.id === hospitalId ? { ...h, logoUrl: promoted } : h)));
+    }
+    const hospital = hospitals.find((h) => h.id === hospitalId);
+    const branch = branches.find((b) => b.hospitalId === hospitalId);
+    try {
+      await publishClinicCenterToSuwasiri({
+        hospitalId,
+        name: hospital?.name || data.hospital?.name || "GP Care Clinic",
+        region: hospital?.district || "Colombo",
+        address: branch?.address,
+        branchName: branch?.name,
+        logoUrl: promoted,
+      });
+    } catch (err) {
+      console.warn("Could not publish clinic logo to Suwasiri:", err);
+    }
+  };
+
+  const updateStaffPhoto = async (payload: { staffId: string; hospitalId: string; photoUrl: string }) => {
+    const promoted = payload.photoUrl
+      ? await promoteClinicImage(payload.photoUrl, `clinic_media/doctors/${payload.staffId}/photo.jpg`)
+      : "";
+    const next = staffDirectory
+      .filter((s) => s.hospitalId === payload.hospitalId)
+      .map((s) => (s.id === payload.staffId ? { ...s, photoUrl: promoted } : s));
+    await persistStaffDirectory(next);
+  };
+
+  const createPortalStaff = async (payload: {
+    hospitalId: string;
+    name: string;
+    email: string;
+    roleName: string;
+    branchIds: string[];
+    phone?: string;
+    specialty?: string;
+    photoUrl?: string;
+  }) => {
+    const res = await fetch("/api/tenancy/staff", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || "Could not add staff");
+      return;
+    }
+    if (data.staffUser) {
+      setStaffUsers((prev) =>
+        prev.some((u) => u.id === data.staffUser.id) ? prev : [...prev, data.staffUser]
+      );
+    }
+    if (data.membership) setMemberships((prev) => [...prev, data.membership]);
+    let staff = data.staff as StaffProvider | undefined;
+    if (staff && payload.photoUrl) {
+      const promoted = await promoteClinicImage(
+        payload.photoUrl,
+        `clinic_media/doctors/${staff.id}/photo.jpg`
+      );
+      staff = { ...staff, photoUrl: promoted };
+      const next = [
+        ...staffDirectory.filter((s) => s.hospitalId === payload.hospitalId && s.id !== staff!.id),
+        staff,
+      ];
+      await persistStaffDirectory(next);
+    } else if (staff) {
+      setStaffDirectory((prev) => [...prev, staff!]);
+    }
+    if (payload.roleName === "Doctor" && staff) {
+      const hospital = hospitals.find((h) => h.id === payload.hospitalId);
+      const branch = branches.find((b) => payload.branchIds?.includes(b.id))
+        || branches.find((b) => b.hospitalId === payload.hospitalId);
+      try {
+        const doctorSynced = await publishClinicDoctorToSuwasiri({
+          staffId: staff.id,
+          name: payload.name,
+          specialty: payload.specialty || staff.specialty || "General Practitioner",
+          hospitalName: hospital?.name || "GP Care Clinic",
+          hospitalId: payload.hospitalId,
+          branchName: branch?.name,
+          branchId: branch?.id,
+          region: hospital?.district || "Colombo",
+          email: payload.email,
+          phone: payload.phone,
+          rosterHours: staff.rosterHours,
+          roster: staff.roster,
+          photoUrl: staff.photoUrl || "",
+        });
+        await publishClinicCenterToSuwasiri({
+          hospitalId: payload.hospitalId,
+          name: hospital?.name || payload.name,
+          region: hospital?.district || "Colombo",
+          address: branch?.address,
+          branchName: branch?.name,
+          logoUrl: hospital?.logoUrl || "",
+        });
+        if (doctorSynced) {
+          alert(`${payload.name} is listed at ${hospital?.name || "this clinic"} in the Suwasiri app. Patients can search the clinic or doctor and book available times (booked slots stay locked).`);
+        } else {
+          alert("Doctor saved here, but they did not reach the Suwasiri app. Sign in with Firebase staff email and try again.");
+        }
+      } catch (err) {
+        console.warn("Could not publish clinic doctor to Suwasiri:", err);
+        alert("Doctor saved here, but Suwasiri sync failed. Check the Firebase connection and try again.");
+      }
+    }
+  };
+
+  const removePortalStaff = async ({ staffId, hospitalId }: { staffId: string; hospitalId: string }) => {
+    const leaving = staffDirectory.find((s) => s.id === staffId);
+    const res = await fetch(`/api/tenancy/staff/${encodeURIComponent(staffId)}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hospitalId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(data.error || "Could not remove staff");
+      return;
+    }
+    if (data.staffDirectory) setStaffDirectory(data.staffDirectory);
+    if (data.memberships) setMemberships(data.memberships);
+    if (leaving && /doctor|medical officer/i.test(leaving.role || "")) {
+      try {
+        await unpublishClinicDoctorFromSuwasiri({
+          staffId: leaving.id,
+          doctorName: leaving.name,
+          hospitalId,
+        });
+      } catch (err) {
+        console.warn("Could not hide clinic doctor on Suwasiri:", err);
+      }
+    }
+    alert(`${leaving?.name || "Staff"} has been removed from this clinic and will no longer appear in Practice Manager, booking lists, or the Suwasiri app.`);
   };
 
   const persistMemberships = async (next: StaffMembership[]) => {
@@ -1723,12 +1875,16 @@ export default function App() {
       throw new Error(errBody.error || `Save failed (${res.status})`);
     }
     const data = await res.json();
+    const storePat = data.patient || {};
+    const samePerson = !storePat.id || storePat.id === patient.id;
     const saved = {
       ...patient,
-      ...(data.patient || {}),
-      name: pickRealPatientName(patient.name, data.patient?.name) || patient.name,
-      labResults: patient.labResults?.length ? patient.labResults : (data.patient?.labResults || []),
-      vaccineRecords: patient.vaccineRecords?.length ? patient.vaccineRecords : (data.patient?.vaccineRecords || []),
+      ...(samePerson ? storePat : {}),
+      id: patient.id,
+      name: pickRealPatientName(patient.name, samePerson ? storePat.name : "") || patient.name,
+      suwasiriBarcode: patient.suwasiriBarcode || barcode.toUpperCase(),
+      labResults: patient.labResults?.length ? patient.labResults : (samePerson ? storePat.labResults : patient.labResults) || [],
+      vaccineRecords: patient.vaccineRecords?.length ? patient.vaccineRecords : (samePerson ? storePat.vaccineRecords : patient.vaccineRecords) || [],
     } as Patient;
     const hid = opts?.hospitalId || sessionHospitalId || HOSPITAL_PRIMECARE;
     saved.hospitalId = saved.hospitalId || hid;
@@ -6059,27 +6215,46 @@ export default function App() {
                 staffDirectory={staffDirectory}
                 accessRequests={patientAccessRequests}
                 onReviewAccessRequest={(id, status) => void reviewPatientAccessRequest(id, status)}
-                onCreateHospital={async (name, district) => {
+                onCreateHospital={async (name, district, logoUrl) => {
                   const res = await fetch("/api/tenancy/hospitals", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ name, district }),
+                    body: JSON.stringify({ name, district, logoUrl: logoUrl || "" }),
                   });
                   const data = await res.json();
                   if (data.hospital) {
-                    setHospitals((prev) => [...prev, data.hospital]);
+                    let hospital = data.hospital as Hospital;
+                    if (logoUrl) {
+                      const promoted = await promoteClinicImage(
+                        logoUrl,
+                        `clinic_media/hospitals/${hospital.id}/logo.jpg`
+                      );
+                      if (promoted !== logoUrl) {
+                        const patched = await fetch(`/api/tenancy/hospitals/${hospital.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ logoUrl: promoted }),
+                        });
+                        const patchData = await patched.json().catch(() => ({}));
+                        hospital = patchData.hospital || { ...hospital, logoUrl: promoted };
+                      } else {
+                        hospital = { ...hospital, logoUrl: promoted };
+                      }
+                    }
+                    setHospitals((prev) => [...prev, hospital]);
                     if (data.roles) setRoleDefs((prev) => [...prev, ...data.roles]);
                     if (data.branch) setBranches((prev) => [...prev, data.branch]);
                     try {
                       const synced = await publishClinicCenterToSuwasiri({
-                        hospitalId: data.hospital.id,
-                        name: data.hospital.name,
-                        region: data.hospital.district || district || "Colombo",
+                        hospitalId: hospital.id,
+                        name: hospital.name,
+                        region: hospital.district || district || "Colombo",
                         address: data.branch?.address,
                         branchName: data.branch?.name,
+                        logoUrl: hospital.logoUrl || "",
                       });
                       if (synced) {
-                        alert(`${data.hospital.name} is on the Suwasiri app. Patients can search this clinic name on Doctors and book after you add a doctor.`);
+                        alert(`${hospital.name} is on the Suwasiri app. Patients can search this clinic name on Doctors and book after you add a doctor.`);
                       } else {
                         alert("Clinic saved here, but it did not reach the Suwasiri app. Sign in with Firebase staff email and try again.");
                       }
@@ -6100,88 +6275,10 @@ export default function App() {
                     setHospitals((prev) => prev.map((h) => (h.id === data.hospital.id ? data.hospital : h)));
                   }
                 }}
-                onCreateStaff={async (payload) => {
-                  const res = await fetch("/api/tenancy/staff", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload),
-                  });
-                  const data = await res.json();
-                  if (!res.ok) {
-                    alert(data.error || "Could not add staff");
-                    return;
-                  }
-                  if (data.staffUser) {
-                    setStaffUsers((prev) =>
-                      prev.some((u) => u.id === data.staffUser.id) ? prev : [...prev, data.staffUser]
-                    );
-                  }
-                  if (data.membership) setMemberships((prev) => [...prev, data.membership]);
-                  if (data.staff) setStaffDirectory((prev) => [...prev, data.staff]);
-                  if (payload.roleName === "Doctor" && data.staff) {
-                    const hospital = hospitals.find((h) => h.id === payload.hospitalId);
-                    const branch = branches.find((b) => payload.branchIds?.includes(b.id))
-                      || branches.find((b) => b.hospitalId === payload.hospitalId);
-                    try {
-                      const doctorSynced = await publishClinicDoctorToSuwasiri({
-                        staffId: data.staff.id,
-                        name: payload.name,
-                        specialty: payload.specialty || data.staff.specialty || "General Practitioner",
-                        hospitalName: hospital?.name || "GP Care Clinic",
-                        hospitalId: payload.hospitalId,
-                        branchName: branch?.name,
-                        branchId: branch?.id,
-                        region: hospital?.district || "Colombo",
-                        email: payload.email,
-                        phone: payload.phone,
-                        rosterHours: data.staff.rosterHours,
-                        roster: data.staff.roster,
-                      });
-                      await publishClinicCenterToSuwasiri({
-                        hospitalId: payload.hospitalId,
-                        name: hospital?.name || payload.name,
-                        region: hospital?.district || "Colombo",
-                        address: branch?.address,
-                        branchName: branch?.name,
-                      });
-                      if (doctorSynced) {
-                        alert(`${payload.name} is listed at ${hospital?.name || "this clinic"} in the Suwasiri app. Patients can search the clinic or doctor and book available times (booked slots stay locked).`);
-                      } else {
-                        alert("Doctor saved here, but they did not reach the Suwasiri app. Sign in with Firebase staff email and try again.");
-                      }
-                    } catch (err) {
-                      console.warn("Could not publish clinic doctor to Suwasiri:", err);
-                      alert("Doctor saved here, but Suwasiri sync failed. Check the Firebase connection and try again.");
-                    }
-                  }
-                }}
-                onRemoveStaff={async ({ staffId, hospitalId }) => {
-                  const leaving = staffDirectory.find((s) => s.id === staffId);
-                  const res = await fetch(`/api/tenancy/staff/${encodeURIComponent(staffId)}`, {
-                    method: "DELETE",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ hospitalId }),
-                  });
-                  const data = await res.json().catch(() => ({}));
-                  if (!res.ok) {
-                    alert(data.error || "Could not remove staff");
-                    return;
-                  }
-                  if (data.staffDirectory) setStaffDirectory(data.staffDirectory);
-                  if (data.memberships) setMemberships(data.memberships);
-                  if (leaving && /doctor|medical officer/i.test(leaving.role || "")) {
-                    try {
-                      await unpublishClinicDoctorFromSuwasiri({
-                        staffId: leaving.id,
-                        doctorName: leaving.name,
-                        hospitalId,
-                      });
-                    } catch (err) {
-                      console.warn("Could not hide clinic doctor on Suwasiri:", err);
-                    }
-                  }
-                  alert(`${leaving?.name || "Staff"} has been removed from this clinic and will no longer appear in Practice Manager, booking lists, or the Suwasiri app.`);
-                }}
+                onUpdateHospitalLogo={updateHospitalLogo}
+                onCreateStaff={createPortalStaff}
+                onUpdateStaffPhoto={updateStaffPhoto}
+                onRemoveStaff={removePortalStaff}
               />
             )}
 
@@ -6196,6 +6293,9 @@ export default function App() {
                   roles={hospitalRoles}
                   staffList={hospitalStaff}
                   onSaveStaff={persistStaffDirectory}
+                  onCreateStaff={createPortalStaff}
+                  onRemoveStaff={removePortalStaff}
+                  onUpdateStaffPhoto={updateStaffPhoto}
                   onCreateBranch={(payload) => persistBranches("create", payload)}
                   onUpdateBranch={(payload) => persistBranches("update", payload)}
                   onDeleteBranch={(id) => persistBranches("delete", { id })}

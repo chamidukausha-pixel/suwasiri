@@ -5,6 +5,7 @@ import '../../data/catalogs/doctor_schedule_slots.dart';
 import '../../data/models/appointment.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
+import 'doctor_booking_shared.dart';
 
 /// Booking confirm UI matching the product mockup (dates, times, reason, CTA).
 class BookingConfirmStep extends StatelessWidget {
@@ -68,14 +69,6 @@ class BookingConfirmStep extends StatelessWidget {
 
   int get _openCount => times.where((t) => !_taken(t)).length;
 
-  String get _initials {
-    final clean = doctor.name.replaceAll(RegExp(r'^Dr\.?\s*', caseSensitive: false), '').trim();
-    final parts = clean.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
-    if (parts.isEmpty) return 'D';
-    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
-    return (parts[0][0] + parts[1][0]).toUpperCase();
-  }
-
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -138,18 +131,7 @@ class BookingConfirmStep extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CircleAvatar(
-                      radius: 34,
-                      backgroundColor: chip,
-                      child: Text(
-                        _initials,
-                        style: const TextStyle(
-                          color: ink,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 18,
-                        ),
-                      ),
-                    ),
+                    DoctorAvatar(doctor: doctor, radius: 34),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
@@ -174,6 +156,28 @@ class BookingConfirmStep extends StatelessWidget {
                               height: 1.3,
                             ),
                           ),
+                          if ((doctor.logoUrl ?? '').trim().isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                ClinicLogoPlaceholder(
+                                  size: 28,
+                                  imageUrl: doctor.logoUrl,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    doctor.hospital,
+                                    style: const TextStyle(
+                                      color: muted,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                           const SizedBox(height: 8),
                           Wrap(
                             spacing: 12,

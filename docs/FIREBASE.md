@@ -53,8 +53,9 @@ Aligned with `firestore.rules` and `FirebaseHealthRepository` / `FirebaseAuthRep
 | `notifications` | `title`, `body`, `timestamp`, `type`, `read` | any signed-in (tighten later) |
 | `telehealth_sessions` | WebRTC offer/answer + `ice_doctor` / `ice_patient` ICE candidates; subcollection `messages` (in-call chat) | any signed-in (patient app + GP Care doctor) |
 | `consultation_notes` | `patientId`, `patientName`, `doctor`, `clinicName`, `title`, `body`, `date`, `appointmentId`, `source` (`gp_care`) | read/create: signed-in; update/delete: household or same patientId. Suwasiri Call + Vault treatment notes + GP Care history |
-| `clinic_doctors` | `name`, `specialty` (matches DoctorCatalog categories, e.g. Cardiologist), `hospital`, `address`, `region` (Sri Lankan district), `rosterHours`, `hospitalId`, `branchId`, `active`, `staffId`, `source` (`gp_care`) | signed-in read/write. GP Care Platform Console / Practice Manager publish doctors so the Suwasiri Doctors tab can search by name, clinic, and district |
-| `clinic_centers` | `name`, `region`, `address`, `hospitalId`, `active`, `source` (`gp_care`) | signed-in read/write. New medical centres created in Platform Console appear in Suwasiri until doctors are added |
+| `clinic_doctors` | `name`, `specialty`, `hospital`, `address`, `region`, `rosterHours`, `hospitalId`, `branchId`, `photoUrl`, `active`, `staffId`, `source` (`gp_care`) | signed-in read/write. Platform Console / Practice Manager publish doctors (photo optional) so Suwasiri Doctors can search by name, clinic, and district |
+| `clinic_centers` | `name`, `region`, `address`, `hospitalId`, `logoUrl`, `active`, `source` (`gp_care`) | signed-in read/write. New medical centres (logo optional) appear in Suwasiri until doctors are added |
+| `clinic_fee_schedules` | One doc per hospital (`hospitalId`) plus optional `global`. `items[]`: `description`, `privateFee`, `suwasiriService` (`medical_certificate` / `repeat_prescription` / `review_results`) | signed-in read/write. Practice Manager MBS items drive Suwasiri booking prices for those reasons |
 | `clinic_patient_registrations` | `patientId`, `patientName`, `hospitalId`, `hospitalName`, `branchId`, `registration` (full intake form), `source` (`suwasiri_app`) | household write; signed-in read. GP Care **Patient Clinical Records** creates a clinic file from this intake |
 
 ## Firebase Storage
@@ -62,6 +63,7 @@ Aligned with `firestore.rules` and `FirebaseHealthRepository` / `FirebaseAuthRep
 | Path | Use | Rule |
 |------|-----|------|
 | `appointment_receipts/{fileName}` | Manual bank-slip PDF or photo from Suwasiri checkout; GP Care Receipts & Invoices opens the download URL | signed-in read/write; max 8 MB (`storage.rules`) |
+| `clinic_media/{hospitals\|doctors}/…` | Medical centre logos and doctor portraits from GP Care | signed-in read/write; max 5 MB (`storage.rules`) |
 
 Deploy: `firebase deploy --only storage`
 

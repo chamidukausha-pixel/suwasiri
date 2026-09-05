@@ -99,7 +99,7 @@ class _ClinicHubScreenState extends State<ClinicHubScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const ClinicLogoPlaceholder(size: 64),
+              ClinicLogoPlaceholder(size: 64, imageUrl: p.logoUrl),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(

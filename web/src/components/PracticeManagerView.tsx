@@ -2,10 +2,13 @@ import React, { useEffect, useState } from "react";
 import { 
   Building2, Users, Calendar, DollarSign, Clock, FileCode, CheckCircle, 
   Plus, Edit, Trash2, MapPin, Stethoscope, Shield, ShieldCheck, Mail, Smartphone,
-  Check, Save, Sparkles, RefreshCw, AlertCircle
+  Check, Save, RefreshCw, AlertCircle
 } from "lucide-react";
-import { StaffProvider, FeeScheduleItem, Hospital, Branch, RoleDefinition, RosterWeekday } from "../types";
-import { DEFAULT_FEE_SCHEDULE, FEE_CATEGORIES } from "../catalogs/feeSchedule";
+import { StaffProvider, FeeScheduleItem, Hospital, Branch, RoleDefinition, RosterWeekday, SuwasiriFeeService } from "../types";
+import { DEFAULT_FEE_SCHEDULE, FEE_CATEGORIES, SUWASIRI_FEE_SERVICES } from "../catalogs/feeSchedule";
+import { DOCTOR_SPECIALTIES } from "../catalogs/doctorSpecialties";
+import ClinicImageField from "./ClinicImageField";
+import { publishFeeScheduleToSuwasiri } from "../sync/suwasiriFeeSchedule";
 
 interface Props {
   currentRole?: string;
@@ -15,6 +18,18 @@ interface Props {
   roles?: RoleDefinition[];
   staffList?: StaffProvider[];
   onSaveStaff?: (staff: StaffProvider[]) => void;
+  onCreateStaff?: (payload: {
+    hospitalId: string;
+    name: string;
+    email: string;
+    roleName: string;
+    branchIds: string[];
+    phone?: string;
+    specialty?: string;
+    photoUrl?: string;
+  }) => Promise<void> | void;
+  onRemoveStaff?: (payload: { staffId: string; hospitalId: string }) => Promise<void> | void;
+  onUpdateStaffPhoto?: (payload: { staffId: string; hospitalId: string; photoUrl: string }) => Promise<void> | void;
   onCreateBranch?: (payload: { name: string; address: string; phone?: string; rooms: string[] }) => void;
   onUpdateBranch?: (payload: Partial<Branch> & { id: string }) => void;
   onDeleteBranch?: (id: string) => void;
@@ -28,6 +43,9 @@ export default function PracticeManagerView({
   roles = [],
   staffList: staffProp,
   onSaveStaff,
+  onCreateStaff,
+  onRemoveStaff,
+  onUpdateStaffPhoto,
   onCreateBranch,
   onUpdateBranch,
   onDeleteBranch,
@@ -55,22 +73,34 @@ export default function PracticeManagerView({
     mbsItemNumber: "",
     description: "",
     category: "Standard Consult" as FeeScheduleItem["category"],
+    suwasiriService: "" as SuwasiriFeeService,
     mbsScheduleFee: 1500,
     mbsBenefit: 500,
     privateFee: 2000,
   });
   const [savingFees, setSavingFees] = useState(false);
+  const [addingDoctor, setAddingDoctor] = useState(false);
+  const [newDoctor, setNewDoctor] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    specialty: "General Practitioner",
+    photoUrl: "",
+  });
 
   useEffect(() => {
     fetch("/api/clinical-state")
       .then((r) => r.json())
       .then((data) => {
-        if (Array.isArray(data.feeSchedule) && data.feeSchedule.length) {
+        const byHospital = hospital?.id && data.feeSchedules?.[hospital.id];
+        if (Array.isArray(byHospital) && byHospital.length) {
+          setFeeSchedule(byHospital);
+        } else if (Array.isArray(data.feeSchedule) && data.feeSchedule.length) {
           setFeeSchedule(data.feeSchedule);
         }
       })
       .catch(() => undefined);
-  }, []);
+  }, [hospital?.id]);
 
   const persistFeeSchedule = async (next: FeeScheduleItem[]) => {
     const withGap = next.map((f) => ({
@@ -84,10 +114,18 @@ export default function PracticeManagerView({
       const res = await fetch("/api/fee-schedule", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ feeSchedule: withGap }),
+        body: JSON.stringify({ feeSchedule: withGap, hospitalId: hospital?.id }),
       });
       const data = await res.json();
       if (data.feeSchedule) setFeeSchedule(data.feeSchedule);
+      const synced = await publishFeeScheduleToSuwasiri({
+        hospitalId: hospital?.id,
+        hospitalName: hospital?.name,
+        items: data.feeSchedule || withGap,
+      });
+      if (!synced) {
+        alert("Fees saved here, but they did not reach the Suwasiri app. Sign in with Firebase staff email and try again.");
+      }
     } catch {
       alert("Could not save fee schedule.");
     } finally {
@@ -162,23 +200,6 @@ export default function PracticeManagerView({
       return;
     }
     setStaffList(prev => prev.map(s => s.id === staffId ? { ...s, assignedRoom: newRoom } : s));
-  };
-
-  const handleAutoSelectWeekdays = () => {
-    if (!isAdmin) return;
-    setStaffList(prev => prev.map(s => ({
-      ...s,
-      roster: {
-        monday: true,
-        tuesday: true,
-        wednesday: true,
-        thursday: true,
-        friday: true,
-        saturday: s.role === "Receptionist",
-        sunday: false
-      }
-    })));
-    triggerSaveSuccess("Standard Mon-Fri roster auto-selected for all clinic staff!");
   };
 
   const handleAutoSelectAllDays = () => {
@@ -325,15 +346,6 @@ export default function PracticeManagerView({
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={handleAutoSelectWeekdays}
-                  className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                  Auto-Select Mon–Fri
-                </button>
-
-                <button
-                  type="button"
                   onClick={handleAutoSelectAllDays}
                   className="bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
@@ -474,21 +486,102 @@ export default function PracticeManagerView({
           <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
             <div>
               <h3 className="font-bold text-xs text-slate-700 uppercase tracking-wider">Clinical Staff Directory</h3>
-              <p className="text-xs text-slate-500">Registered practitioners, Medicare provider numbers, and contact credentials</p>
+              <p className="text-xs text-slate-500">Add or remove doctors here. They appear on this list and in the Suwasiri app; remove hides them immediately.</p>
             </div>
             {isAdmin && (
-              <button 
-                onClick={() => {
-                  if (onSaveStaff) onSaveStaff(staffList);
-                  triggerSaveSuccess("Staff roles and branch assignments saved.");
-                }}
-                className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>Save staff assignments</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAddingDoctor((v) => !v)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add doctor</span>
+                </button>
+                <button 
+                  onClick={() => {
+                    if (onSaveStaff) onSaveStaff(staffList);
+                    triggerSaveSuccess("Staff roles and branch assignments saved.");
+                  }}
+                  className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Save staff assignments</span>
+                </button>
+              </div>
             )}
           </div>
+
+          {addingDoctor && isAdmin && hospital && (
+            <form
+              className="p-4 bg-emerald-50 border-b border-emerald-100 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!newDoctor.name.trim() || !newDoctor.email.trim()) {
+                  alert("Doctor name and email are required.");
+                  return;
+                }
+                if (!onCreateStaff) return;
+                await onCreateStaff({
+                  hospitalId: hospital.id,
+                  name: newDoctor.name.trim(),
+                  email: newDoctor.email.trim(),
+                  roleName: "Doctor",
+                  branchIds: branches.map((b) => b.id),
+                  phone: newDoctor.phone.trim() || undefined,
+                  specialty: newDoctor.specialty,
+                  photoUrl: newDoctor.photoUrl || undefined,
+                });
+                setNewDoctor({ name: "", email: "", phone: "", specialty: "General Practitioner", photoUrl: "" });
+                setAddingDoctor(false);
+                triggerSaveSuccess("Doctor added. They now appear in Staff & Practitioners and on Suwasiri.");
+              }}
+            >
+              <input
+                required
+                value={newDoctor.name}
+                onChange={(e) => setNewDoctor((p) => ({ ...p, name: e.target.value }))}
+                placeholder="Full name (e.g. Dr. Priyantha Silva)"
+                className="border rounded-lg px-3 py-1.5"
+              />
+              <input
+                required
+                type="email"
+                value={newDoctor.email}
+                onChange={(e) => setNewDoctor((p) => ({ ...p, email: e.target.value }))}
+                placeholder="Work email"
+                className="border rounded-lg px-3 py-1.5"
+              />
+              <input
+                value={newDoctor.phone}
+                onChange={(e) => setNewDoctor((p) => ({ ...p, phone: e.target.value }))}
+                placeholder="Phone (optional)"
+                className="border rounded-lg px-3 py-1.5"
+              />
+              <select
+                value={newDoctor.specialty}
+                onChange={(e) => setNewDoctor((p) => ({ ...p, specialty: e.target.value }))}
+                className="border rounded-lg px-3 py-1.5"
+              >
+                {DOCTOR_SPECIALTIES.map((spec) => (
+                  <option key={spec} value={spec}>{spec}</option>
+                ))}
+              </select>
+              <div className="md:col-span-2">
+                <ClinicImageField
+                  label="Doctor photo (shown in Suwasiri booking)"
+                  value={newDoctor.photoUrl}
+                  storagePath={`clinic_media/pending/doctor-${Date.now()}.jpg`}
+                  onChange={(url) => setNewDoctor((p) => ({ ...p, photoUrl: url }))}
+                />
+              </div>
+              <div className="md:col-span-2 flex justify-end">
+                <button type="submit" className="bg-[#00334f] text-white px-3 py-1.5 rounded-lg font-bold">
+                  Add doctor to this clinic
+                </button>
+              </div>
+            </form>
+          )}
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -503,9 +596,37 @@ export default function PracticeManagerView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
+                {staffList.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-6 px-4 text-slate-500 italic">
+                      No staff at this clinic yet. Add a doctor above — they will appear here and in the Suwasiri app.
+                    </td>
+                  </tr>
+                )}
                 {staffList.map((s) => (
                   <tr key={s.id} className="hover:bg-slate-50/70">
-                    <td className="py-3 px-4 font-bold text-slate-900">{s.name}</td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        {s.photoUrl ? (
+                          <img src={s.photoUrl} alt="" className="w-9 h-9 rounded-full object-cover border shrink-0" />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full bg-slate-100 border shrink-0" />
+                        )}
+                        <div>
+                          <p className="font-bold text-slate-900">{s.name}</p>
+                          {/doctor|medical officer/i.test(s.role || "") && isAdmin && hospital && onUpdateStaffPhoto && (
+                            <div className="mt-1">
+                              <ClinicImageField
+                                label="Photo"
+                                value={s.photoUrl || ""}
+                                storagePath={`clinic_media/doctors/${s.id}/photo.jpg`}
+                                onChange={(url) => void onUpdateStaffPhoto({ staffId: s.id, hospitalId: hospital.id, photoUrl: url })}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
                     <td className="py-3 px-4">
                       {isAdmin && roles.length > 0 ? (
                         <select
@@ -546,9 +667,23 @@ export default function PracticeManagerView({
                     <td className="py-3 px-4 text-slate-700">{s.assignedRoom}</td>
                     <td className="py-3 px-4 text-slate-600">{s.email}</td>
                     <td className="py-3 px-4">
-                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
-                        Active
-                      </span>
+                      <div className="flex flex-col gap-1 items-start">
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+                          Active
+                        </span>
+                        {isAdmin && hospital && onRemoveStaff && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!window.confirm(`Remove ${s.name} from ${hospital.name}? They will disappear from this list, weekly rosters, and the Suwasiri app.`)) return;
+                              await onRemoveStaff({ staffId: s.id, hospitalId: hospital.id });
+                            }}
+                            className="text-[10px] font-bold text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-1 rounded"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -564,7 +699,7 @@ export default function PracticeManagerView({
           <div className="p-4 bg-sky-50 border-b border-sky-100 flex justify-between items-center">
             <div>
               <h3 className="font-bold text-xs text-slate-700 uppercase tracking-wider">MBS Schedule & Private Billing Fees</h3>
-              <p className="text-xs text-slate-500">Edit schedule fee, private fee, and gap. Super Admin can add new MBS / clinic items.</p>
+              <p className="text-xs text-slate-500">Add or delete items and map them to Suwasiri (medical certificate, repeat prescription, review results). The app shows only that private fee for those bookings.</p>
             </div>
             {isAdmin && (
               <div className="flex items-center gap-2">
@@ -602,6 +737,7 @@ export default function PracticeManagerView({
                   mbsItemNumber: newFee.mbsItemNumber.trim(),
                   description: newFee.description.trim(),
                   category: newFee.category,
+                  suwasiriService: newFee.suwasiriService,
                   mbsScheduleFee: Number(newFee.mbsScheduleFee) || 0,
                   mbsBenefit: Number(newFee.mbsBenefit) || 0,
                   privateFee: Number(newFee.privateFee) || 0,
@@ -613,6 +749,7 @@ export default function PracticeManagerView({
                   mbsItemNumber: "",
                   description: "",
                   category: "Standard Consult",
+                  suwasiriService: "",
                   mbsScheduleFee: 1500,
                   mbsBenefit: 500,
                   privateFee: 2000,
@@ -640,6 +777,13 @@ export default function PracticeManagerView({
                 className="border rounded-lg px-2 py-1.5"
               >
                 {FEE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select
+                value={newFee.suwasiriService}
+                onChange={(e) => setNewFee((p) => ({ ...p, suwasiriService: e.target.value as SuwasiriFeeService }))}
+                className="border rounded-lg px-2 py-1.5 md:col-span-2"
+              >
+                {SUWASIRI_FEE_SERVICES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
               <input
                 type="number"
@@ -672,9 +816,11 @@ export default function PracticeManagerView({
                   <th className="py-3 px-4">MBS Item</th>
                   <th className="py-3 px-4">Description</th>
                   <th className="py-3 px-4">Category</th>
+                  <th className="py-3 px-4">Suwasiri booking</th>
                   <th className="py-3 px-4">MBS Schedule Fee</th>
                   <th className="py-3 px-4">Private Fee</th>
                   <th className="py-3 px-4">Out-of-Pocket Gap</th>
+                  {isAdmin && <th className="py-3 px-4"></th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -719,6 +865,21 @@ export default function PracticeManagerView({
                     </td>
                     <td className="py-3 px-4">
                       {isAdmin ? (
+                        <select
+                          value={f.suwasiriService || ""}
+                          onChange={(e) => updateFeeField(f.id, "suwasiriService", e.target.value)}
+                          className="text-[10px] bg-violet-50 text-violet-800 px-2 py-1 rounded font-semibold border border-violet-100"
+                        >
+                          {SUWASIRI_FEE_SERVICES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                        </select>
+                      ) : (
+                        <span className="text-[10px] text-slate-600">
+                          {SUWASIRI_FEE_SERVICES.find((s) => s.value === (f.suwasiriService || ""))?.label}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {isAdmin ? (
                         <input
                           type="number"
                           min={0}
@@ -746,6 +907,20 @@ export default function PracticeManagerView({
                     <td className="py-3 px-4 font-mono font-extrabold text-amber-700">
                       {f.gapFee > 0 ? `Rs. ${f.gapFee.toFixed(2)}` : "Rs. 0.00 (No Gap)"}
                     </td>
+                    {isAdmin && (
+                      <td className="py-3 px-4">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!window.confirm(`Delete ${f.mbsItemNumber}? Suwasiri will stop using this fee.`)) return;
+                            void persistFeeSchedule(feeSchedule.filter((item) => item.id !== f.id));
+                          }}
+                          className="text-[10px] font-bold text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-1 rounded"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

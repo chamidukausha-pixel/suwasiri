@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteField,
   doc,
   getDocs,
   onSnapshot,
@@ -39,6 +40,7 @@ export function mapClinicDoctorDoc(id: string, data: Record<string, unknown>): S
     assignedRoom: String(data.address || data.hospital || "Clinic"),
     roster: EMPTY_ROSTER,
     rosterHours: hours,
+    photoUrl: String(data.photoUrl || ""),
     active: data.active !== false,
   };
 }
@@ -85,6 +87,7 @@ export function staffDoctorStub(opts: {
     phone: "",
     assignedRoom: "Clinic",
     roster: EMPTY_ROSTER,
+    photoUrl: "",
     active: true,
   };
 }
@@ -154,6 +157,7 @@ export async function publishClinicDoctorToSuwasiri(opts: {
   phone?: string;
   rosterHours?: StaffProvider["rosterHours"];
   roster?: StaffProvider["roster"];
+  photoUrl?: string;
 }): Promise<boolean> {
   if (!isFirebaseConfigured()) return false;
   const name = opts.name.trim();
@@ -169,31 +173,31 @@ export async function publishClinicDoctorToSuwasiri(opts: {
           .map(([day, h]) => [day, { start: h!.start, end: h!.end }])
       )
     : {};
-  await setDoc(
-    doc(getFirebaseDb(), "clinic_doctors", id),
-    {
-      name: displayName,
-      specialty,
-      hospital,
-      address: opts.branchName || hospital,
-      region: opts.region || "Colombo",
-      rating: 4.8,
-      yearsExperience: 8,
-      feeLkr: 3500,
-      nextAvailable: rosterLabel(opts.rosterHours, opts.roster),
-      bio: `${specialty} at ${hospital}. Book via Suwasiri.`,
-      email: opts.email || "",
-      phone: opts.phone || "",
-      source: "gp_care",
-      staffId: opts.staffId,
-      hospitalId: opts.hospitalId || "",
-      branchId: opts.branchId || "",
-      rosterHours: hours,
-      active: true,
-      updatedAt: new Date().toISOString(),
-    },
-    { merge: true }
-  );
+  const payload: Record<string, unknown> = {
+    name: displayName,
+    specialty,
+    hospital,
+    address: opts.branchName || hospital,
+    region: opts.region || "Colombo",
+    rating: 4.8,
+    yearsExperience: 8,
+    feeLkr: 3500,
+    nextAvailable: rosterLabel(opts.rosterHours, opts.roster),
+    bio: `${specialty} at ${hospital}. Book via Suwasiri.`,
+    email: opts.email || "",
+    phone: opts.phone || "",
+    source: "gp_care",
+    staffId: opts.staffId,
+    hospitalId: opts.hospitalId || "",
+    branchId: opts.branchId || "",
+    rosterHours: hours,
+    active: true,
+    updatedAt: new Date().toISOString(),
+  };
+  if (opts.photoUrl !== undefined) {
+    payload.photoUrl = opts.photoUrl ? opts.photoUrl : deleteField();
+  }
+  await setDoc(doc(getFirebaseDb(), "clinic_doctors", id), payload, { merge: true });
   return true;
 }
 
@@ -235,23 +239,24 @@ export async function publishClinicCenterToSuwasiri(opts: {
   region?: string;
   address?: string;
   branchName?: string;
+  logoUrl?: string;
 }): Promise<boolean> {
   if (!isFirebaseConfigured()) return false;
   const name = opts.name.trim();
   if (!name) return false;
-  await setDoc(
-    doc(getFirebaseDb(), "clinic_centers", opts.hospitalId),
-    {
-      name,
-      region: opts.region || "Colombo",
-      address: opts.address || opts.branchName || `${opts.region || "Colombo"}, Sri Lanka`,
-      hospitalId: opts.hospitalId,
-      source: "gp_care",
-      active: true,
-      updatedAt: new Date().toISOString(),
-    },
-    { merge: true }
-  );
+  const payload: Record<string, unknown> = {
+    name,
+    region: opts.region || "Colombo",
+    address: opts.address || opts.branchName || `${opts.region || "Colombo"}, Sri Lanka`,
+    hospitalId: opts.hospitalId,
+    source: "gp_care",
+    active: true,
+    updatedAt: new Date().toISOString(),
+  };
+  if (opts.logoUrl !== undefined) {
+    payload.logoUrl = opts.logoUrl ? opts.logoUrl : deleteField();
+  }
+  await setDoc(doc(getFirebaseDb(), "clinic_centers", opts.hospitalId), payload, { merge: true });
   return true;
 }
 
@@ -282,6 +287,7 @@ export async function republishStaffDoctorsToSuwasiri(opts: {
         phone: s.phone,
         rosterHours: s.rosterHours,
         roster: s.roster,
+        photoUrl: s.photoUrl || "",
       });
     } catch (err) {
       console.warn("Could not republish clinic doctor to Suwasiri:", err);

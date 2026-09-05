@@ -256,6 +256,9 @@ class AuthCubit extends Cubit<AuthState> {
       activeFamilyKey: selectAfter ? key : state.activeFamilyKey,
     ));
     if (selectAfter) _listenUserDoc(ensured.id);
+    try {
+      await _auth.updateProfile(ensured);
+    } catch (_) {}
     final oid = ownerUid;
     if (oid != null) {
       await _persistMembers(oid, updated);
@@ -326,9 +329,7 @@ class AuthCubit extends Cubit<AuthState> {
           .copyWith(id: state.user?.id ?? profile.id)
           .withEnsuredBarcode();
 
-      if (key == _kOwner) {
-        await _auth.updateProfile(ensured);
-      }
+      await _auth.updateProfile(ensured);
 
       if (state.familyMembers.isNotEmpty) {
         final updated = state.familyMembers.map((m) {
@@ -370,10 +371,10 @@ class AuthCubit extends Cubit<AuthState> {
       if (current == null || current.id != updated.id) return;
       final merged = current.copyWith(
         name: () {
-          final fromIntake = updated.healthIntake?.fullName.trim();
-          if (fromIntake != null && fromIntake.isNotEmpty) return fromIntake;
           final n = updated.name.trim();
           if (n.isNotEmpty && n.toLowerCase() != 'patient') return n;
+          final fromIntake = updated.healthIntake?.fullName.trim();
+          if (fromIntake != null && fromIntake.isNotEmpty) return fromIntake;
           return current.name;
         }(),
         clinicAllergies: updated.clinicAllergies ?? current.clinicAllergies,

@@ -337,7 +337,7 @@ Future<void> _showAddFamilyMemberSheet(BuildContext context) async {
               id: '${ownerId}_$key',
               name: name,
               email: profile.email,
-              nic: profile.nic,
+              nic: nicCtrl.text.trim().isEmpty ? null : nicCtrl.text.trim(),
               mobileNo: profile.mobileNo,
               bloodGroup: profile.bloodGroup,
               region: profile.region,
@@ -346,7 +346,6 @@ Future<void> _showAddFamilyMemberSheet(BuildContext context) async {
               ceylonHealthId:
                   'CH-${key.toUpperCase()}-${('${ownerId}_$key'.hashCode.abs() % 1000000)}',
               barcodeNumber: null,
-              // Never inherit main applicant intake — GP Care uses displayName.
               healthIntake: null,
             ).withEnsuredBarcode();
 

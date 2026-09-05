@@ -1,6 +1,7 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 /** Same Firebase project as the Flutter app (`suwasiri-91824`). Public client config. */
 export const firebaseWebConfig = {
@@ -19,6 +20,7 @@ export function isFirebaseConfigured(): boolean {
 let app: FirebaseApp | undefined;
 let auth: Auth | undefined;
 let db: Firestore | undefined;
+let storage: FirebaseStorage | undefined;
 
 export function getFirebaseApp(): FirebaseApp {
   if (app) return app;
@@ -39,6 +41,11 @@ export function getFirebaseAuth(): Auth {
 export function getFirebaseDb(): Firestore {
   if (!db) db = getFirestore(getFirebaseApp());
   return db;
+}
+
+export function getFirebaseStorage(): FirebaseStorage {
+  if (!storage) storage = getStorage(getFirebaseApp());
+  return storage;
 }
 
 export const googleProvider = new GoogleAuthProvider();

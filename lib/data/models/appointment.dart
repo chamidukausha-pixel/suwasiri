@@ -20,6 +20,7 @@ class Doctor extends Equatable {
     this.latitude,
     this.longitude,
     this.photoUrl,
+    this.logoUrl,
     this.hospitalId = '',
     this.branchId = '',
     this.rosterHours = const {},
@@ -39,6 +40,8 @@ class Doctor extends Equatable {
   final double? latitude;
   final double? longitude;
   final String? photoUrl;
+  /// Medical centre logo from GP Care Platform Console.
+  final String? logoUrl;
   final String hospitalId;
   final String branchId;
   /// Weekday → `{start: "16:00", end: "18:00"}` from GP Care Practice Manager.
@@ -63,6 +66,7 @@ class Doctor extends Equatable {
     double? latitude,
     double? longitude,
     String? photoUrl,
+    String? logoUrl,
     String? hospitalId,
     String? branchId,
     Map<String, Map<String, String>>? rosterHours,
@@ -82,6 +86,7 @@ class Doctor extends Equatable {
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       photoUrl: photoUrl ?? this.photoUrl,
+      logoUrl: logoUrl ?? this.logoUrl,
       hospitalId: hospitalId ?? this.hospitalId,
       branchId: branchId ?? this.branchId,
       rosterHours: rosterHours ?? this.rosterHours,
@@ -89,9 +94,11 @@ class Doctor extends Equatable {
   }
 
   /// Network avatar when no clinic photo is stored.
-  String get displayPhotoUrl =>
-      photoUrl ??
-      'https://i.pravatar.cc/256?u=${Uri.encodeComponent(id)}';
+  String get displayPhotoUrl {
+    final url = photoUrl?.trim();
+    if (url != null && url.isNotEmpty) return url;
+    return 'https://i.pravatar.cc/256?u=${Uri.encodeComponent(id)}';
+  }
 
   String get placeLabel {
     final parts = [
@@ -118,6 +125,7 @@ class Doctor extends Equatable {
         latitude,
         longitude,
         photoUrl,
+        logoUrl,
         hospitalId,
         branchId,
         rosterHours,
@@ -138,11 +146,17 @@ class Doctor extends Equatable {
       nextAvailable:
           map['nextAvailable'] as String? ?? 'Mon–Fri · 09:00–17:00',
       address: map['address'] as String? ?? '',
-      photoUrl: map['photoUrl'] as String?,
+      photoUrl: _nonEmptyUrl(map['photoUrl']),
+      logoUrl: _nonEmptyUrl(map['logoUrl']),
       hospitalId: map['hospitalId'] as String? ?? '',
       branchId: map['branchId'] as String? ?? '',
       rosterHours: _parseRosterHours(map['rosterHours']),
     );
+  }
+
+  static String? _nonEmptyUrl(dynamic raw) {
+    final value = raw?.toString().trim() ?? '';
+    return value.isEmpty ? null : value;
   }
 
   static Map<String, Map<String, String>> _parseRosterHours(dynamic raw) {

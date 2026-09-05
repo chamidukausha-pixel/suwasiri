@@ -160,9 +160,16 @@ class FirebaseAuthRepository implements AuthRepository {
 
   @override
   Future<void> updateProfile(UserProfile profile) async {
-    await _users.doc(profile.id).set(profile.toMap(), SetOptions(merge: true));
+    final data = Map<String, dynamic>.from(profile.toMap());
+    if (profile.healthIntake == null) {
+      data['healthIntake'] = FieldValue.delete();
+    }
+    await _users.doc(profile.id).set(data, SetOptions(merge: true));
     final user = _auth.currentUser;
-    if (user != null && profile.name.isNotEmpty) {
+    if (user != null &&
+        profile.id == user.uid &&
+        profile.name.isNotEmpty &&
+        profile.name.toLowerCase() != 'patient') {
       await user.updateDisplayName(profile.name);
     }
   }

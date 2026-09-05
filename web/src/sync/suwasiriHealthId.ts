@@ -104,16 +104,18 @@ function namesFromClinicRegistrations(data: Record<string, unknown>): string[] {
 
 /** Real patient name from the Suwasiri `users` file — never the Auth placeholder "Patient". */
 export function displayName(data: Record<string, unknown>, intake: Record<string, unknown>): string {
+  // Profile `name` first: family members (e.g. Manel) must not inherit another
+  // household member’s leftover healthIntake.fullName (e.g. Kalyani).
   const candidates = [
+    str(data.name),
+    str(data.fullName),
+    str(data.displayName),
+    str(data.patientName),
     str(intake.fullName),
     str(intake.name),
     str(intake.givenName),
     str(intake.preferredName),
-    str(data.fullName),
     ...namesFromClinicRegistrations(data),
-    str(data.name),
-    str(data.displayName),
-    str(data.patientName),
   ].filter((n) => n && !isPlaceholderPatientName(n));
   if (candidates[0]) return candidates[0];
   const email = str(data.email);
@@ -375,7 +377,7 @@ async function enrichPatient(id: string, data: Record<string, unknown>): Promise
   ]);
   return {
     ...base,
-    name: pickRealPatientName(base.name, registeredName, bookedName) || base.name,
+    name: pickRealPatientName(base.name) || pickRealPatientName(registeredName, bookedName) || base.name,
     labResults: labs,
     vaccineRecords: mergeVaccines(vaccines, base.vaccineRecords || []),
   };
@@ -394,7 +396,6 @@ function healthIdsOnUser(id: string, data: Record<string, unknown>): string[] {
   return [
     str(data.barcodeNumber),
     str(data.ceylonHealthId),
-    nic,
     generateSuwasiriHealthId(id, nic || id),
   ]
     .map(normalizeHealthId)
@@ -421,8 +422,13 @@ async function queryByField(field: string, value: string): Promise<Patient | nul
       query(collection(getFirebaseDb(), "users"), where(field, "==", value))
     );
     if (snap.empty) return null;
-    const first = snap.docs[0];
-    return enrichPatient(first.id, first.data() as Record<string, unknown>);
+    const upper = normalizeHealthId(value);
+    const exact = snap.docs.find((d) => {
+      const data = d.data() as Record<string, unknown>;
+      return healthIdsOnUser(d.id, data).includes(upper) || normalizeHealthId(str(data[field])) === upper;
+    });
+    const chosen = exact || snap.docs[0];
+    return enrichPatient(chosen.id, chosen.data() as Record<string, unknown>);
   } catch (err) {
     console.warn(`Unique Health ID query ${field}:`, err);
     return null;
@@ -455,10 +461,14 @@ export async function lookupSuwasiriHealthId(raw: string): Promise<Patient | nul
   for (const value of variants) {
     const hit =
       (await queryByField("barcodeNumber", value)) ||
-      (await queryByField("ceylonHealthId", value)) ||
-      (await queryByField("NIC", value)) ||
-      (await queryByField("nic", value));
+      (await queryByField("ceylonHealthId", value));
     if (hit) return hit;
+  }
+  if (!looksLikeUniqueHealthId(code)) {
+    for (const value of variants) {
+      const byNic = (await queryByField("NIC", value)) || (await queryByField("nic", value));
+      if (byNic) return byNic;
+    }
   }
 
   const scanned = await scanUsersForHealthId(upper);
