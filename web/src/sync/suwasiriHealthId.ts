@@ -356,6 +356,19 @@ async function queryByField(field: string, value: string): Promise<Patient | nul
   }
 }
 
+export async function loadSuwasiriUserFile(patientId: string): Promise<Patient | null> {
+  if (!patientId || !isFirebaseConfigured()) return null;
+  if (!getFirebaseAuth().currentUser) return null;
+  try {
+    const snap = await getDoc(doc(getFirebaseDb(), "users", patientId));
+    if (!snap.exists()) return null;
+    return enrichPatient(snap.id, snap.data() as Record<string, unknown>);
+  } catch (err) {
+    console.warn("Suwasiri user file:", err);
+    return null;
+  }
+}
+
 /** Look up a Suwasiri Unique Health ID / barcode on Firestore `users`, plus vault labs and vaccinations. */
 export async function lookupSuwasiriHealthId(raw: string): Promise<Patient | null> {
   const code = raw.trim();

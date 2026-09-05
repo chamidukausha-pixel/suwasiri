@@ -67,7 +67,7 @@ export default function UniqueHealthIdSyncPanel({
           </h3>
         </div>
         <span className="text-[10px] text-slate-500 font-medium">
-          Walk-in patient: enter their Unique Health ID and Sync to Portal. They are registered at this clinic with name, age, NIC, labs, vaccines, and other Suwasiri details — no manual file needed.
+          Walk-in patient: enter their Unique Health ID and Sync to Portal. Review the file, then Save to Patient Clinical Records.
         </span>
       </div>
 
@@ -128,9 +128,15 @@ export default function UniqueHealthIdSyncPanel({
         </p>
       )}
 
+      {preview && !saved && (
+        <p className="text-[11px] font-semibold text-[#00334f] bg-sky-50 border border-sky-200 rounded px-3 py-2">
+          File loaded from Suwasiri. Click <strong>Save to Patient Clinical Records</strong> to add {preview.name} at this clinic.
+        </p>
+      )}
+
       {saved && preview && (
         <p className="text-[11px] font-semibold text-emerald-900 bg-emerald-100 border border-emerald-300 rounded px-3 py-2">
-          {preview.name} is registered at this clinic with their Suwasiri file. You can book a walk-in appointment with a doctor.
+          {preview.name} is saved on Patient Clinical Records at this clinic. You can book a walk-in appointment with a doctor.
         </p>
       )}
 

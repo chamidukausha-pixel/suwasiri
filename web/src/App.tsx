@@ -119,6 +119,7 @@ import {
   isFakeSuwasiriClinicFile,
   lookupSuwasiriHealthId,
   looksLikeUniqueHealthId,
+  loadSuwasiriUserFile,
   patientVisibleAtHospital,
 } from "./sync/suwasiriHealthId";
 import { saveConsultationNote } from "./sync/suwasiriConsultSync";
@@ -137,6 +138,7 @@ import {
 import { subscribeSuwasiriVaccinePatients } from "./sync/suwasiriVaccinations";
 import {
   applyClinicRegistration,
+  mergeRegistrationWithLiveFile,
   subscribeClinicRegistrations,
   type ClinicRegistrationPatch,
 } from "./sync/suwasiriClinicRegistrations";
@@ -636,6 +638,7 @@ export default function App() {
   const [healthIdLookupError, setHealthIdLookupError] = useState("");
   const [healthIdSaving, setHealthIdSaving] = useState(false);
   const [healthIdSaved, setHealthIdSaved] = useState(false);
+  const ingestedClinicRegs = useRef(new Set<string>());
   const [selectedReceiptUrl, setSelectedReceiptUrl] = useState<string | null>(null);
   const [selectedReceiptPatientName, setSelectedReceiptPatientName] = useState<string>("");
 
@@ -909,6 +912,24 @@ export default function App() {
     });
     const unsubRegs = subscribeClinicRegistrations((patientId, patch) => {
       setSuwasiriRegistrations((prev) => ({ ...prev, [patientId]: patch }));
+      const ingestKey = `${patch.docId}:${patch.hospitalId}`;
+      if (ingestedClinicRegs.current.has(ingestKey) || !patch.patient) return;
+      ingestedClinicRegs.current.add(ingestKey);
+      void (async () => {
+        try {
+          let file = patch.patient!;
+          const live = await loadSuwasiriUserFile(patientId);
+          file = mergeRegistrationWithLiveFile(file, live);
+          await persistClinicPatientFile(file, file.suwasiriBarcode || "", {
+            hospitalId: patch.hospitalId,
+            branchId: patch.branchId,
+            medicalCenter: patch.hospitalName,
+          });
+        } catch (err) {
+          ingestedClinicRegs.current.delete(ingestKey);
+          console.warn("Clinic registration → Patient Clinical Records:", err);
+        }
+      })();
     });
     return () => {
       unsubAppt?.();
@@ -1617,56 +1638,83 @@ export default function App() {
     );
   };
 
-  const suwasiriPatientPayload = (patient: Patient, barcode: string) => ({
-    id: patient.id,
-    name: patient.name,
-    age: patient.age,
-    gender: patient.gender,
-    bloodType: patient.bloodType,
-    allergies: patient.allergies,
-    phone: patient.phone,
-    email: patient.email,
-    dateOfBirth: patient.dateOfBirth,
-    nic: patient.nic,
-    address: patient.address,
-    emergencyContactName: patient.emergencyContactName,
-    emergencyContactPhone: patient.emergencyContactPhone,
-    vaccineRecords: patient.vaccineRecords || [],
-    labResults: patient.labResults || [],
-    notes: patient.notes,
-    medicalHistory: patient.medicalHistory,
-    activeMedications: patient.activeMedications,
-    heightCm: patient.heightCm,
-    weightKg: patient.weightKg,
-    medicareNumber: patient.medicareNumber,
-    ihiNumber: patient.ihiNumber,
-    medicalCenter: activeHospital?.name || patient.medicalCenter,
-    hospitalId: sessionHospitalId || HOSPITAL_PRIMECARE,
-    branchId: sessionBranchId || BRANCH_COLOMBO,
-    suwasiriBarcode: patient.suwasiriBarcode || barcode.toUpperCase(),
-  });
+  const suwasiriPatientPayload = (
+    patient: Patient,
+    barcode: string,
+    opts?: { hospitalId?: string; branchId?: string; medicalCenter?: string }
+  ) => {
+    const hid = opts?.hospitalId || sessionHospitalId || HOSPITAL_PRIMECARE;
+    const bid = opts?.branchId || sessionBranchId || BRANCH_COLOMBO;
+    return {
+      id: patient.id,
+      name: patient.name,
+      age: patient.age,
+      gender: patient.gender,
+      bloodType: patient.bloodType,
+      allergies: patient.allergies,
+      phone: patient.phone,
+      email: patient.email,
+      dateOfBirth: patient.dateOfBirth,
+      nic: patient.nic,
+      address: patient.address,
+      emergencyContactName: patient.emergencyContactName,
+      emergencyContactPhone: patient.emergencyContactPhone,
+      vaccineRecords: patient.vaccineRecords || [],
+      labResults: patient.labResults || [],
+      notes: patient.notes,
+      medicalHistory: patient.medicalHistory,
+      activeMedications: patient.activeMedications,
+      heightCm: patient.heightCm,
+      weightKg: patient.weightKg,
+      medicareNumber: patient.medicareNumber,
+      ihiNumber: patient.ihiNumber,
+      medicalCenter: opts?.medicalCenter || activeHospital?.name || patient.medicalCenter,
+      hospitalId: hid,
+      branchId: bid,
+      suwasiriBarcode: patient.suwasiriBarcode || barcode.toUpperCase(),
+      syncedHospitalIds: [hid],
+      accessStatus: "ACTIVE" as const,
+    };
+  };
 
-  const persistLookedUpHealthId = async (patient: Patient, barcode: string) => {
+  const persistClinicPatientFile = async (
+    patient: Patient,
+    barcode: string,
+    opts?: { hospitalId?: string; branchId?: string; medicalCenter?: string }
+  ) => {
     const res = await fetch("/api/patients", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(suwasiriPatientPayload(patient, barcode)),
+      body: JSON.stringify(suwasiriPatientPayload(patient, barcode, opts)),
     });
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}));
       throw new Error(errBody.error || `Save failed (${res.status})`);
     }
     const data = await res.json();
-    if (data.state?.patients) {
-      setPatients(data.state.patients.filter((p: Patient) => !isFakeSuwasiriClinicFile(p)));
-    } else {
-      const saved = data.patient || patient;
-      setPatients((prev) => {
-        const withoutFakes = prev.filter((p) => !isFakeSuwasiriClinicFile(p) && p.id !== saved.id);
-        return [{ ...saved }, ...withoutFakes];
-      });
-    }
-    return (data.patient || patient) as Patient;
+    const saved = {
+      ...patient,
+      ...(data.patient || {}),
+      labResults: patient.labResults?.length ? patient.labResults : (data.patient?.labResults || []),
+      vaccineRecords: patient.vaccineRecords?.length ? patient.vaccineRecords : (data.patient?.vaccineRecords || []),
+    } as Patient;
+    const hid = opts?.hospitalId || sessionHospitalId || HOSPITAL_PRIMECARE;
+    saved.hospitalId = saved.hospitalId || hid;
+    saved.syncedHospitalIds = Array.from(
+      new Set([...(saved.syncedHospitalIds || []), hid])
+    );
+    setPatients((prev) => {
+      const fromStore: Patient[] = data.state?.patients
+        ? data.state.patients.filter((p: Patient) => !isFakeSuwasiriClinicFile(p))
+        : prev.filter((p) => !isFakeSuwasiriClinicFile(p));
+      const without = fromStore.filter((p) => p.id !== saved.id);
+      return [{ ...saved }, ...without];
+    });
+    return saved;
+  };
+
+  const persistLookedUpHealthId = async (patient: Patient, barcode: string) => {
+    return persistClinicPatientFile(patient, barcode);
   };
 
   const handleLookupUniqueHealthId = async (raw: string) => {
@@ -1678,7 +1726,6 @@ export default function App() {
     setHealthIdLookupError("");
     setHealthIdPreview(null);
     setHealthIdSaved(false);
-    let preview: Patient | null = null;
     try {
       const patient = await lookupSuwasiriHealthId(input);
       if (!patient) {
@@ -1688,22 +1735,7 @@ export default function App() {
         return;
       }
       const barcode = patient.suwasiriBarcode || input.toUpperCase();
-      preview = { ...patient, suwasiriBarcode: barcode };
-      setHealthIdPreview(preview);
-      setHealthIdSaving(true);
-      const saved = await persistLookedUpHealthId(preview, barcode);
-      setHealthIdPreview({
-        ...saved,
-        labResults: saved.labResults?.length ? saved.labResults : preview.labResults,
-        vaccineRecords: saved.vaccineRecords?.length ? saved.vaccineRecords : preview.vaccineRecords,
-        nic: saved.nic || preview.nic,
-        address: saved.address || preview.address,
-        dateOfBirth: saved.dateOfBirth || preview.dateOfBirth,
-        emergencyContactName: saved.emergencyContactName || preview.emergencyContactName,
-        emergencyContactPhone: saved.emergencyContactPhone || preview.emergencyContactPhone,
-      });
-      setHealthIdSaved(true);
-      setSearchQuery(saved.name || preview.name);
+      setHealthIdPreview({ ...patient, suwasiriBarcode: barcode });
     } catch (err: any) {
       const message = String(err?.message || err);
       if (message.toLowerCase().includes("sign in")) {
@@ -1712,14 +1744,11 @@ export default function App() {
         setHealthIdLookupError(
           "Could not read this Unique Health ID. Sign in to GP Care with a Firebase staff account."
         );
-      } else if (preview) {
-        setHealthIdLookupError("Details loaded, but could not save to Patient Clinical Records: " + message);
       } else {
         setHealthIdLookupError(`Could not look up Unique Health ID: ${message}`);
       }
     } finally {
       setBarcodeLoading(false);
-      setHealthIdSaving(false);
     }
   };
 
@@ -1738,6 +1767,7 @@ export default function App() {
         vaccineRecords: saved.vaccineRecords?.length ? saved.vaccineRecords : patient.vaccineRecords,
       });
       setHealthIdSaved(true);
+      setFocusedSearchPatientId(saved.id);
       setSearchQuery(saved.name || patient.name);
     } catch (err: any) {
       setHealthIdLookupError("Could not save this Unique Health ID file: " + (err.message || err));
@@ -4292,7 +4322,7 @@ export default function App() {
                     </h2>
                     <p className="text-xs text-slate-500 font-sans">
                       {isFrontDeskStaff
-                        ? "Walk-in: enter the Unique Health ID and Sync to Portal to register that Suwasiri patient at this clinic, then book a walk-in. Click a name to open their file (live consult booking and fees are hidden)."
+                        ? "Walk-in: enter the Unique Health ID, Sync to Portal, then Save to Patient Clinical Records. Suwasiri app new-patient registrations at this clinic appear here automatically."
                         : "Click a patient name to open their GP Exam Room clinical profile."}
                     </p>
                   </div>
@@ -4317,6 +4347,7 @@ export default function App() {
                       onChange={(e) => {
                         const value = e.target.value;
                         setSearchQuery(value);
+                        setFocusedSearchPatientId(null);
                         if (looksLikeUniqueHealthId(value)) {
                           void handleLookupUniqueHealthId(value);
                         }
@@ -4345,6 +4376,7 @@ export default function App() {
                     setHealthIdPreview(null);
                     setHealthIdLookupError("");
                     setHealthIdSaved(false);
+                    setFocusedSearchPatientId(null);
                   }}
                 />
 

@@ -55,7 +55,7 @@ Aligned with `firestore.rules` and `FirebaseHealthRepository` / `FirebaseAuthRep
 | `consultation_notes` | `patientId`, `patientName`, `doctor`, `clinicName`, `title`, `body`, `date`, `appointmentId`, `source` (`gp_care`) | read/create: signed-in; update/delete: household or same patientId. Suwasiri Call + Vault treatment notes + GP Care history |
 | `clinic_doctors` | `name`, `specialty` (matches DoctorCatalog categories, e.g. Cardiologist), `hospital`, `address`, `region` (Sri Lankan district), `rosterHours`, `hospitalId`, `branchId`, `active`, `staffId`, `source` (`gp_care`) | signed-in read/write. GP Care Platform Console / Practice Manager publish doctors so the Suwasiri Doctors tab can search by name, clinic, and district |
 | `clinic_centers` | `name`, `region`, `address`, `hospitalId`, `active`, `source` (`gp_care`) | signed-in read/write. New medical centres created in Platform Console appear in Suwasiri until doctors are added |
-| `clinic_patient_registrations` | `patientId`, `patientName`, `hospitalId`, `hospitalName`, `branchId`, `registration` (full intake form), `source` (`suwasiri_app`) | household write; signed-in read. GP Care **Patient Clinical Records → Medical history** |
+| `clinic_patient_registrations` | `patientId`, `patientName`, `hospitalId`, `hospitalName`, `branchId`, `registration` (full intake form), `source` (`suwasiri_app`) | household write; signed-in read. GP Care **Patient Clinical Records** creates a clinic file from this intake |
 
 ## Firebase Storage
 

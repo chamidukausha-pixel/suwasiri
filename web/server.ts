@@ -1597,11 +1597,15 @@ app.post("/api/patients", (req, res) => {
   }
 
   const hid = hospitalId || HOSPITAL_PRIMECARE;
+  const incomingSynced = Array.isArray(req.body.syncedHospitalIds)
+    ? req.body.syncedHospitalIds.map((x: unknown) => String(x)).filter(Boolean)
+    : [];
   if (requestedId) {
     const existing = store.patients.find((p: { id: string }) => p.id === requestedId);
     if (existing) {
       const synced = new Set(existing.syncedHospitalIds || [existing.hospitalId || HOSPITAL_PRIMECARE]);
       synced.add(hid);
+      incomingSynced.forEach((id: string) => synced.add(id));
       existing.syncedHospitalIds = Array.from(synced);
       applySuwasiriDemographics(existing, req.body);
       if (medicalCenter && hid === (existing.hospitalId || HOSPITAL_PRIMECARE)) {
@@ -1609,6 +1613,7 @@ app.post("/api/patients", (req, res) => {
       }
       existing.hospitalId = existing.hospitalId || hid;
       existing.branchId = existing.branchId || branchId || BRANCH_COLOMBO;
+      if (req.body.accessStatus) existing.accessStatus = req.body.accessStatus;
       foldDuplicateSuwasiriFiles(store, existing);
       saveStore(store);
       return res.status(200).json({ patient: existing, state: store, isNewSync: false });
@@ -1640,8 +1645,8 @@ app.post("/api/patients", (req, res) => {
     hospitalId: hid,
     branchId: branchId || BRANCH_COLOMBO,
     suwasiriBarcode: suwasiriBarcode || undefined,
-    syncedHospitalIds: [hid],
-    accessStatus: "ACTIVE"
+    syncedHospitalIds: incomingSynced.length ? Array.from(new Set([hid, ...incomingSynced])) : [hid],
+    accessStatus: req.body.accessStatus || "ACTIVE"
   };
   applySuwasiriDemographics(newPatient, req.body);
 
@@ -1658,6 +1663,7 @@ app.post("/api/patients", (req, res) => {
   if (sameFile && sameFile.id !== newPatient.id) {
     const synced = new Set(sameFile.syncedHospitalIds || [sameFile.hospitalId || HOSPITAL_PRIMECARE]);
     synced.add(hid);
+    incomingSynced.forEach((id: string) => synced.add(id));
     sameFile.syncedHospitalIds = Array.from(synced);
     applySuwasiriDemographics(sameFile, req.body);
     sameFile.hospitalId = sameFile.hospitalId || hid;
