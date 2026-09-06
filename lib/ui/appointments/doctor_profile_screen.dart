@@ -17,11 +17,13 @@ class DoctorProfileScreen extends StatefulWidget {
     required this.doctor,
     required this.practice,
     this.initialVisitReason,
+    this.homeService,
   });
 
   final Doctor doctor;
   final ClinicPractice practice;
   final String? initialVisitReason;
+  final String? homeService;
 
   @override
   State<DoctorProfileScreen> createState() => _DoctorProfileScreenState();
@@ -57,6 +59,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
       context,
       doctor: widget.doctor,
       initialVisitReason: widget.initialVisitReason,
+      homeService: widget.homeService,
       initialSlot: slot,
     );
     if (mounted) await _loadNext();

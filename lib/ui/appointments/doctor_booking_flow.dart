@@ -10,6 +10,7 @@ Future<void> startDoctorBooking(
   BuildContext context, {
   required Doctor doctor,
   String? initialVisitReason,
+  String? homeService,
   DateTime? initialSlot,
 }) async {
   if (doctor.isClinicOnly) return;
@@ -27,6 +28,7 @@ Future<void> startDoctorBooking(
     context,
     doctor: doctor,
     initialVisitReason: initialVisitReason,
+    homeService: homeService,
     initialSlot: initialSlot,
   );
 }

@@ -587,7 +587,10 @@ class FirebaseHealthRepository implements HealthRepository {
       required bool preferred,
     }) {
       for (final item in items) {
-        final key = item.suwasiriService.trim();
+        var key = item.suwasiriService.trim();
+        if (key.isEmpty) {
+          key = suwasiriServiceForVisitReason(item.description) ?? '';
+        }
         if (key.isEmpty) continue;
         if (preferred || !byService.containsKey(key)) {
           byService[key] = item;

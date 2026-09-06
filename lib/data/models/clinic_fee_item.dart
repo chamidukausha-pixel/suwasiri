@@ -18,12 +18,16 @@ class ClinicFeeItem {
   factory ClinicFeeItem.fromMap(Map<String, dynamic> map) {
     var service = (map['suwasiriService'] as String? ?? '').trim();
     final category = map['category'] as String? ?? '';
+    final description = map['description'] as String? ?? '';
+    if (service.isEmpty) {
+      service = suwasiriServiceForVisitReason(description) ?? '';
+    }
     if (service.isEmpty && category.toLowerCase() == 'telehealth') {
       service = 'telehealth';
     }
     return ClinicFeeItem(
       id: map['id'] as String? ?? '',
-      description: map['description'] as String? ?? '',
+      description: description,
       privateFeeLkr: (map['privateFee'] as num?)?.toInt() ??
           (map['privateFeeLkr'] as num?)?.toInt() ??
           0,
@@ -35,6 +39,12 @@ class ClinicFeeItem {
 }
 
 /// Maps a Suwasiri visit-reason chip / home action to a Practice Manager MBS item.
+const kDefaultHomeServiceFees = <String, int>{
+  'medical_certificate': 1000,
+  'repeat_prescription': 1500,
+  'review_results': 1200,
+};
+
 String? suwasiriServiceForVisitReason(String reason) {
   final n = reason.toLowerCase();
   if (n.contains('medical certificate') ||
@@ -94,39 +104,28 @@ ClinicFeeItem? feeItemForVisitReason(String reason, List<ClinicFeeItem> fees) {
   return feeItemForService(service, fees);
 }
 
-/// Service-specific bookings use only that private fee — not consult + venue.
+/// Home-icon bookings (certificate / repeat Rx / review) use the GP Care
+/// private fee only. Falls back to the MBS defaults if Firestore has not synced yet.
+int feeForHomeService(String service, List<ClinicFeeItem> fees) {
+  final match = feeItemForService(service, fees);
+  if (match != null && match.privateFeeLkr > 0) return match.privateFeeLkr;
+  return kDefaultHomeServiceFees[service] ?? 0;
+}
+
+/// Home-icon bookings use only that private fee — not consult + venue.
+/// Regular Book Appointment always uses the doctor's standard consult fee.
 int consultFeeForVisit({
-  required String visitReason,
   required int doctorFeeLkr,
   required List<ClinicFeeItem> fees,
-  bool videoConsult = false,
+  String? homeService,
 }) {
-  final match = feeItemForVisitReason(visitReason, fees);
-  if (match != null) return match.privateFeeLkr;
-  if (videoConsult) {
-    final tele = feeItemForService('telehealth', fees);
-    if (tele != null) return tele.privateFeeLkr;
+  final service = (homeService ?? '').trim();
+  if (service.isNotEmpty) {
+    final amount = feeForHomeService(service, fees);
+    if (amount > 0) return amount;
   }
   return doctorFeeLkr;
 }
 
-bool isServiceOnlyFee(
-  String visitReason,
-  List<ClinicFeeItem> fees, {
-  bool videoConsult = false,
-}) {
-  if (feeItemForVisitReason(visitReason, fees) != null) return true;
-  if (videoConsult && feeItemForService('telehealth', fees) != null) return true;
-  return false;
-}
-
-String formatFeeLkr(int amount) {
-  final digits = amount.toString();
-  final buf = StringBuffer();
-  for (var i = 0; i < digits.length; i++) {
-    final fromEnd = digits.length - i;
-    buf.write(digits[i]);
-    if (fromEnd > 1 && fromEnd % 3 == 1) buf.write(',');
-  }
-  return 'LKR ${buf.toString()}';
-}
+bool isHomeServiceBooking(String? homeService) =>
+    (homeService ?? '').trim().isNotEmpty;

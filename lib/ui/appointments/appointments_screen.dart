@@ -28,6 +28,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   bool _loading = true;
   String _category = 'general';
   String? _pendingVisitReason;
+  String? _pendingHomeService;
   String? _district;
 
   @override
@@ -48,13 +49,13 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
 
   void _applyPendingIntent() {
     final pending = DoctorDirectoryIntent.consume();
-    if (pending.visitReason == null && pending.categoryId == null) return;
     setState(() {
+      _pendingVisitReason = pending.visitReason;
+      _pendingHomeService = pending.homeService;
       if (pending.categoryId != null && pending.categoryId!.isNotEmpty) {
         _category = pending.categoryId!;
-      }
-      if (pending.visitReason != null && pending.visitReason!.isNotEmpty) {
-        _pendingVisitReason = pending.visitReason;
+      } else if ((pending.homeService ?? '').isNotEmpty) {
+        _category = 'all';
       }
     });
   }
@@ -256,6 +257,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
               doctors: doctors,
               categoryId: _category,
               initialVisitReason: _pendingVisitReason,
+              homeService: _pendingHomeService,
             ),
         ],
       ),

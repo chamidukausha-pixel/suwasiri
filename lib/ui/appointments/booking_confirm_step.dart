@@ -21,6 +21,7 @@ class BookingConfirmStep extends StatelessWidget {
     required this.slotsLoading,
     required this.visitReason,
     required this.consultFee,
+    this.lockVisitReason = false,
     required this.onClose,
     required this.onMode,
     required this.onDate,
@@ -49,6 +50,7 @@ class BookingConfirmStep extends StatelessWidget {
   final bool slotsLoading;
   final String visitReason;
   final int consultFee;
+  final bool lockVisitReason;
   final VoidCallback onClose;
   final ValueChanged<ConsultMode> onMode;
   final ValueChanged<DateTime> onDate;
@@ -487,13 +489,21 @@ class BookingConfirmStep extends StatelessWidget {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    for (final (label, icon) in reasons)
+                    if (lockVisitReason)
                       _ReasonChip(
-                        label: label,
-                        icon: icon,
-                        selected: visitReason == label,
-                        onTap: () => onReason(label),
-                      ),
+                        label: visitReason,
+                        icon: Icons.lock_outline_rounded,
+                        selected: true,
+                        onTap: () {},
+                      )
+                    else
+                      for (final (label, icon) in reasons)
+                        _ReasonChip(
+                          label: label,
+                          icon: icon,
+                          selected: visitReason == label,
+                          onTap: () => onReason(label),
+                        ),
                   ],
                 ),
                 const SizedBox(height: 8),

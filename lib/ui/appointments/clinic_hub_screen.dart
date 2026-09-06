@@ -16,10 +16,12 @@ class ClinicHubScreen extends StatefulWidget {
     super.key,
     required this.practice,
     this.initialVisitReason,
+    this.homeService,
   });
 
   final ClinicPractice practice;
   final String? initialVisitReason;
+  final String? homeService;
 
   @override
   State<ClinicHubScreen> createState() => _ClinicHubScreenState();
@@ -59,6 +61,7 @@ class _ClinicHubScreenState extends State<ClinicHubScreen> {
       context,
       doctor: doctor,
       initialVisitReason: widget.initialVisitReason,
+      homeService: widget.homeService,
     );
     if (mounted) await _loadAvailability();
   }
@@ -70,6 +73,7 @@ class _ClinicHubScreenState extends State<ClinicHubScreen> {
           doctor: doctor,
           practice: widget.practice,
           initialVisitReason: widget.initialVisitReason,
+          homeService: widget.homeService,
         ),
       ),
     );

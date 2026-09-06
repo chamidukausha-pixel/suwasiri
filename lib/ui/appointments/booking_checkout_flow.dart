@@ -54,6 +54,7 @@ Future<void> showBookingCheckoutFlow(
   BuildContext context, {
   required Doctor doctor,
   String? initialVisitReason,
+  String? homeService,
   DateTime? initialSlot,
 }) async {
   final result = await showModalBottomSheet<_BookingResult>(
@@ -67,6 +68,7 @@ Future<void> showBookingCheckoutFlow(
     builder: (_) => _BookingCheckoutSheet(
       doctor: doctor,
       initialVisitReason: initialVisitReason,
+      homeService: homeService,
       initialSlot: initialSlot,
     ),
   );
@@ -170,11 +172,13 @@ class _BookingCheckoutSheet extends StatefulWidget {
   const _BookingCheckoutSheet({
     required this.doctor,
     this.initialVisitReason,
+    this.homeService,
     this.initialSlot,
   });
 
   final Doctor doctor;
   final String? initialVisitReason;
+  final String? homeService;
   final DateTime? initialSlot;
 
   @override
@@ -203,19 +207,14 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
       );
 
   int get _consultFee => consultFeeForVisit(
-        visitReason: _visitReason,
         doctorFeeLkr: widget.doctor.feeLkr,
         fees: _fees,
-        videoConsult: _mode == ConsultMode.video,
+        homeService: widget.homeService,
       );
 
-  bool get _serviceOnlyFee => isServiceOnlyFee(
-        _visitReason,
-        _fees,
-        videoConsult: _mode == ConsultMode.video,
-      );
+  bool get _homeServiceFee => isHomeServiceBooking(widget.homeService);
 
-  int get _total => _serviceOnlyFee ? _consultFee : _consultFee + _venueFee;
+  int get _total => _homeServiceFee ? _consultFee : _consultFee + _venueFee;
 
   List<DateTime> get _dates => DoctorScheduleSlots.upcomingDates();
 
@@ -259,9 +258,6 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
     final reason = widget.initialVisitReason?.trim();
     if (reason != null && reason.isNotEmpty) {
       _visitReason = reason;
-      if (suwasiriServiceForVisitReason(reason) == 'telehealth') {
-        _mode = ConsultMode.video;
-      }
     }
     if (widget.initialSlot != null) {
       final slot = widget.initialSlot!;
@@ -286,7 +282,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
     super.didChangeDependencies();
     if (_depsReady) return;
     _depsReady = true;
-    if (_visitReason.isEmpty) {
+    if (_visitReason.isEmpty && !isHomeServiceBooking(widget.homeService)) {
       _visitReason = AppLocalizations.of(context).t('bookingReasonFollowUp');
     }
     unawaited(_loadFees());
@@ -410,6 +406,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
                 slotsLoading: _slotsLoading,
                 visitReason: _visitReason,
                 consultFee: _consultFee,
+                lockVisitReason: _homeServiceFee,
                 onClose: () => Navigator.pop(context),
                 onMode: (m) => setState(() => _mode = m),
                 onDate: (d) => setState(() {
@@ -420,7 +417,10 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
                   if (_isBooked(t)) return;
                   setState(() => _selectedTime = t);
                 },
-                onReason: (r) => setState(() => _visitReason = r),
+                onReason: (r) {
+                  if (_homeServiceFee) return;
+                  setState(() => _visitReason = r);
+                },
                 onProceed: () {
                   if (_times.isEmpty || _isBooked(_selectedTime)) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -440,7 +440,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
                 doctor: widget.doctor,
                 slot: _slotDateTime,
                 total: _total,
-                feeLabel: _serviceOnlyFee ? _visitReason : null,
+                feeLabel: _homeServiceFee ? _visitReason : null,
                 paying: _paying,
                 onBack: () => setState(() => _step = _CheckoutStep.confirm),
                 onClose: () => Navigator.pop(context),

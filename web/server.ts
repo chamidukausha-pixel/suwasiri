@@ -868,6 +868,15 @@ function getStore() {
           mutated = true;
         }
       }
+      const rx = (data.feeSchedule as any[]).find(
+        (f: any) => f.id === "fee-rx" || f.suwasiriService === "repeat_prescription"
+      );
+      if (rx && Number(rx.privateFee) === 800) {
+        rx.privateFee = 1500;
+        rx.mbsScheduleFee = 1500;
+        rx.gapFee = 1500;
+        mutated = true;
+      }
     }
     if (!Array.isArray(data.recalls)) {
       data.recalls = INITIAL_STATE.recalls;

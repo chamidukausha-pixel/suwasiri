@@ -58,11 +58,10 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {}
   }
 
-  String? _feeLine(String visitReasonKey) {
-    final reason = AppLocalizations.of(context).t(visitReasonKey);
-    final item = feeItemForVisitReason(reason, _fees);
-    if (item == null) return null;
-    return 'LKR ${NumberFormat('#,###').format(item.privateFeeLkr)}';
+  String? _feeLine(String homeService) {
+    final amount = feeForHomeService(homeService, _fees);
+    if (amount <= 0) return null;
+    return 'LKR ${NumberFormat('#,###').format(amount)}';
   }
 
   void _syncSchedule() {
@@ -106,12 +105,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openDoctorsForService({
     required String visitReasonKey,
-    String categoryId = 'general',
+    required String homeService,
   }) {
     final l = AppLocalizations.of(context);
     DoctorDirectoryIntent.set(
       visitReason: l.t(visitReasonKey),
-      categoryId: categoryId,
+      categoryId: 'all',
+      homeService: homeService,
     );
     widget.onNavigate(1);
   }
@@ -172,10 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: Icons.videocam_rounded,
                   iconBg: AppColors.videoBrown,
                   label: l.t('videoConsultation'),
-                  feeLabel: _feeLine('videoConsultation'),
-                  onTap: () => _openDoctorsForService(
-                    visitReasonKey: 'videoConsultation',
-                  ),
+                  onTap: () => widget.onNavigate(2),
                 ),
               ),
               const SizedBox(width: 10),
@@ -211,9 +208,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: Icons.medication_rounded,
                       iconBg: const Color(0xFF22C55E),
                       label: l.t('repeatPrescription'),
-                      feeLabel: _feeLine('visitReasonRepeatPrescription'),
+                      feeLabel: _feeLine('repeat_prescription'),
                       onTap: () => _openDoctorsForService(
                         visitReasonKey: 'visitReasonRepeatPrescription',
+                        homeService: 'repeat_prescription',
                       ),
                     );
                   case 1:
@@ -221,9 +219,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: Icons.description_rounded,
                       iconBg: AppColors.trustBlue,
                       label: l.t('medicalCertificate'),
-                      feeLabel: _feeLine('visitReasonMedicalCertificate'),
+                      feeLabel: _feeLine('medical_certificate'),
                       onTap: () => _openDoctorsForService(
                         visitReasonKey: 'visitReasonMedicalCertificate',
+                        homeService: 'medical_certificate',
                       ),
                     );
                   default:
@@ -231,9 +230,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: Icons.analytics_rounded,
                       iconBg: const Color(0xFF8B5CF6),
                       label: l.t('reviewResults'),
-                      feeLabel: _feeLine('visitReasonReviewResults'),
+                      feeLabel: _feeLine('review_results'),
                       onTap: () => _openDoctorsForService(
                         visitReasonKey: 'visitReasonReviewResults',
+                        homeService: 'review_results',
                       ),
                     );
                 }
@@ -405,13 +405,11 @@ class _QuickActionCard extends StatelessWidget {
     required this.iconBg,
     required this.label,
     required this.onTap,
-    this.feeLabel,
   });
 
   final IconData icon;
   final Color iconBg;
   final String label;
-  final String? feeLabel;
   final VoidCallback onTap;
 
   @override
@@ -446,18 +444,6 @@ class _QuickActionCard extends StatelessWidget {
                 height: 1.25,
               ),
             ),
-            if (feeLabel != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                feeLabel!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Color(0xFFE85D4C),
-                  fontWeight: FontWeight.w800,
-                  fontSize: 11,
-                ),
-              ),
-            ],
           ],
         ),
       ),

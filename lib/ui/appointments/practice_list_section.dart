@@ -19,11 +19,13 @@ class PracticeListSection extends StatefulWidget {
     required this.doctors,
     required this.categoryId,
     this.initialVisitReason,
+    this.homeService,
   });
 
   final List<Doctor> doctors;
   final String categoryId;
   final String? initialVisitReason;
+  final String? homeService;
 
   @override
   State<PracticeListSection> createState() => _PracticeListSectionState();
@@ -70,6 +72,7 @@ class _PracticeListSectionState extends State<PracticeListSection> {
         builder: (_) => ClinicHubScreen(
           practice: practice,
           initialVisitReason: widget.initialVisitReason,
+          homeService: widget.homeService,
         ),
       ),
     );
@@ -80,6 +83,7 @@ class _PracticeListSectionState extends State<PracticeListSection> {
       context,
       doctor: preview.doctor,
       initialVisitReason: widget.initialVisitReason,
+      homeService: widget.homeService,
       initialSlot: preview.slots.first,
     );
     if (mounted) await _loadPreviews();
