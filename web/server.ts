@@ -769,6 +769,7 @@ const INITIAL_STATE = {
     }
   ],
   auditLogs: [],
+  retentionPolicies: [],
 };
 
 function isFakeSuwasiriBarcodeFile(p: any): boolean {
@@ -884,6 +885,10 @@ function getStore() {
     }
     if (!Array.isArray(data.auditLogs)) {
       data.auditLogs = [];
+      mutated = true;
+    }
+    if (!Array.isArray(data.retentionPolicies)) {
+      data.retentionPolicies = [];
       mutated = true;
     }
     if (Array.isArray(data.staffDirectory)) {
@@ -1271,6 +1276,57 @@ app.post("/api/tenancy/staff", (req, res) => {
   res.json({ success: true, staffUser: store.staffUsers.find((u: any) => u.id === userId), membership, staff });
 });
 
+app.patch("/api/tenancy/staff/:id", (req, res) => {
+  const store = getStore();
+  const staffId = req.params.id;
+  const idx = (store.staffDirectory || []).findIndex((s: any) => s.id === staffId);
+  if (idx < 0) return res.status(404).json({ error: "Staff not found" });
+  const current = store.staffDirectory[idx];
+  const { name, email, phone, roleName, specialty, branchIds, photoUrl } = req.body || {};
+  let roleId = current.roleId;
+  let role = (store.roles || []).find((r: any) => r.id === roleId);
+  if (roleName) {
+    const found = (store.roles || []).find(
+      (r: any) => r.hospitalId === current.hospitalId && r.name === roleName && r.enabled !== false
+    );
+    if (!found) return res.status(400).json({ error: `Role "${roleName}" not found for this hospital` });
+    role = found;
+    roleId = found.id;
+  }
+  const nextStaff = {
+    ...current,
+    name: name != null ? String(name).trim() : current.name,
+    email: email != null ? String(email).trim() : current.email,
+    phone: phone != null ? String(phone) : current.phone,
+    role: role?.name || current.role,
+    roleId,
+    specialty: specialty != null ? specialty : current.specialty,
+    branchIds: Array.isArray(branchIds) ? branchIds : current.branchIds,
+    photoUrl: photoUrl != null ? photoUrl : current.photoUrl,
+  };
+  store.staffDirectory[idx] = nextStaff;
+  if (current.userId) {
+    store.staffUsers = (store.staffUsers || []).map((u: any) =>
+      u.id === current.userId
+        ? { ...u, name: nextStaff.name, email: nextStaff.email }
+        : u
+    );
+    store.memberships = (store.memberships || []).map((m: any) =>
+      m.userId === current.userId && m.hospitalId === current.hospitalId
+        ? { ...m, roleId, branchIds: nextStaff.branchIds, active: true }
+        : m
+    );
+  }
+  persistTenancy(store);
+  res.json({
+    success: true,
+    staff: nextStaff,
+    staffDirectory: store.staffDirectory,
+    staffUsers: store.staffUsers,
+    memberships: store.memberships,
+  });
+});
+
 app.delete("/api/tenancy/staff/:id", (req, res) => {
   const store = getStore();
   const staffId = req.params.id;
@@ -1336,9 +1392,32 @@ app.post("/api/audit-logs", (req, res) => {
     details: entry.details || "",
     ipAddress: entry.ipAddress || "clinic-lan",
   };
-  store.auditLogs = [log, ...(store.auditLogs || [])].slice(0, 500);
+  store.auditLogs = [log, ...(store.auditLogs || [])].slice(0, 5000);
   saveStore(store);
   res.json({ success: true, log, auditLogs: store.auditLogs });
+});
+
+app.get("/api/retention-policies", (req, res) => {
+  const store = getStore();
+  res.json({ policies: store.retentionPolicies || [] });
+});
+
+app.post("/api/retention-policies", (req, res) => {
+  const store = getStore();
+  const { title, body, createdBy } = req.body || {};
+  if (!String(title || "").trim() || !String(body || "").trim()) {
+    return res.status(400).json({ error: "title and body required" });
+  }
+  const policy = {
+    id: `ret-${Date.now()}`,
+    title: String(title).trim(),
+    body: String(body).trim(),
+    createdAt: new Date().toISOString(),
+    createdBy: createdBy || "Super Admin",
+  };
+  store.retentionPolicies = [policy, ...(store.retentionPolicies || [])];
+  saveStore(store);
+  res.json({ success: true, policy, policies: store.retentionPolicies });
 });
 
 app.patch("/api/tenancy/hospitals/:id", (req, res) => {
@@ -1352,7 +1431,7 @@ app.patch("/api/tenancy/hospitals/:id", (req, res) => {
 
 app.post("/api/tenancy/hospitals", (req, res) => {
   const store = getStore();
-  const { name, district, logoUrl } = req.body || {};
+  const { name, district, logoUrl, copyRolesFrom } = req.body || {};
   if (!name) return res.status(400).json({ error: "name required" });
   const id = `hosp-${Date.now()}`;
   const region = String(district || "Colombo").trim() || "Colombo";
@@ -1367,7 +1446,20 @@ app.post("/api/tenancy/hospitals", (req, res) => {
   };
   store.hospitals = [...(store.hospitals || []), hospital];
   store.branches = [...(store.branches || []), branch];
-  store.roles = [...(store.roles || []), ...cloneHospitalRoles(id)];
+  const cloned = cloneHospitalRoles(id);
+  const sourceId = String(copyRolesFrom || "").trim();
+  const extras = sourceId
+    ? (store.roles || [])
+        .filter((r: any) => r.hospitalId === sourceId && r.enabled !== false && !r.isSystem)
+        .map((r: any, i: number) => ({
+          ...r,
+          id: roleIdFor(id, `${r.name}-${Date.now()}-${i}`),
+          hospitalId: id,
+          isSystem: false,
+          enabled: true,
+        }))
+    : [];
+  store.roles = [...(store.roles || []), ...cloned, ...extras];
   persistTenancy(store);
   res.json({
     success: true,

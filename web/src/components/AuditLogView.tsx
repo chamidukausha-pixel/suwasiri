@@ -25,6 +25,7 @@ interface Props {
   patients?: Patient[];
   logs?: AuditLogEntry[];
   labOrders?: LabOrder[];
+  staffNames?: string[];
   onExportCsv?: () => void;
   selectedDate?: string;
   todayKey?: string;
@@ -150,15 +151,28 @@ function deriveClinicalLogs(patients: Patient[], labOrders: LabOrder[]): AuditLo
   for (const p of patients) {
     for (const h of p.history || []) {
       rows.push({
-        id: `hist-${p.id}-${h.date}-${h.reason}`,
+        id: `hist-${p.id}-${h.date}-${h.reason}-${h.appointmentId || ""}`,
         timestamp: `${h.date} 09:00:00`,
         user: h.doctor || "Doctor",
         role: "Doctor",
         action: "Clinical consultation",
-        category: "DIAGNOSIS",
+        category: "CONSULTATION",
         patientId: p.id,
         patientName: p.name,
-        details: `${h.reason}. ${h.notes || ""}\nMedicines: ${(p.activeMedications || []).join("; ") || "none"}`,
+        details: `${h.reason}. ${h.notes || h.soapSubjective || ""}\nMedicines: ${(p.activeMedications || []).join("; ") || "none"}`,
+      });
+    }
+    if (p.notes) {
+      rows.push({
+        id: `notes-${p.id}`,
+        timestamp: `${(p.history?.[0]?.date || new Date().toISOString().slice(0, 10))} 09:20:00`,
+        user: p.history?.[0]?.doctor || "Doctor",
+        role: "Doctor",
+        action: "Doctor notes on file",
+        category: "CLINICAL_NOTE",
+        patientId: p.id,
+        patientName: p.name,
+        details: p.notes,
       });
     }
     for (const lab of p.labResults || []) {
@@ -167,7 +181,7 @@ function deriveClinicalLogs(patients: Patient[], labOrders: LabOrder[]): AuditLo
         timestamp: `${lab.date} 10:15:00`,
         user: lab.reviewedBy || "Doctor",
         role: "Doctor",
-        action: lab.doctorReviewed ? "Reviewed pathology result" : "Pathology result on chart",
+        action: lab.doctorReviewed ? "Reviewed lab report" : "Lab report on chart",
         category: "PATHOLOGY",
         patientId: p.id,
         patientName: p.name,
@@ -180,11 +194,50 @@ function deriveClinicalLogs(patients: Patient[], labOrders: LabOrder[]): AuditLo
         timestamp: `${rx.date} 11:00:00`,
         user: "Doctor",
         role: "Doctor",
-        action: "Created electronic prescription",
+        action: "Issued prescription",
         category: "PRESCRIPTION",
         patientId: p.id,
         patientName: p.name,
         details: `Rx ${rx.rxNumber || rx.id}: ${(rx.items || []).join("; ")}`,
+      });
+    }
+    for (const cert of p.medicalCertificatesList || []) {
+      rows.push({
+        id: `mc-${p.id}-${cert.id}`,
+        timestamp: `${cert.date} 12:00:00`,
+        user: cert.doctorName || "Doctor",
+        role: "Doctor",
+        action: "Issued medical certificate",
+        category: "CERTIFICATE",
+        patientId: p.id,
+        patientName: p.name,
+        details: `${cert.diagnosis} · ${cert.status} · ${cert.numDays} day(s)`,
+      });
+    }
+    for (const dx of p.diagnosesList || []) {
+      rows.push({
+        id: `dx-${p.id}-${dx.id}`,
+        timestamp: `${dx.dateDiagnosed} 09:40:00`,
+        user: "Doctor",
+        role: "Doctor",
+        action: "Added diagnosis",
+        category: "DIAGNOSIS",
+        patientId: p.id,
+        patientName: p.name,
+        details: dx.condition,
+      });
+    }
+    for (const ref of p.referralsList || []) {
+      rows.push({
+        id: `ref-${p.id}-${ref.id}`,
+        timestamp: `${ref.dateCreated || new Date().toISOString().slice(0, 10)} 13:00:00`,
+        user: ref.referringDoctor || "Doctor",
+        role: "Doctor",
+        action: "Issued referral",
+        category: "REFERRAL",
+        patientId: p.id,
+        patientName: p.name,
+        details: `${ref.specialistName} (${ref.specialty}) · ${ref.urgency} · ${ref.clinicalSummary || ""}`,
       });
     }
   }
@@ -208,6 +261,7 @@ export default function AuditLogView({
   patients = [],
   logs = INITIAL_AUDIT_LOGS,
   labOrders = [],
+  staffNames = [],
   selectedDate,
   todayKey,
   calendarYear,
@@ -296,7 +350,7 @@ export default function AuditLogView({
                 Comprehensive Clinical & Medico-Legal Audit Trail
               </h1>
               <p className="text-xs text-slate-500">
-                Tamper-evident, time-indexed event log capturing every clinical view, diagnosis, prescription, lab review, and referral.
+                Tamper-evident, time-indexed event log. Consultations, edits, medicines, prescriptions, lab reports, reviews, medical certificates, and doctor notes are recorded here and cannot be deleted. Click a date and a doctor (or All Practitioners / All Categories) to inspect that slice.
               </p>
             </div>
           </div>
@@ -331,15 +385,19 @@ export default function AuditLogView({
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none text-slate-700 bg-white"
             >
-              <option value="ALL">All Categories ({logs.length})</option>
-              <option value="PATIENT_RECORD">Patient Record Access</option>
-              <option value="PRESCRIPTION">Prescription Generated</option>
-              <option value="DIAGNOSIS">Diagnosis Added</option>
-              <option value="PATHOLOGY">Pathology Results</option>
-              <option value="REFERRAL">Referral Dispatched</option>
-              <option value="BILLING">Billing & Medicare</option>
+              <option value="ALL">All Categories</option>
+              <option value="CONSULTATION">Consultation</option>
+              <option value="CLINICAL_NOTE">Doctor notes</option>
+              <option value="PRESCRIPTION">Prescriptions / medicines</option>
+              <option value="DIAGNOSIS">Diagnosis</option>
+              <option value="PATHOLOGY">Lab reports</option>
+              <option value="CERTIFICATE">Medical certificates</option>
+              <option value="REFERRAL">Referrals</option>
+              <option value="PATIENT_RECORD">Patient record</option>
+              <option value="BILLING">Billing</option>
+              <option value="SECURITY">Security / break-glass</option>
               <option value="MHR_ACCESS">My Health Record (MHR)</option>
-              <option value="AUTHENTICATION">Authentication & Security</option>
+              <option value="AUTHENTICATION">Authentication</option>
             </select>
           </div>
 
@@ -350,9 +408,12 @@ export default function AuditLogView({
               className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none text-slate-700 bg-white"
             >
               <option value="ALL">All Practitioners</option>
-              <option value="Dr. Priyantha Silva">Dr. Priyantha Silva (Doctor)</option>
-              <option value="Dr. Anoja Senanayake">Dr. Anoja Senanayake (Doctor)</option>
-              <option value="Sarah Perera">Sarah Perera (Receptionist)</option>
+              {Array.from(new Set([
+                ...staffNames,
+                ...mergedLogs.map((l) => l.user).filter(Boolean),
+              ])).sort().map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
             </select>
           </div>
 

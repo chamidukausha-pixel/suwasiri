@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Bell, Building2, Plus, ShieldAlert, UserCheck, Users } from "lucide-react";
+import { Bell, Building2, Pencil, Plus, ShieldAlert, UserCheck, Users } from "lucide-react";
 import type { Branch, Hospital, PatientAccessRequest, RoleDefinition, StaffMembership, StaffProvider, StaffUser } from "../types";
 import { DOCTOR_SPECIALTIES } from "../catalogs/doctorSpecialties";
 import { SRI_LANKA_DISTRICTS } from "../catalogs/sriLankaDistricts";
@@ -14,8 +14,21 @@ interface Props {
   staffDirectory: StaffProvider[];
   onCreateHospital: (name: string, district: string, logoUrl?: string) => void;
   onToggleHospitalStatus: (hospitalId: string, status: "ACTIVE" | "SUSPENDED") => void;
+  onUpdateHospital: (payload: { hospitalId: string; name?: string; district?: string }) => Promise<void> | void;
   onUpdateHospitalLogo: (hospitalId: string, logoUrl: string) => Promise<void> | void;
+  onCreateBranch?: (payload: { hospitalId: string; name: string; address: string }) => Promise<void> | void;
   onCreateStaff: (payload: {
+    hospitalId: string;
+    name: string;
+    email: string;
+    roleName: string;
+    branchIds: string[];
+    phone?: string;
+    specialty?: string;
+    photoUrl?: string;
+  }) => Promise<void> | void;
+  onUpdateStaff: (payload: {
+    staffId: string;
     hospitalId: string;
     name: string;
     email: string;
@@ -42,8 +55,11 @@ export default function PlatformConsoleView({
   staffDirectory,
   onCreateHospital,
   onToggleHospitalStatus,
+  onUpdateHospital,
   onUpdateHospitalLogo,
+  onCreateBranch,
   onCreateStaff,
+  onUpdateStaff,
   onUpdateStaffPhoto,
   onRemoveStaff,
   accessRequests = [],
@@ -61,6 +77,18 @@ export default function PlatformConsoleView({
   const [staffBranches, setStaffBranches] = useState<string[]>([]);
   const [staffPhotoUrl, setStaffPhotoUrl] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editingHospitalId, setEditingHospitalId] = useState<string | null>(null);
+  const [editHospitalName, setEditHospitalName] = useState("");
+  const [editHospitalDistrict, setEditHospitalDistrict] = useState("Colombo");
+  const [newBranchName, setNewBranchName] = useState("");
+  const [newBranchAddress, setNewBranchAddress] = useState("");
+  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
+  const [editStaffName, setEditStaffName] = useState("");
+  const [editStaffEmail, setEditStaffEmail] = useState("");
+  const [editStaffPhone, setEditStaffPhone] = useState("");
+  const [editStaffRole, setEditStaffRole] = useState("Doctor");
+  const [editStaffSpecialty, setEditStaffSpecialty] = useState("Cardiologist");
+  const [editStaffBranches, setEditStaffBranches] = useState<string[]>([]);
   const pendingAccess = accessRequests.filter((r) => r.status === "PENDING");
 
   return (
@@ -243,6 +271,21 @@ export default function PlatformConsoleView({
                     </span>
                     <button
                       type="button"
+                      onClick={() => {
+                        setEditingHospitalId(editingHospitalId === h.id ? null : h.id);
+                        setEditHospitalName(h.name);
+                        setEditHospitalDistrict(h.district || "Colombo");
+                        setNewBranchName("");
+                        setNewBranchAddress("");
+                        setOpenHospitalId(h.id);
+                      }}
+                      className="text-xs font-bold border border-sky-200 text-sky-800 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-lg flex items-center gap-1"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Edit
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => onToggleHospitalStatus(h.id, h.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE")}
                       className="text-xs font-bold border px-3 py-1.5 rounded-lg hover:bg-slate-50"
                     >
@@ -253,6 +296,90 @@ export default function PlatformConsoleView({
 
                 {open && (
                   <div className="border-t bg-slate-50 p-4 space-y-4">
+                    {editingHospitalId === h.id && (
+                      <form
+                        className="bg-white border border-sky-200 rounded-xl p-3 space-y-2"
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          if (!editHospitalName.trim()) return;
+                          await onUpdateHospital({
+                            hospitalId: h.id,
+                            name: editHospitalName.trim(),
+                            district: editHospitalDistrict,
+                          });
+                          setEditingHospitalId(null);
+                        }}
+                      >
+                        <p className="text-[11px] font-bold text-slate-700 uppercase">Edit hospital details</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <input
+                            value={editHospitalName}
+                            onChange={(e) => setEditHospitalName(e.target.value)}
+                            placeholder="Hospital / medical centre name"
+                            className="border rounded-lg px-3 py-1.5 text-xs"
+                          />
+                          <select
+                            value={editHospitalDistrict}
+                            onChange={(e) => setEditHospitalDistrict(e.target.value)}
+                            className="border rounded-lg px-3 py-1.5 text-xs"
+                          >
+                            {SRI_LANKA_DISTRICTS.map((d) => (
+                              <option key={d} value={d}>{d}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex gap-2">
+                          <button type="submit" className="bg-[#00334f] text-white px-3 py-1.5 rounded-lg text-xs font-bold">
+                            Save hospital
+                          </button>
+                          <button type="button" onClick={() => setEditingHospitalId(null)} className="text-xs font-bold text-slate-600">
+                            Cancel
+                          </button>
+                        </div>
+                        <div className="border-t pt-2 space-y-2">
+                          <p className="text-[11px] font-bold text-slate-700 uppercase">Add a branch</p>
+                          <p className="text-[10px] text-slate-500">New branches appear in Security & RBAC → Assign staff to branches.</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <input
+                              value={newBranchName}
+                              onChange={(e) => setNewBranchName(e.target.value)}
+                              placeholder="Branch name (e.g. Negombo)"
+                              className="border rounded-lg px-3 py-1.5 text-xs"
+                            />
+                            <input
+                              value={newBranchAddress}
+                              onChange={(e) => setNewBranchAddress(e.target.value)}
+                              placeholder="Address"
+                              className="border rounded-lg px-3 py-1.5 text-xs"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!newBranchName.trim() || !onCreateBranch) return;
+                              await onCreateBranch({
+                                hospitalId: h.id,
+                                name: newBranchName.trim(),
+                                address: newBranchAddress.trim() || `${editHospitalDistrict}, Sri Lanka`,
+                              });
+                              setNewBranchName("");
+                              setNewBranchAddress("");
+                            }}
+                            className="bg-sky-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add branch
+                          </button>
+                          <div className="flex flex-wrap gap-1">
+                            {hospitalBranches.map((b) => (
+                              <span key={b.id} className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-100">
+                                {b.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </form>
+                    )}
                     <div>
                       <h3 className="text-xs font-bold text-[#00334f] uppercase tracking-wider mb-2">Employees at this clinic</h3>
                       {hospitalStaff.length === 0 ? (
@@ -260,7 +387,8 @@ export default function PlatformConsoleView({
                       ) : (
                         <div className="grid gap-1.5">
                           {hospitalStaff.map((s) => (
-                            <div key={s.id} className="bg-white border rounded-lg px-3 py-2 text-xs flex flex-wrap items-center justify-between gap-2">
+                            <div key={s.id} className="bg-white border rounded-lg px-3 py-2 text-xs space-y-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="flex items-center gap-2 min-w-0">
                                 {s.photoUrl ? (
                                   <img src={s.photoUrl} alt="" className="w-9 h-9 rounded-full object-cover border shrink-0" />
@@ -283,6 +411,22 @@ export default function PlatformConsoleView({
                                 )}
                                 <button
                                   type="button"
+                                  onClick={() => {
+                                    setEditingStaffId(editingStaffId === s.id ? null : s.id);
+                                    setEditStaffName(s.name);
+                                    setEditStaffEmail(s.email);
+                                    setEditStaffPhone(s.phone || "");
+                                    setEditStaffRole(s.role);
+                                    setEditStaffSpecialty(s.specialty || "Cardiologist");
+                                    setEditStaffBranches(s.branchIds || hospitalBranches.map((b) => b.id));
+                                  }}
+                                  className="text-[10px] font-bold text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-2 py-1 rounded flex items-center gap-1"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
                                   onClick={async () => {
                                     if (!window.confirm(`Remove ${s.name} from ${h.name}? They will disappear from Practice Manager, this clinic’s booking lists, and the Suwasiri app.`)) return;
                                     await onRemoveStaff({ staffId: s.id, hospitalId: h.id });
@@ -292,6 +436,68 @@ export default function PlatformConsoleView({
                                   Remove (resigned)
                                 </button>
                               </div>
+                              </div>
+                              {editingStaffId === s.id && (
+                                <form
+                                  className="bg-slate-50 border rounded-lg p-2 grid grid-cols-1 sm:grid-cols-2 gap-2"
+                                  onSubmit={async (e) => {
+                                    e.preventDefault();
+                                    await onUpdateStaff({
+                                      staffId: s.id,
+                                      hospitalId: h.id,
+                                      name: editStaffName.trim(),
+                                      email: editStaffEmail.trim(),
+                                      phone: editStaffPhone.trim(),
+                                      roleName: editStaffRole,
+                                      specialty: editStaffRole === "Doctor" ? editStaffSpecialty : undefined,
+                                      branchIds: editStaffBranches,
+                                      photoUrl: s.photoUrl,
+                                    });
+                                    setEditingStaffId(null);
+                                  }}
+                                >
+                                  <input value={editStaffName} onChange={(e) => setEditStaffName(e.target.value)} className="border rounded-lg px-2 py-1.5 text-xs" placeholder="Name" />
+                                  <input value={editStaffEmail} onChange={(e) => setEditStaffEmail(e.target.value)} className="border rounded-lg px-2 py-1.5 text-xs" placeholder="Email" />
+                                  <input value={editStaffPhone} onChange={(e) => setEditStaffPhone(e.target.value)} className="border rounded-lg px-2 py-1.5 text-xs" placeholder="Phone" />
+                                  <select value={editStaffRole} onChange={(e) => setEditStaffRole(e.target.value)} className="border rounded-lg px-2 py-1.5 text-xs">
+                                    {(hospitalRoles.length ? hospitalRoles.map((r) => r.name) : STAFF_ROLES).map((name) => (
+                                      <option key={name} value={name}>{name}</option>
+                                    ))}
+                                  </select>
+                                  {editStaffRole === "Doctor" && (
+                                    <select value={editStaffSpecialty} onChange={(e) => setEditStaffSpecialty(e.target.value)} className="border rounded-lg px-2 py-1.5 text-xs sm:col-span-2">
+                                      {DOCTOR_SPECIALTIES.map((spec) => (
+                                        <option key={spec} value={spec}>{spec}</option>
+                                      ))}
+                                    </select>
+                                  )}
+                                  <div className="sm:col-span-2 flex flex-wrap gap-1">
+                                    {hospitalBranches.map((b) => {
+                                      const on = editStaffBranches.includes(b.id);
+                                      return (
+                                        <button
+                                          key={b.id}
+                                          type="button"
+                                          onClick={() =>
+                                            setEditStaffBranches((prev) =>
+                                              prev.includes(b.id) ? prev.filter((id) => id !== b.id) : [...prev, b.id]
+                                            )
+                                          }
+                                          className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                                            on ? "bg-emerald-100 text-emerald-800 border-emerald-200" : "bg-white text-slate-500"
+                                          }`}
+                                        >
+                                          {b.name}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="sm:col-span-2 flex gap-2">
+                                    <button type="submit" className="bg-[#00334f] text-white px-3 py-1.5 rounded-lg text-[10px] font-bold">Save employee</button>
+                                    <button type="button" onClick={() => setEditingStaffId(null)} className="text-[10px] font-bold text-slate-600">Cancel</button>
+                                  </div>
+                                </form>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -329,7 +535,7 @@ export default function PlatformConsoleView({
                       }}
                     >
                       <p className="text-[11px] font-bold text-slate-700 uppercase">Add staff to {h.name}</p>
-                      <p className="text-[10px] text-sky-800">Doctors sync to Suwasiri (search by name, {h.district || "district"}, and this clinic name).</p>
+                      <p className="text-[10px] text-sky-800">Designations come from Security & RBAC (Add role). Doctors sync to Suwasiri (search by name, {h.district || "district"}, and this clinic name).</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <input
                           value={staffName}

@@ -52,7 +52,7 @@ import {
 
 import { 
   Patient, Appointment, Alert, Task, Billing, VaccineRecord, LabResult, PrescriptionRecord, LabOrder, NotificationLog, ClinicMessage, Expense,
-  Hospital, Branch, RoleDefinition, StaffMembership, StaffUser, StaffProvider, MedicalCertificateRecord, PatientAccessRequest, AuditLogEntry, FeeScheduleItem
+  Hospital, Branch, RoleDefinition, StaffMembership, StaffUser, StaffProvider, MedicalCertificateRecord, PatientAccessRequest, AuditLogEntry, FeeScheduleItem, RetentionPolicyItem
 } from "./types";
 
 import ClinicMonthCalendar, { LiveColomboClock } from "./components/ClinicMonthCalendar";
@@ -490,6 +490,7 @@ export default function App() {
   const [staffDirectory, setStaffDirectory] = useState<StaffProvider[]>([]);
   const [clinicFeeSchedule, setClinicFeeSchedule] = useState<FeeScheduleItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [retentionPolicies, setRetentionPolicies] = useState<RetentionPolicyItem[]>([]);
 
   // Navigation tab routing
   const [activeTab, setActiveTab] = useState<string>("dashboard");
@@ -868,6 +869,7 @@ export default function App() {
       if (Array.isArray(data.feeSchedule)) setClinicFeeSchedule(data.feeSchedule);
       if (Array.isArray(data.recalls) && data.recalls.length) setRecalls(data.recalls);
       if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
+      if (Array.isArray(data.retentionPolicies)) setRetentionPolicies(data.retentionPolicies);
       
       // Auto-set first patient id for appointment book dropdown
       if (data.patients && data.patients.length > 0) {
@@ -1265,13 +1267,21 @@ export default function App() {
   };
 
   const addHospitalRole = async (name: string, cloneFromRoleId: string) => {
-    const res = await fetch("/api/tenancy/roles", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ hospitalId: sessionHospitalId, name, cloneFromRoleId }),
-    });
-    const data = await res.json();
-    if (data.role) setRoleDefs((prev) => [...prev, data.role]);
+    const created: RoleDefinition[] = [];
+    for (const hospital of hospitals) {
+      const cloneId =
+        hospital.id === sessionHospitalId
+          ? cloneFromRoleId
+          : roleDefs.find((r) => r.hospitalId === hospital.id && r.name === "Doctor")?.id || cloneFromRoleId;
+      const res = await fetch("/api/tenancy/roles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hospitalId: hospital.id, name, cloneFromRoleId: cloneId }),
+      });
+      const data = await res.json();
+      if (data.role) created.push(data.role);
+    }
+    if (created.length) setRoleDefs((prev) => [...prev, ...created]);
     else fetchState();
   };
 
@@ -1330,6 +1340,85 @@ export default function App() {
       });
     } catch (err) {
       console.warn("Could not publish clinic logo to Suwasiri:", err);
+    }
+  };
+
+  const updateHospitalDetails = async (payload: { hospitalId: string; name?: string; district?: string }) => {
+    const res = await fetch(`/api/tenancy/hospitals/${payload.hospitalId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: payload.name, district: payload.district }),
+    });
+    const data = await res.json();
+    const hospital = data.hospital as Hospital | undefined;
+    if (hospital) {
+      setHospitals((prev) => prev.map((h) => (h.id === hospital.id ? hospital : h)));
+    }
+    const hid = payload.hospitalId;
+    const next = hospital || hospitals.find((h) => h.id === hid);
+    const branch = branches.find((b) => b.hospitalId === hid);
+    try {
+      await publishClinicCenterToSuwasiri({
+        hospitalId: hid,
+        name: next?.name || payload.name || "GP Care Clinic",
+        region: next?.district || payload.district || "Colombo",
+        address: branch?.address,
+        branchName: branch?.name,
+        logoUrl: next?.logoUrl || "",
+      });
+    } catch (err) {
+      console.warn("Could not publish hospital edit to Suwasiri:", err);
+    }
+  };
+
+  const updatePortalStaff = async (payload: {
+    staffId: string;
+    hospitalId: string;
+    name: string;
+    email: string;
+    roleName: string;
+    branchIds: string[];
+    phone?: string;
+    specialty?: string;
+    photoUrl?: string;
+  }) => {
+    const res = await fetch(`/api/tenancy/staff/${encodeURIComponent(payload.staffId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(data.error || "Could not update staff");
+      return;
+    }
+    if (data.staffDirectory) setStaffDirectory(data.staffDirectory);
+    if (data.staffUsers) setStaffUsers(data.staffUsers);
+    if (data.memberships) setMemberships(data.memberships);
+    const staff = data.staff as StaffProvider | undefined;
+    if (staff && /doctor|medical officer/i.test(staff.role || payload.roleName)) {
+      const hospital = hospitals.find((h) => h.id === payload.hospitalId);
+      const branch = branches.find((b) => (staff.branchIds || []).includes(b.id))
+        || branches.find((b) => b.hospitalId === payload.hospitalId);
+      try {
+        await publishClinicDoctorToSuwasiri({
+          staffId: staff.id,
+          name: staff.name,
+          specialty: staff.specialty || "General Practitioner",
+          hospitalName: hospital?.name || "GP Care Clinic",
+          hospitalId: payload.hospitalId,
+          branchName: branch?.name,
+          branchId: branch?.id,
+          region: hospital?.district || "Colombo",
+          email: staff.email,
+          phone: staff.phone,
+          rosterHours: staff.rosterHours,
+          roster: staff.roster,
+          photoUrl: staff.photoUrl || "",
+        });
+      } catch (err) {
+        console.warn("Could not republish edited doctor to Suwasiri:", err);
+      }
     }
   };
 
@@ -1462,6 +1551,55 @@ export default function App() {
     if (data.memberships) setMemberships(data.memberships);
   };
 
+  const publishRetentionPolicy = async (title: string, body: string) => {
+    const res = await fetch("/api/retention-policies", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, body, createdBy: sessionUser?.name || "Super Admin" }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(data.error || "Could not save retention policy.");
+      return;
+    }
+    if (data.policies) setRetentionPolicies(data.policies);
+    const staff = staffDirectory.filter(
+      (s) => s.active !== false && /doctor|medical officer|consultant|receptionist/i.test(s.role || "")
+    );
+    const content = `New Sri Lanka National Healthcare Data Retention & Privacy Policy: ${title}. ${body}`;
+    for (const person of staff) {
+      await fetch("/api/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientName: person.name,
+          recipient: person.email || person.phone || person.name,
+          transport: "App Notification",
+          templateType: "RETENTION_POLICY",
+          content,
+          registeredBy: sessionUser?.name || "Super Admin",
+        }),
+      }).catch(() => undefined);
+    }
+    await fetch("/api/clinical-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sender: sessionUser?.name || "Super Admin",
+        senderRole: "Admin",
+        text: content,
+        channel: "#general-clinical",
+      }),
+    }).catch(() => undefined);
+    void logAudit({
+      action: "Published retention policy",
+      category: "SECURITY",
+      details: `${title} notified to ${staff.length} doctors and receptionists.`,
+    });
+    alert(`Policy saved. ${staff.length} doctors and receptionists were notified.`);
+    fetchState();
+  };
+
   const persistRecalls = async (next: RecallRecord[]) => {
     setRecalls(next);
     await fetch("/api/recalls", {
@@ -1502,7 +1640,7 @@ export default function App() {
       const res = await fetch("/api/tenancy/branches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hospitalId: sessionHospitalId, ...payload }),
+        body: JSON.stringify({ hospitalId: payload.hospitalId || sessionHospitalId, ...payload }),
       });
       const data = await res.json();
       if (data.branch) setBranches((prev) => [...prev, data.branch]);
@@ -2001,6 +2139,7 @@ export default function App() {
   };
 
   const persistClinicalFile = async (updated: Patient) => {
+    const previous = patients.find((p) => p.id === updated.id);
     setPatients((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
     setSuwasiriPatients((prev) => prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)));
     setSelectedConsultPatient((prev) => (prev?.id === updated.id ? { ...updated, name: prev.name || updated.name } : prev));
@@ -2091,6 +2230,64 @@ export default function App() {
       }
     } catch (err) {
       console.warn("Clinical file persist:", err);
+    }
+    if (previous) {
+      const actor = sessionUser?.name || String(currentRole);
+      const base = { patientId: updated.id, patientName: updated.name };
+      if ((updated.history || []).length > (previous.history || []).length) {
+        const h = (updated.history || [])[(updated.history || []).length - 1];
+        void logAudit({
+          ...base,
+          action: "Clinical consultation",
+          category: "CONSULTATION",
+          details: `${h?.reason || "Consult"} by ${h?.doctor || actor}. ${h?.notes || h?.soapSubjective || ""}`.trim(),
+        });
+      }
+      if ((updated.notes || "") !== (previous.notes || "")) {
+        void logAudit({ ...base, action: "Edited doctor notes", category: "CLINICAL_NOTE", details: updated.notes || "Notes updated." });
+      }
+      if ((updated.prescriptionsList || []).length > (previous.prescriptionsList || []).length) {
+        const rx = (updated.prescriptionsList || [])[(updated.prescriptionsList || []).length - 1];
+        void logAudit({
+          ...base,
+          action: "Issued prescription",
+          category: "PRESCRIPTION",
+          details: `Rx ${rx?.rxNumber || rx?.id}: ${(rx?.items || []).join("; ")}`,
+        });
+      }
+      if ((updated.activeMedications || []).join("|") !== (previous.activeMedications || []).join("|")) {
+        void logAudit({
+          ...base,
+          action: "Issued / updated medicines",
+          category: "PRESCRIPTION",
+          details: (updated.activeMedications || []).join("; ") || "Medicines cleared.",
+        });
+      }
+      if ((updated.labResults || []).length > (previous.labResults || []).length) {
+        const lab = (updated.labResults || [])[(updated.labResults || []).length - 1];
+        void logAudit({
+          ...base,
+          action: lab?.doctorReviewed ? "Reviewed lab report" : "Lab report filed",
+          category: "PATHOLOGY",
+          details: `${lab?.testName}: ${lab?.result}. ${lab?.remarks || ""}`.trim(),
+        });
+      }
+      if ((updated.medicalCertificatesList || []).length > (previous.medicalCertificatesList || []).length) {
+        const cert = (updated.medicalCertificatesList || [])[(updated.medicalCertificatesList || []).length - 1];
+        void logAudit({
+          ...base,
+          action: "Issued medical certificate",
+          category: "CERTIFICATE",
+          details: `${cert?.diagnosis || "Certificate"} · ${cert?.status || ""} · ${cert?.doctorName || actor}`,
+        });
+      }
+      if ((updated.diagnosesList || []).length > (previous.diagnosesList || []).length) {
+        const dx = (updated.diagnosesList || [])[(updated.diagnosesList || []).length - 1];
+        void logAudit({ ...base, action: "Added diagnosis", category: "DIAGNOSIS", details: dx?.condition || "Diagnosis recorded." });
+      }
+      if ((updated.referralsList || []).length > (previous.referralsList || []).length) {
+        void logAudit({ ...base, action: "Issued referral", category: "REFERRAL", details: "Specialist referral written to the patient file." });
+      }
     }
   };
 
@@ -6235,7 +6432,7 @@ export default function App() {
                   const res = await fetch("/api/tenancy/hospitals", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ name, district, logoUrl: logoUrl || "" }),
+                    body: JSON.stringify({ name, district, logoUrl: logoUrl || "", copyRolesFrom: sessionHospitalId }),
                   });
                   const data = await res.json();
                   if (data.hospital) {
@@ -6292,7 +6489,10 @@ export default function App() {
                   }
                 }}
                 onUpdateHospitalLogo={updateHospitalLogo}
+                onUpdateHospital={updateHospitalDetails}
+                onCreateBranch={(payload) => persistBranches("create", payload)}
                 onCreateStaff={createPortalStaff}
+                onUpdateStaff={updatePortalStaff}
                 onUpdateStaffPhoto={updateStaffPhoto}
                 onRemoveStaff={removePortalStaff}
               />
@@ -6334,11 +6534,22 @@ export default function App() {
                   hospitals={hospitals}
                   branches={branches}
                   memberships={memberships}
+                  retentionPolicies={retentionPolicies}
                   onSaveStaff={persistStaffDirectory}
                   onSaveMemberships={persistMemberships}
                   onSaveRoles={persistRoles}
                   onAddRole={addHospitalRole}
                   onRemoveRole={removeHospitalRole}
+                  onPublishRetentionPolicy={publishRetentionPolicy}
+                  onRecordBreakGlass={(event) => {
+                    void logAudit({
+                      action: "Authorized break-glass override",
+                      category: "SECURITY",
+                      patientId: event.patientId,
+                      patientName: event.patientName,
+                      details: `${event.doctorName} unlocked ${event.patientName}: ${event.clinicalReason}`,
+                    });
+                  }}
                 />
               </div>
             )}
@@ -6350,6 +6561,7 @@ export default function App() {
                   patients={hospitalPatients}
                   logs={auditLogs}
                   labOrders={labOrders}
+                  staffNames={staffDirectory.map((s) => s.name).filter(Boolean)}
                   selectedDate={selectedAuditDate}
                   todayKey={todayKey}
                   calendarYear={auditCalendarMonth.year}

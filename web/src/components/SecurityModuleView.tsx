@@ -38,6 +38,7 @@ import {
   Hospital,
   Branch,
   StaffMembership,
+  RetentionPolicyItem,
 } from "../types";
 import { cloneHospitalRoles } from "../tenancy";
 
@@ -60,6 +61,8 @@ interface Props {
   memberships?: StaffMembership[];
   onSaveStaff?: (staff: StaffProvider[]) => void | Promise<void>;
   onSaveMemberships?: (memberships: StaffMembership[]) => void | Promise<void>;
+  retentionPolicies?: RetentionPolicyItem[];
+  onPublishRetentionPolicy?: (title: string, body: string) => void | Promise<void>;
 }
 
 const DEFAULT_SECURITY_CONFIG: SecurityStatusConfig = {
@@ -146,8 +149,10 @@ export default function SecurityModuleView({
   hospitals = [],
   branches = [],
   memberships = [],
+  retentionPolicies = [],
   onSaveStaff,
   onSaveMemberships,
+  onPublishRetentionPolicy,
 }: Props) {
   const isAdmin = canEditRbac ?? (currentRole === "Admin" || currentRole === "Practice Manager" || currentRole === "Hospital Super Admin" || isPlatformSA);
   const [config, setConfig] = useState<SecurityStatusConfig>(DEFAULT_SECURITY_CONFIG);
@@ -232,7 +237,7 @@ export default function SecurityModuleView({
     }
     setNewRoleName("");
     setShowAddRole(false);
-    setRbacSaveSuccess("Custom role added to this hospital.");
+    setRbacSaveSuccess("Designation added. It now appears in Platform Console → Add staff.");
     setTimeout(() => setRbacSaveSuccess(null), 3500);
   };
 
@@ -251,7 +256,11 @@ export default function SecurityModuleView({
   const [breakGlassPatientId, setBreakGlassPatientId] = useState(patients[0]?.id || "9942-LK");
   const [breakGlassReason, setBreakGlassReason] = useState("");
   const [breakGlassUrgency, setBreakGlassUrgency] = useState<BreakGlassEvent["urgencyLevel"]>("LIFE_THREATENING_EMERGENCY");
-  const [breakGlassWitness, setBreakGlassWitness] = useState("RN Nirosha Fernando");
+  const [breakGlassWitness, setBreakGlassWitness] = useState("");
+  const doctorStaff = staffList.filter((s) =>
+    /doctor|medical officer|consultant/i.test(s.role || "")
+  );
+  const [breakGlassDoctorId, setBreakGlassDoctorId] = useState(doctorStaff[0]?.id || "");
   const [breakGlassLogs, setBreakGlassLogs] = useState<BreakGlassEvent[]>([
     {
       id: "bg-01",
@@ -267,6 +276,8 @@ export default function SecurityModuleView({
   ]);
 
   const [backupRunning, setBackupRunning] = useState(false);
+  const [newPolicyTitle, setNewPolicyTitle] = useState("");
+  const [newPolicyBody, setNewPolicyBody] = useState("");
 
   const handleRevokeSession = (sessionId: string) => {
     setSessions((prev) => prev.filter((s) => s.id !== sessionId));
@@ -294,15 +305,21 @@ export default function SecurityModuleView({
     }
 
     const pat = patients.find((p) => p.id === breakGlassPatientId) || { name: "Patient Record", id: breakGlassPatientId };
+    const doctor =
+      doctorStaff.find((d) => d.id === breakGlassDoctorId) || doctorStaff[0];
+    if (!doctor) {
+      alert("Select a doctor to authorize this override.");
+      return;
+    }
     const event: BreakGlassEvent = {
       id: "bg-" + Date.now(),
       timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
-      doctorId: "DOC-882",
-      doctorName: "Dr. Priyantha Silva",
+      doctorId: doctor.id,
+      doctorName: doctor.name,
       patientId: pat.id,
       patientName: pat.name,
       clinicalReason: breakGlassReason,
-      authorizedWitness: breakGlassWitness,
+      authorizedWitness: breakGlassWitness || doctor.name,
       urgencyLevel: breakGlassUrgency
     };
 
@@ -623,7 +640,7 @@ export default function SecurityModuleView({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Defines clinical, billing, and governance boundaries for <strong>{hospitalName || "this hospital"}</strong> ({permissions.length} roles). Custom roles can be added or removed; system templates can only be disabled.
+                Defines clinical, billing, and governance boundaries for <strong>{hospitalName || "this hospital"}</strong> ({permissions.length} roles). Add a designation / position here and it appears in Platform Console → Add staff. Custom roles can be removed; system templates can only be disabled.
               </p>
             </div>
 
@@ -635,7 +652,7 @@ export default function SecurityModuleView({
                   className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Add role
+                  Add designation
                 </button>
                 <button
                   type="button"
@@ -669,7 +686,7 @@ export default function SecurityModuleView({
               <div>
                 <h4 className="text-sm font-bold text-[#00334f]">Assign staff to branches</h4>
                 <p className="text-[11px] text-slate-500">
-                  Super Admin can attach staff to other branches (and other hospitals if you are Platform Super Admin). Saving updates Practice Manager and login memberships.
+                  Super Admin can attach staff to other branches. Hospitals and branches created in Platform Console appear here and can be selected.
                 </p>
               </div>
               <div className="space-y-2 max-h-72 overflow-y-auto">
@@ -715,6 +732,9 @@ export default function SecurityModuleView({
                                 }`}
                               >
                                 {b.name}
+                                {hospitals.find((h) => h.id === b.hospitalId)
+                                  ? ` · ${hospitals.find((h) => h.id === b.hospitalId)?.name}`
+                                  : ""}
                               </button>
                             );
                           })}
@@ -773,11 +793,11 @@ export default function SecurityModuleView({
           {showAddRole && isAdmin && (
             <div className="bg-sky-50 border border-sky-200 rounded-xl p-4 flex flex-wrap items-end gap-3">
               <div>
-                <label className="block text-[10px] font-bold text-slate-600 mb-1">New role name</label>
+                <label className="block text-[10px] font-bold text-slate-600 mb-1">New designation / position</label>
                 <input
                   value={newRoleName}
                   onChange={(e) => setNewRoleName(e.target.value)}
-                  placeholder="e.g. Night Triage Lead"
+                  placeholder="e.g. Physiotherapist, Night Triage Lead"
                   className="border rounded-lg px-3 py-1.5 text-xs bg-white outline-none focus:border-[#00334f]"
                 />
               </div>
@@ -794,7 +814,7 @@ export default function SecurityModuleView({
                 </select>
               </div>
               <button type="button" onClick={handleAddCustomRole} className="bg-[#00334f] text-white px-3 py-1.5 rounded-lg text-xs font-bold">
-                Create role
+                Create designation
               </button>
               <button type="button" onClick={() => setShowAddRole(false)} className="text-xs font-bold text-slate-600">
                 Cancel
@@ -1395,6 +1415,47 @@ export default function SecurityModuleView({
                 All digital prescriptions, dispensing audit logs, and Schedule II / III narcotic or psychotropic substance records are cryptographically stored for a minimum of <strong>5 years</strong>, with real-time verification available to the National Medicines Regulatory Authority (NMRA) and Sri Lanka Medical Council (SLMC).
               </p>
             </div>
+
+            {(retentionPolicies || []).map((p) => (
+              <div key={p.id} className="p-4 bg-amber-50 rounded-xl border border-amber-100 space-y-1">
+                <span className="font-bold text-slate-800 block text-sm">{p.title}</span>
+                <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">{p.body}</p>
+                <p className="text-[10px] text-slate-500">Saved {p.createdAt?.slice(0, 16).replace("T", " ")} · {p.createdBy}</p>
+              </div>
+            ))}
+
+            {isAdmin && (
+              <form
+                className="p-4 bg-white rounded-xl border border-teal-200 space-y-2"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!newPolicyTitle.trim() || !newPolicyBody.trim()) return;
+                  await onPublishRetentionPolicy?.(newPolicyTitle.trim(), newPolicyBody.trim());
+                  setNewPolicyTitle("");
+                  setNewPolicyBody("");
+                }}
+              >
+                <p className="font-bold text-sm text-[#00334f]">Add a retention / privacy policy</p>
+                <p className="text-[11px] text-slate-500">Saving notifies every doctor and receptionist in the staff directory.</p>
+                <input
+                  value={newPolicyTitle}
+                  onChange={(e) => setNewPolicyTitle(e.target.value)}
+                  placeholder="Policy title"
+                  className="w-full border rounded-lg px-3 py-1.5 text-xs"
+                />
+                <textarea
+                  value={newPolicyBody}
+                  onChange={(e) => setNewPolicyBody(e.target.value)}
+                  rows={4}
+                  placeholder="Policy text (Sri Lanka PDPA / MoH / clinic-specific rules)"
+                  className="w-full border rounded-lg px-3 py-1.5 text-xs"
+                />
+                <button type="submit" className="bg-teal-700 hover:bg-teal-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1">
+                  <Plus className="w-3.5 h-3.5" />
+                  Add & notify clinicians
+                </button>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -1462,6 +1523,24 @@ export default function SecurityModuleView({
                   placeholder="Describe patient acute presentation and clinical necessity for overriding sealed chart..."
                   className="w-full p-2.5 border rounded-lg outline-none focus:border-rose-600"
                 />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Authorizing doctor *</label>
+                <select
+                  value={breakGlassDoctorId}
+                  onChange={(e) => setBreakGlassDoctorId(e.target.value)}
+                  className="w-full p-2.5 border rounded-lg font-bold text-slate-800 bg-white"
+                  required
+                >
+                  {doctorStaff.length === 0 && <option value="">No doctors on this roster</option>}
+                  {doctorStaff.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} · {d.specialty || d.role}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1">Only doctors can authorize a break-glass override.</p>
               </div>
 
               <div>

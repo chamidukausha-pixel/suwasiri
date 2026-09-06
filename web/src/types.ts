@@ -171,17 +171,39 @@ export interface MyHealthRecordDoc {
   summary: string;
 }
 
+export type AuditLogCategory =
+  | "PATIENT_RECORD"
+  | "CONSULTATION"
+  | "CLINICAL_NOTE"
+  | "PRESCRIPTION"
+  | "DIAGNOSIS"
+  | "PATHOLOGY"
+  | "CERTIFICATE"
+  | "REFERRAL"
+  | "BILLING"
+  | "SECURITY"
+  | "MHR_ACCESS"
+  | "AUTHENTICATION";
+
 export interface AuditLogEntry {
   id: string;
   timestamp: string;
   user: string;
-  role: "Doctor" | "Admin" | "Receptionist" | "Nurse" | "Patient";
+  role: string;
   action: string;
-  category: "PATIENT_RECORD" | "PRESCRIPTION" | "DIAGNOSIS" | "PATHOLOGY" | "REFERRAL" | "BILLING" | "SECURITY" | "MHR_ACCESS" | "AUTHENTICATION";
+  category: AuditLogCategory;
   patientId?: string;
   patientName?: string;
   details: string;
   ipAddress?: string;
+}
+
+export interface RetentionPolicyItem {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  createdBy: string;
 }
 
 export type RosterWeekday =
