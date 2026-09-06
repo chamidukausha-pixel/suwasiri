@@ -206,9 +206,14 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
         visitReason: _visitReason,
         doctorFeeLkr: widget.doctor.feeLkr,
         fees: _fees,
+        videoConsult: _mode == ConsultMode.video,
       );
 
-  bool get _serviceOnlyFee => isServiceOnlyFee(_visitReason, _fees);
+  bool get _serviceOnlyFee => isServiceOnlyFee(
+        _visitReason,
+        _fees,
+        videoConsult: _mode == ConsultMode.video,
+      );
 
   int get _total => _serviceOnlyFee ? _consultFee : _consultFee + _venueFee;
 
@@ -254,6 +259,9 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
     final reason = widget.initialVisitReason?.trim();
     if (reason != null && reason.isNotEmpty) {
       _visitReason = reason;
+      if (suwasiriServiceForVisitReason(reason) == 'telehealth') {
+        _mode = ConsultMode.video;
+      }
     }
     if (widget.initialSlot != null) {
       final slot = widget.initialSlot!;

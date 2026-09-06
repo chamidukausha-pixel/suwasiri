@@ -581,13 +581,43 @@ class FirebaseHealthRepository implements HealthRepository {
           .toList();
     }
 
+    void ingest(
+      List<ClinicFeeItem> items,
+      Map<String, ClinicFeeItem> byService, {
+      required bool preferred,
+    }) {
+      for (final item in items) {
+        final key = item.suwasiriService.trim();
+        if (key.isEmpty) continue;
+        if (preferred || !byService.containsKey(key)) {
+          byService[key] = item;
+        }
+      }
+    }
+
     try {
+      final snap = await _db.collection('clinic_fee_schedules').get();
+      final byService = <String, ClinicFeeItem>{};
+      for (final doc in snap.docs) {
+        if (doc.id == 'global') {
+          ingest(parse(doc.data()), byService, preferred: false);
+        }
+      }
+      for (final doc in snap.docs) {
+        if (doc.id == 'global') continue;
+        final preferred =
+            hospitalId.trim().isNotEmpty && doc.id == hospitalId.trim();
+        ingest(parse(doc.data()), byService, preferred: preferred);
+      }
+      if (byService.isNotEmpty) return byService.values.toList();
       if (hospitalId.trim().isNotEmpty) {
-        final doc = await _db.collection('clinic_fee_schedules').doc(hospitalId).get();
+        final doc =
+            await _db.collection('clinic_fee_schedules').doc(hospitalId).get();
         final items = parse(doc.data());
         if (items.isNotEmpty) return items;
       }
-      final global = await _db.collection('clinic_fee_schedules').doc('global').get();
+      final global =
+          await _db.collection('clinic_fee_schedules').doc('global').get();
       return parse(global.data());
     } catch (_) {
       return const [];

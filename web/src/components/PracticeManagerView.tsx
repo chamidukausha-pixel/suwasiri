@@ -93,10 +93,16 @@ export default function PracticeManagerView({
       .then((r) => r.json())
       .then((data) => {
         const byHospital = hospital?.id && data.feeSchedules?.[hospital.id];
-        if (Array.isArray(byHospital) && byHospital.length) {
-          setFeeSchedule(byHospital);
-        } else if (Array.isArray(data.feeSchedule) && data.feeSchedule.length) {
-          setFeeSchedule(data.feeSchedule);
+        const items = Array.isArray(byHospital) && byHospital.length
+          ? byHospital
+          : Array.isArray(data.feeSchedule) ? data.feeSchedule : [];
+        if (items.length) {
+          setFeeSchedule(items);
+          void publishFeeScheduleToSuwasiri({
+            hospitalId: hospital?.id,
+            hospitalName: hospital?.name,
+            items,
+          }).catch(() => undefined);
         }
       })
       .catch(() => undefined);

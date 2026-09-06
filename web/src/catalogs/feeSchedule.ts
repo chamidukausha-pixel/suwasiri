@@ -16,6 +16,7 @@ export const SUWASIRI_FEE_SERVICES: { value: SuwasiriFeeService; label: string }
   { value: "medical_certificate", label: "Suwasiri: Medical certificate" },
   { value: "repeat_prescription", label: "Suwasiri: Repeat prescription" },
   { value: "review_results", label: "Suwasiri: Review results" },
+  { value: "telehealth", label: "Suwasiri: Video consultation" },
 ];
 
 export const DEFAULT_FEE_SCHEDULE: FeeScheduleItem[] = [
@@ -84,6 +85,7 @@ export const DEFAULT_FEE_SCHEDULE: FeeScheduleItem[] = [
     privateFee: 2400.0,
     gapFee: 1800.0,
     bulkBillable: false,
+    suwasiriService: "telehealth",
   },
   {
     id: "fee-mc",

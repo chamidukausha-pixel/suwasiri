@@ -87,6 +87,7 @@ class BookingConfirmStep extends StatelessWidget {
       (l.t('bookingReasonMedicalCertificate'), Icons.description_outlined),
       (l.t('bookingReasonSpecialistReferral'), Icons.group_outlined),
       (l.t('bookingReasonReviewResults'), Icons.analytics_outlined),
+      (l.t('videoConsultation'), Icons.videocam_outlined),
     ];
 
     return ColoredBox(

@@ -1,5 +1,5 @@
 import { doc, setDoc } from "firebase/firestore";
-import { getFirebaseDb, isFirebaseConfigured } from "../firebase";
+import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from "../firebase";
 import type { FeeScheduleItem } from "../types";
 
 export async function publishFeeScheduleToSuwasiri(opts: {
@@ -8,9 +8,9 @@ export async function publishFeeScheduleToSuwasiri(opts: {
   items: FeeScheduleItem[];
 }): Promise<boolean> {
   if (!isFirebaseConfigured()) return false;
-  const hospitalId = (opts.hospitalId || "").trim() || "global";
-  await setDoc(doc(getFirebaseDb(), "clinic_fee_schedules", hospitalId), {
-    hospitalId,
+  if (!getFirebaseAuth().currentUser) return false;
+  const payload = {
+    hospitalId: (opts.hospitalId || "").trim() || "global",
     hospitalName: opts.hospitalName || "",
     items: opts.items.map((item) => ({
       id: item.id,
@@ -23,6 +23,12 @@ export async function publishFeeScheduleToSuwasiri(opts: {
     })),
     source: "gp_care",
     updatedAt: new Date().toISOString(),
-  });
+  };
+  const db = getFirebaseDb();
+  await setDoc(doc(db, "clinic_fee_schedules", "global"), { ...payload, hospitalId: "global" });
+  const hospitalId = (opts.hospitalId || "").trim();
+  if (hospitalId && hospitalId !== "global") {
+    await setDoc(doc(db, "clinic_fee_schedules", hospitalId), payload);
+  }
   return true;
 }

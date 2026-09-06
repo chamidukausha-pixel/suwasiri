@@ -52,7 +52,7 @@ import {
 
 import { 
   Patient, Appointment, Alert, Task, Billing, VaccineRecord, LabResult, PrescriptionRecord, LabOrder, NotificationLog, ClinicMessage, Expense,
-  Hospital, Branch, RoleDefinition, StaffMembership, StaffUser, StaffProvider, MedicalCertificateRecord, PatientAccessRequest, AuditLogEntry
+  Hospital, Branch, RoleDefinition, StaffMembership, StaffUser, StaffProvider, MedicalCertificateRecord, PatientAccessRequest, AuditLogEntry, FeeScheduleItem
 } from "./types";
 
 import ClinicMonthCalendar, { LiveColomboClock } from "./components/ClinicMonthCalendar";
@@ -155,6 +155,7 @@ import {
   unpublishClinicDoctorFromSuwasiri,
   doctorWorksAtClinic,
 } from "./sync/suwasiriClinicDoctors";
+import { publishFeeScheduleToSuwasiri } from "./sync/suwasiriFeeSchedule";
 import DoctorDaySlotsPanel from "./components/DoctorDaySlotsPanel";
 
 export interface DrugFormularyItem {
@@ -487,6 +488,7 @@ export default function App() {
   const [memberships, setMemberships] = useState<StaffMembership[]>([]);
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [staffDirectory, setStaffDirectory] = useState<StaffProvider[]>([]);
+  const [clinicFeeSchedule, setClinicFeeSchedule] = useState<FeeScheduleItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
 
   // Navigation tab routing
@@ -863,6 +865,7 @@ export default function App() {
       setMemberships(data.memberships || []);
       setStaffUsers(data.staffUsers || []);
       setStaffDirectory(data.staffDirectory || []);
+      if (Array.isArray(data.feeSchedule)) setClinicFeeSchedule(data.feeSchedule);
       if (Array.isArray(data.recalls) && data.recalls.length) setRecalls(data.recalls);
       if (Array.isArray(data.auditLogs)) setAuditLogs(data.auditLogs);
       
@@ -880,6 +883,19 @@ export default function App() {
   useEffect(() => {
     fetchState();
   }, []);
+
+  useEffect(() => {
+    if (!authUser || !isFirebaseConfigured() || clinicFeeSchedule.length === 0) return;
+    const hid = sessionHospitalId;
+    const hospitalFees =
+      // prefer this hospital’s copy when Practice Manager has saved one
+      clinicFeeSchedule;
+    void publishFeeScheduleToSuwasiri({
+      hospitalId: hid,
+      hospitalName: hospitals.find((h) => h.id === hid)?.name,
+      items: hospitalFees,
+    }).catch((err) => console.warn("Fee schedule sync:", err));
+  }, [authUser, clinicFeeSchedule, sessionHospitalId, hospitals]);
 
   useEffect(() => {
     if (activeTab !== "platform" || !isFirebaseConfigured()) return;

@@ -235,7 +235,8 @@ export type SuwasiriFeeService =
   | "standard"
   | "medical_certificate"
   | "repeat_prescription"
-  | "review_results";
+  | "review_results"
+  | "telehealth";
 
 export interface FeeScheduleItem {
   id: string;
