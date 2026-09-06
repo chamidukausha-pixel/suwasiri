@@ -25,10 +25,11 @@ export async function publishFeeScheduleToSuwasiri(opts: {
     updatedAt: new Date().toISOString(),
   };
   const db = getFirebaseDb();
-  await setDoc(doc(db, "clinic_fee_schedules", "global"), { ...payload, hospitalId: "global" });
   const hospitalId = (opts.hospitalId || "").trim();
   if (hospitalId && hospitalId !== "global") {
     await setDoc(doc(db, "clinic_fee_schedules", hospitalId), payload);
+  } else {
+    await setDoc(doc(db, "clinic_fee_schedules", "global"), { ...payload, hospitalId: "global" });
   }
   return true;
 }

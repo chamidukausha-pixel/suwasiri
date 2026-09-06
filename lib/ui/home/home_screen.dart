@@ -8,9 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/map_launcher.dart';
 import '../../data/catalogs/doctor_catalog.dart';
 import '../../data/models/appointment.dart';
-import '../../data/models/clinic_fee_item.dart';
 import '../../data/models/vaccine_models.dart';
-import '../../data/repositories/health_repository.dart';
 import '../../localization/app_localizations.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/suwasiri_brand_header.dart';
@@ -31,13 +29,10 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  List<ClinicFeeItem> _fees = const [];
-
   @override
   void initState() {
     super.initState();
     _syncSchedule();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadFees());
   }
 
   @override
@@ -45,23 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.didUpdateWidget(oldWidget);
     if (widget.isActive && !oldWidget.isActive) {
       _syncSchedule();
-      _loadFees();
     }
-  }
-
-  Future<void> _loadFees() async {
-    if (!mounted) return;
-    try {
-      final fees = await context.read<HealthRepository>().getClinicFeeSchedule();
-      if (!mounted) return;
-      setState(() => _fees = fees);
-    } catch (_) {}
-  }
-
-  String? _feeLine(String homeService) {
-    final amount = feeForHomeService(homeService, _fees);
-    if (amount <= 0) return null;
-    return 'LKR ${NumberFormat('#,###').format(amount)}';
   }
 
   void _syncSchedule() {
@@ -196,7 +175,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 12),
           SizedBox(
-            height: 148,
+            height: 128,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: 3,
@@ -208,7 +187,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: Icons.medication_rounded,
                       iconBg: const Color(0xFF22C55E),
                       label: l.t('repeatPrescription'),
-                      feeLabel: _feeLine('repeat_prescription'),
                       onTap: () => _openDoctorsForService(
                         visitReasonKey: 'visitReasonRepeatPrescription',
                         homeService: 'repeat_prescription',
@@ -219,7 +197,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: Icons.description_rounded,
                       iconBg: AppColors.trustBlue,
                       label: l.t('medicalCertificate'),
-                      feeLabel: _feeLine('medical_certificate'),
                       onTap: () => _openDoctorsForService(
                         visitReasonKey: 'visitReasonMedicalCertificate',
                         homeService: 'medical_certificate',
@@ -230,7 +207,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: Icons.analytics_rounded,
                       iconBg: const Color(0xFF8B5CF6),
                       label: l.t('reviewResults'),
-                      feeLabel: _feeLine('review_results'),
                       onTap: () => _openDoctorsForService(
                         visitReasonKey: 'visitReasonReviewResults',
                         homeService: 'review_results',
@@ -336,13 +312,11 @@ class _ServiceNeedCard extends StatelessWidget {
     required this.iconBg,
     required this.label,
     required this.onTap,
-    this.feeLabel,
   });
 
   final IconData icon;
   final Color iconBg;
   final String label;
-  final String? feeLabel;
   final VoidCallback onTap;
 
   @override
@@ -353,7 +327,7 @@ class _ServiceNeedCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(20),
       child: SizedBox(
         width: 132,
-        height: 128,
+        height: 120,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
           child: Column(
@@ -380,17 +354,6 @@ class _ServiceNeedCard extends StatelessWidget {
                   height: 1.2,
                 ),
               ),
-              if (feeLabel != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  feeLabel!,
-                  style: const TextStyle(
-                    color: Color(0xFFE85D4C),
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
             ],
           ),
         ),

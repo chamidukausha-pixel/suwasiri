@@ -599,29 +599,25 @@ class FirebaseHealthRepository implements HealthRepository {
     }
 
     try {
-      final snap = await _db.collection('clinic_fee_schedules').get();
-      final byService = <String, ClinicFeeItem>{};
-      for (final doc in snap.docs) {
-        if (doc.id == 'global') {
-          ingest(parse(doc.data()), byService, preferred: false);
+      final hid = hospitalId.trim();
+      if (hid.isNotEmpty && hid != 'global') {
+        final clinic =
+            await _db.collection('clinic_fee_schedules').doc(hid).get();
+        final clinicItems = parse(clinic.data());
+        if (clinicItems.isNotEmpty) {
+          final byService = <String, ClinicFeeItem>{};
+          ingest(clinicItems, byService, preferred: true);
+          if (byService.isNotEmpty) return byService.values.toList();
+          return clinicItems;
         }
-      }
-      for (final doc in snap.docs) {
-        if (doc.id == 'global') continue;
-        final preferred =
-            hospitalId.trim().isNotEmpty && doc.id == hospitalId.trim();
-        ingest(parse(doc.data()), byService, preferred: preferred);
-      }
-      if (byService.isNotEmpty) return byService.values.toList();
-      if (hospitalId.trim().isNotEmpty) {
-        final doc =
-            await _db.collection('clinic_fee_schedules').doc(hospitalId).get();
-        final items = parse(doc.data());
-        if (items.isNotEmpty) return items;
       }
       final global =
           await _db.collection('clinic_fee_schedules').doc('global').get();
-      return parse(global.data());
+      final globalItems = parse(global.data());
+      if (globalItems.isEmpty) return const [];
+      final byService = <String, ClinicFeeItem>{};
+      ingest(globalItems, byService, preferred: true);
+      return byService.isNotEmpty ? byService.values.toList() : globalItems;
     } catch (_) {
       return const [];
     }

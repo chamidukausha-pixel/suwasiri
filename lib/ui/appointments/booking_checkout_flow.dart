@@ -314,7 +314,7 @@ class _BookingCheckoutSheetState extends State<_BookingCheckoutSheet> {
   Future<void> _loadFees() async {
     try {
       final fees = await context.read<HealthRepository>().getClinicFeeSchedule(
-            hospitalId: widget.doctor.hospitalId,
+            hospitalId: widget.doctor.feeScheduleHospitalId,
           );
       if (!mounted) return;
       setState(() => _fees = fees);

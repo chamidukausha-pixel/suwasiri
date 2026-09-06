@@ -109,6 +109,13 @@ class Doctor extends Equatable {
     return parts.join(', ');
   }
 
+  /// GP Care MBS schedule for this medical centre (clinic-specific).
+  String get feeScheduleHospitalId {
+    final hid = hospitalId.trim();
+    if (hid.isNotEmpty) return hid;
+    return GpCareClinicMap.resolve(hospital).hospitalId;
+  }
+
   @override
   List<Object?> get props => [
         id,
