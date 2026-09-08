@@ -1,6 +1,6 @@
 # Suwasiri
 
-Sri Lankan digital health companion ù **Flutter** (iOS & Android) plus the **Sri Lankan GP Care** web clinic portal, both in this repo, on **Firebase**.
+Sri Lankan digital health companion ¬ù **Flutter** (iOS & Android) plus the **Sri Lankan GP Care** web clinic portal, both in this repo, on **Firebase**.
 
 ## Run
 
@@ -19,9 +19,9 @@ Config files (already in repo):
 
 ### Auth
 
-- Email / password ù Firebase Auth
-- Google ù Firebase + Google Sign-In (add SHA-1 in Console for Android)
-- Phone ù temporary OTP `123456` until Phone Auth is wired
+- Email / password ¬ù Firebase Auth
+- Google ¬ù Firebase + Google Sign-In (add SHA-1 in Console for Android)
+- Phone ¬ù temporary OTP `123456` until Phone Auth is wired
 
 Enable **Email/Password** and **Google** under Authentication in the [Firebase Console](https://console.firebase.google.com/project/suwasiri-91824/authentication/providers).
 
@@ -49,7 +49,7 @@ See [docs/WEB.md](docs/WEB.md).
 
 | Doc | Use |
 |-----|-----|
-| [docs/STATUS.md](docs/STATUS.md) | What's done / in progress ù **update as you work** |
+| [docs/STATUS.md](docs/STATUS.md) | What's done / in progress ¬ù **update as you work** |
 | [docs/FIREBASE.md](docs/FIREBASE.md) | Project IDs, collections, CLI |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Code map & how to extend |
 | [docs/WEB.md](docs/WEB.md) | GP Care web app and mobile/web sync |

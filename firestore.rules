@@ -90,6 +90,17 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    // Patient rates a doctor after a clinic or video consult (one doc per appointment).
+    match /doctor_ratings/{ratingId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && isHouseholdPatient(request.resource.data.patientId)
+        && request.resource.data.stars is int
+        && request.resource.data.stars >= 1
+        && request.resource.data.stars <= 5;
+      allow update, delete: if false;
+    }
+
     match /prescriptions/{rxId} {
       // Patients read their household scripts. GP Care staff issue e-Rx from
       // the clinic / telehealth room onto the same collection.

@@ -132,10 +132,12 @@ import {
 } from "./sync/suwasiriPatientChart";
 import {
   appointmentAgeGender,
+  buildPaymentLedger,
   invoiceAppointmentId,
   invoicePaymentLabel,
   isInvoiceSettled,
   isPdfReceipt,
+  isReceiptAwaitingApproval,
 } from "./sync/suwasiriBilling";
 import { subscribeSuwasiriVaccinePatients } from "./sync/suwasiriVaccinations";
 import {
@@ -1112,69 +1114,10 @@ export default function App() {
     acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
-  const dayBookedAppointments = tenantAppointments.filter((a) => appointmentDateKey(a) === selectedBillingDate);
-  const dayBilling = billing.filter((inv) =>
-    dayBookedAppointments.some(
-      (a) => (inv.patientId && a.patientId === inv.patientId) || a.patientName === inv.patientName
-    ) || inv.date === selectedBillingDate
-  );
-  const dayInvoiceRows = (() => {
-    const used = new Set<string>();
-    const rows: Array<Billing & { appointmentTime?: string }> = [];
-    for (const apt of dayBookedAppointments) {
-      const match = billing.find(
-        (inv) =>
-          (inv.appointmentId && inv.appointmentId === apt.id) ||
-          (inv.patientId && inv.patientId === apt.patientId) ||
-          inv.patientName === apt.patientName
-      );
-      const p = patients.find((x) => x.id === apt.patientId);
-      const name = apt.patientName || p?.name || "Patient";
-      const cashSettled = /^cash$/i.test(String(match?.paymentMethod || apt.paymentMethod || ""));
-      const paidViaApp = Boolean((match?.paidBySuwasiri || apt.paidBySuwasiri) && !cashSettled);
-      const settled = isInvoiceSettled(match || {}) || isInvoiceSettled(apt) || paidViaApp;
-      if (match) {
-        used.add(match.id);
-        rows.push({
-          ...match,
-          patientName: match.patientName || name,
-          appointmentTime: apt.time,
-          appointmentId: match.appointmentId || apt.id,
-          suwasiriReceiptUrl: match.suwasiriReceiptUrl || apt.suwasiriReceiptUrl,
-          paidBySuwasiri: paidViaApp,
-          paymentMethod: cashSettled
-            ? "Cash"
-            : (match.paymentMethod || (apt.paymentMethod as Billing["paymentMethod"])),
-          status: settled ? (isInvoiceSettled(match) ? match.status : "PAID") : match.status,
-        });
-      } else {
-        rows.push({
-          id: `booked-${apt.id}`,
-          patientName: name,
-          patientId: apt.patientId,
-          amount: apt.feeAmount || 3500,
-          service: apt.reason || (apt.isTelehealth ? "GP Video Consult" : "GP Consultation"),
-          status: settled ? "PAID" : "PENDING",
-          date: apt.date,
-          appointmentTime: apt.time,
-          appointmentId: apt.id,
-          paymentMethod: apt.paymentMethod as Billing["paymentMethod"],
-          paidBySuwasiri: paidViaApp,
-          suwasiriReceiptUrl: apt.suwasiriReceiptUrl,
-        });
-      }
-    }
-    for (const inv of dayBilling) {
-      if (!used.has(inv.id)) rows.push(inv);
-    }
-    return rows.sort((a, b) => {
-      const au = isInvoiceSettled(a) ? 1 : 0;
-      const bu = isInvoiceSettled(b) ? 1 : 0;
-      if (au !== bu) return au - bu;
-      return String(a.appointmentTime || a.date || "").localeCompare(String(b.appointmentTime || b.date || ""));
-    });
-  })();
+  const paymentLedger = buildPaymentLedger(tenantAppointments, billing, patients);
+  const dayInvoiceRows = paymentLedger.filter((r) => r.date === selectedBillingDate);
   const dayUnsettledCount = dayInvoiceRows.filter((r) => !isInvoiceSettled(r)).length;
+  const dayAwaitingApprovalCount = dayInvoiceRows.filter((r) => isReceiptAwaitingApproval(r)).length;
   const jumpToBillingToday = () => {
     const n = new Date();
     setBillingCalendarMonth({ year: n.getFullYear(), month: n.getMonth() });
@@ -2669,6 +2612,7 @@ export default function App() {
             date: invoice.date,
             paymentMethod: "Cash",
             paidBySuwasiri: false,
+            paymentStatus: "SETTLED",
             appointmentId,
           }),
         });
@@ -2679,7 +2623,7 @@ export default function App() {
         const res = await fetch(`/api/billing/${invoice.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "PAID", paidBySuwasiri: false, paymentMethod: "Cash" }),
+          body: JSON.stringify({ status: "PAID", paidBySuwasiri: false, paymentMethod: "Cash", paymentStatus: "SETTLED" }),
         });
         if (!res.ok) throw new Error("Could not settle invoice");
         const data = await res.json();
@@ -2721,12 +2665,14 @@ export default function App() {
               patientId: invoice.patientId,
               amount: invoice.amount,
               service: invoice.service,
-              status: "PAID",
+              status: "PENDING",
               date: invoice.date,
               paymentMethod: "Suwasiri Manual",
               paidBySuwasiri: true,
               suwasiriReceiptUrl: base64data,
               appointmentId,
+              paymentStatus: "PENDING",
+              receiptApproved: false,
             }),
           });
           if (!created.ok) throw new Error("Could not save receipt");
@@ -2748,16 +2694,18 @@ export default function App() {
         }
         if (appointmentId) {
           await updateSuwasiriAppointmentPayment(appointmentId, {
-            paymentStatus: "PAID",
+            paymentStatus: "PENDING",
             paymentMethod: "Suwasiri Manual",
             paidBySuwasiri: true,
             suwasiriReceiptUrl: base64data,
+            receiptApproved: false,
           });
           const patch = {
-            paymentStatus: "PAID",
+            paymentStatus: "PENDING",
             paymentMethod: "Suwasiri Manual",
             paidBySuwasiri: true,
             suwasiriReceiptUrl: base64data,
+            receiptApproved: false,
           };
           setSuwasiriAppointments((prev) =>
             prev.map((a) => (a.id === appointmentId ? { ...a, ...patch } : a))
@@ -2770,6 +2718,73 @@ export default function App() {
       reader.readAsDataURL(file);
     } catch (err: any) {
       alert("Error uploading receipt: " + err.message);
+    }
+  };
+
+  const handleApproveBankSlip = async (invoice: Billing) => {
+    const appointmentId = invoiceAppointmentId(invoice);
+    try {
+      if (String(invoice.id).startsWith("booked-")) {
+        const res = await fetch("/api/billing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            patientName: invoice.patientName,
+            patientId: invoice.patientId,
+            amount: invoice.amount,
+            service: invoice.service,
+            status: "PAID",
+            date: invoice.date,
+            paymentMethod: "Suwasiri Manual",
+            paidBySuwasiri: true,
+            suwasiriReceiptUrl: invoice.suwasiriReceiptUrl,
+            appointmentId,
+            paymentStatus: "PAID",
+            receiptApproved: true,
+          }),
+        });
+        if (!res.ok) throw new Error("Could not approve bank slip");
+        const data = await res.json();
+        setBilling(data.state.billing);
+      } else {
+        const res = await fetch(`/api/billing/${invoice.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: "PAID",
+            paidBySuwasiri: true,
+            paymentMethod: invoice.paymentMethod || "Suwasiri Manual",
+            paymentStatus: "PAID",
+            receiptApproved: true,
+          }),
+        });
+        if (!res.ok) throw new Error("Could not approve bank slip");
+        const data = await res.json();
+        setBilling(data.state.billing);
+      }
+      if (appointmentId) {
+        await updateSuwasiriAppointmentPayment(appointmentId, {
+          paymentStatus: "PAID",
+          paymentMethod: invoice.paymentMethod || "Suwasiri Manual",
+          paidBySuwasiri: true,
+          receiptApproved: true,
+        });
+        const patch = {
+          paymentStatus: "PAID",
+          paymentMethod: invoice.paymentMethod || "Suwasiri Manual",
+          paidBySuwasiri: true,
+          receiptApproved: true,
+        };
+        setSuwasiriAppointments((prev) =>
+          prev.map((a) => (a.id === appointmentId ? { ...a, ...patch } : a))
+        );
+        setAppointments((prev) =>
+          prev.map((a) => (a.id === appointmentId ? { ...a, ...patch } : a))
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Could not approve the bank slip. Try again.");
     }
   };
 
@@ -3648,11 +3663,11 @@ export default function App() {
             onClick={() => requestTab("dashboard")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
               activeTab === "dashboard"
-                ? "text-[#00334f] bg-[#e7eeff] font-bold shadow-xs"
-                : "text-[#72787f] hover:text-[#00334f] hover:bg-[#f0f3ff]"
+                ? "text-teal-900 bg-[#e8f3f0] font-bold shadow-xs"
+                : "text-[#72787f] hover:text-teal-900 hover:bg-[#eef6f4]"
             }`}
           >
-            <Activity className="w-4 h-4 mr-3 text-[#00334f]" />
+            <Activity className="w-4 h-4 mr-3 text-teal-800" />
             <span className="text-[13px] font-medium">Doctor Dashboard</span>
           </button>
           )}
@@ -3676,11 +3691,11 @@ export default function App() {
             onClick={() => requestTab("pathology")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
               activeTab === "pathology"
-                ? "text-[#00334f] bg-[#e7eeff] font-bold shadow-xs"
-                : "text-[#72787f] hover:text-[#00334f] hover:bg-[#f0f3ff]"
+                ? "text-teal-900 bg-[#e8f3f0] font-bold shadow-xs"
+                : "text-[#72787f] hover:text-teal-900 hover:bg-[#eef6f4]"
             }`}
           >
-            <FlaskConical className="w-4 h-4 mr-3 text-emerald-600" />
+            <FlaskConical className="w-4 h-4 mr-3 text-teal-700" />
             <span className="text-[13px] font-medium">Pathology & Diagnostics</span>
           </button>
           )}
@@ -3710,14 +3725,14 @@ export default function App() {
             onClick={() => requestTab("recalls")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
               activeTab === "recalls"
-                ? "text-[#00334f] bg-[#e7eeff] font-bold shadow-xs"
-                : "text-[#72787f] hover:text-[#00334f] hover:bg-[#f0f3ff]"
+                ? "text-teal-900 bg-[#e8f3f0] font-bold shadow-xs"
+                : "text-[#72787f] hover:text-teal-900 hover:bg-[#eef6f4]"
             }`}
           >
-            <Bell className="w-4 h-4 mr-3 text-red-500" />
+            <Bell className="w-4 h-4 mr-3 text-sky-800" />
             <span className="text-[13px] font-medium">Recalls & Reminders</span>
             {activeRecallCount > 0 && (
-              <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-rose-600 text-white text-[9px] font-black flex items-center justify-center">
+              <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-teal-700 text-white text-[9px] font-black flex items-center justify-center">
                 {activeRecallCount}
               </span>
             )}
@@ -4148,7 +4163,7 @@ export default function App() {
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div
                         onClick={() => document.getElementById("doctor-dashboard-queue")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                        className="bg-gradient-to-br from-sky-500 via-blue-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 p-4 rounded-xl cursor-pointer transition shadow-md hover:shadow-lg group text-white"
+                        className="bg-gradient-to-br from-sky-800 via-blue-800 to-teal-800 hover:from-sky-700 hover:to-teal-700 p-4 rounded-xl cursor-pointer transition shadow-md hover:shadow-lg group text-white"
                         title="Jump to today’s appointment list on this dashboard"
                       >
                         <div className="flex items-center justify-between mb-1">
@@ -4156,14 +4171,14 @@ export default function App() {
                           <CalendarIcon className="w-5 h-5 text-white/90 group-hover:scale-110 transition-transform" />
                         </div>
                         <div className="text-3xl font-black">{dayAppointments.length}</div>
-                        <p className="text-[11px] text-sky-100 mt-1 font-semibold">
+                        <p className="text-[11px] text-sky-100/90 mt-1 font-semibold">
                           {dayAppointments.filter((a) => a.status === "SCHEDULED").length} scheduled • {dayAppointments.filter((a) => a.status === "CHECKED IN" || a.status === "IN EXAM ROOM").length} in clinic
                         </p>
                       </div>
 
                       <div
                         onClick={() => document.getElementById("doctor-dashboard-queue")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                        className="bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 hover:from-amber-300 hover:to-rose-400 p-4 rounded-xl cursor-pointer transition shadow-md hover:shadow-lg group text-white"
+                        className="bg-gradient-to-br from-teal-800 via-emerald-800 to-cyan-900 hover:from-teal-700 hover:to-cyan-800 p-4 rounded-xl cursor-pointer transition shadow-md hover:shadow-lg group text-white"
                         title="Jump to today’s waiting list on this dashboard"
                       >
                         <div className="flex items-center justify-between mb-1">
@@ -4171,12 +4186,12 @@ export default function App() {
                           <Clock className="w-5 h-5 text-white/90 group-hover:scale-110 transition-transform" />
                         </div>
                         <div className="text-3xl font-black">{lobbyCheckedInCount}</div>
-                        <p className="text-[11px] text-amber-50 mt-1 font-semibold">In clinic queue</p>
+                        <p className="text-[11px] text-teal-100/90 mt-1 font-semibold">In clinic queue</p>
                       </div>
 
                       <div
                         onClick={() => document.getElementById("doctor-dashboard-queue")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                        className="bg-gradient-to-br from-violet-500 via-purple-600 to-fuchsia-600 hover:from-violet-400 hover:to-fuchsia-500 p-4 rounded-xl cursor-pointer transition shadow-md hover:shadow-lg group text-white"
+                        className="bg-gradient-to-br from-blue-900 via-sky-800 to-teal-800 hover:from-blue-800 hover:to-teal-700 p-4 rounded-xl cursor-pointer transition shadow-md hover:shadow-lg group text-white"
                         title="Jump to today’s video consults on this dashboard"
                       >
                         <div className="flex items-center justify-between mb-1">
@@ -4184,7 +4199,7 @@ export default function App() {
                           <Video className="w-5 h-5 text-white/90 group-hover:scale-110 transition-transform" />
                         </div>
                         <div className="text-3xl font-black">{dayAppointments.filter((a) => a.isTelehealth || a.type === "Telehealth Video").length}</div>
-                        <p className="text-[11px] text-purple-100 mt-1 font-semibold">Remote consults</p>
+                        <p className="text-[11px] text-sky-100/90 mt-1 font-semibold">Remote consults</p>
                       </div>
                     </div>
                   </div>
@@ -4192,18 +4207,18 @@ export default function App() {
                   <div
                     id="doctor-dashboard-completed"
                     onClick={() => document.getElementById("doctor-dashboard-queue")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                    className="bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 p-5 rounded-xl flex items-center justify-between shadow-md text-white cursor-pointer scroll-mt-4"
+                    className="bg-gradient-to-br from-emerald-800 via-teal-800 to-sky-900 p-5 rounded-xl flex items-center justify-between shadow-md text-white cursor-pointer scroll-mt-4"
                   >
                     <div className="flex items-center gap-3.5">
                       <div className="w-12 h-12 bg-white/20 text-white rounded-xl flex items-center justify-center">
                         <Stethoscope className="w-6 h-6" />
                       </div>
                       <div>
-                        <p className="text-emerald-50 font-extrabold text-[11px] uppercase tracking-wider">Completed Consultations</p>
+                        <p className="text-teal-100/90 font-extrabold text-[11px] uppercase tracking-wider">Completed Consultations</p>
                         <p className="font-black text-2xl">{dayAppointments.filter(a => a.status === "COMPLETED").length} finished this date</p>
                       </div>
                     </div>
-                    <span className="text-[11px] font-extrabold text-emerald-900 bg-white/90 px-3 py-1.5 rounded-lg shadow-xs">
+                    <span className="text-[11px] font-extrabold text-teal-900 bg-white/90 px-3 py-1.5 rounded-lg shadow-xs">
                       On Schedule
                     </span>
                   </div>
@@ -4215,7 +4230,7 @@ export default function App() {
                       
                       {/* Today's Appointment Schedule & Live Lobby Queue - EXPANDED LARGE */}
                       <section id="doctor-dashboard-queue" className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm scroll-mt-4">
-                        <div className="px-5 py-4 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-2 bg-[#f0f3ff]">
+                        <div className="px-5 py-4 border-b flex flex-col sm:flex-row justify-between sm:items-center gap-2 bg-[#e8f3f0]">
                           <div className="flex items-center gap-2">
                             <Clock className="w-5 h-5 text-[#00334f]" />
                             <div>
@@ -4256,7 +4271,7 @@ export default function App() {
                               ) : dayAppointments.map((apt, index) => {
                                 const p = patients.find(pat => pat.id === apt.patientId);
                                 return (
-                                  <tr key={apt.id} className="hover:bg-sky-50/50 transition-colors group">
+                                  <tr key={apt.id} className="hover:bg-teal-50/60 transition-colors group">
                                     <td className="p-3.5 text-center">
                                       <span className="font-mono font-black text-xs text-slate-600">#{index + 1}</span>
                                     </td>
@@ -4287,7 +4302,7 @@ export default function App() {
                                           </span>
                                         )}
                                         {(apt.isTelehealth || apt.type === "Telehealth Video") && (
-                                          <span className="text-[9px] font-bold uppercase tracking-wide text-purple-800 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
+                                          <span className="text-[9px] font-bold uppercase tracking-wide text-sky-900 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded">
                                             Video
                                           </span>
                                         )}
@@ -4314,9 +4329,9 @@ export default function App() {
                                     <td className="p-3.5">
                                       <span className={`px-2.5 py-1 rounded text-[10px] font-bold border inline-block ${
                                         apt.status === "IN EXAM ROOM"
-                                          ? "bg-red-50 text-red-700 border-red-300 animate-pulse"
+                                          ? "bg-sky-50 text-sky-800 border-sky-300"
                                           : apt.status === "CHECKED IN"
-                                          ? "bg-amber-50 text-amber-800 border-amber-300 font-black"
+                                          ? "bg-teal-50 text-teal-800 border-teal-300 font-black"
                                           : apt.status === "COMPLETED"
                                           ? "bg-emerald-50 text-emerald-800 border-emerald-300"
                                           : "bg-slate-100 text-slate-600 border-slate-300"
@@ -4337,7 +4352,7 @@ export default function App() {
                                             handleUpdateAptStatus(apt.id, "IN EXAM ROOM");
                                             handleStartConsultation(person, apt);
                                           }}
-                                          className="text-amber-900 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors shadow-xs text-xs font-bold inline-flex items-center gap-1"
+                                          className="text-teal-900 bg-teal-100 hover:bg-teal-200 px-3 py-1.5 rounded-lg transition-colors shadow-xs text-xs font-bold inline-flex items-center gap-1"
                                         >
                                           <Stethoscope className="w-3.5 h-3.5" />
                                           {isVideoBooking(apt) ? "Open Telehealth →" : "Call To GP Exam →"}
@@ -4348,7 +4363,7 @@ export default function App() {
                                         <>
                                         <button
                                           onClick={() => openBookedPatient(apt, p)}
-                                          className="text-red-700 bg-red-100 hover:bg-red-200 px-3 py-1.5 rounded-lg transition-colors text-xs font-bold inline-flex items-center gap-1"
+                                          className="text-sky-900 bg-sky-100 hover:bg-sky-200 px-3 py-1.5 rounded-lg transition-colors text-xs font-bold inline-flex items-center gap-1"
                                         >
                                           <Stethoscope className="w-3.5 h-3.5" />
                                           {isVideoBooking(apt) ? "Resume Telehealth →" : "Resume Consult →"}
@@ -6129,7 +6144,7 @@ export default function App() {
                     onJumpToToday={jumpToBillingToday}
                   />
                   <p className="text-[11px] text-slate-500 mt-2 px-1">
-                    Click a date to show invoices for patients booked that day. <strong>Cash Settle</strong> marks payment as Settled. App card/debit or a bank slip shows <strong>Paid by Suwasiri App</strong>. Click a PDF or photo slip to view it.
+                    Click a date to show invoices for patients booked that day. <strong>Cash Settle</strong> marks counter payment as Settled. Suwasiri debit/card is collected immediately. A bank slip stays pending until you click <strong>Approved</strong>. All of these update Reports & Analytics.
                   </p>
                 </div>
               <div className="xl:col-span-8 bg-white p-6 border rounded space-y-4 min-h-0">
@@ -6152,6 +6167,11 @@ export default function App() {
                       <span className="text-[11px] font-bold px-2.5 py-1 rounded-full border bg-emerald-50 text-emerald-800 border-emerald-200">
                         {dayInvoiceRows.length - dayUnsettledCount} paid
                       </span>
+                      {dayAwaitingApprovalCount > 0 && (
+                        <span className="text-[11px] font-bold px-2.5 py-1 rounded-full border bg-sky-50 text-sky-900 border-sky-200">
+                          {dayAwaitingApprovalCount} slip{dayAwaitingApprovalCount === 1 ? "" : "s"} to approve
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -6180,6 +6200,7 @@ export default function App() {
                       )}
                       {dayInvoiceRows.map(invoice => {
                         const notSettled = !isInvoiceSettled(invoice);
+                        const awaitingApproval = isReceiptAwaitingApproval(invoice);
                         const overdue = invoice.status === "OVERDUE" && notSettled;
                         const payLabel = overdue ? "Overdue — not settled" : invoicePaymentLabel(invoice);
                         const bookedPatient = patients.find((x) => x.id === invoice.patientId);
@@ -6292,13 +6313,23 @@ export default function App() {
                             </span>
                             {notSettled && (
                               <span className={`text-[9px] font-extrabold uppercase tracking-wide ${overdue ? "text-rose-800" : "text-amber-800"}`}>
-                                Payment outstanding
+                                {awaitingApproval ? "Awaiting approval" : "Payment outstanding"}
                               </span>
                             )}
                             </div>
                           </td>
                           <td className="p-3">
-                            <div className="flex items-center justify-end gap-1.5">
+                            <div className="flex flex-col items-end gap-1.5">
+                              {awaitingApproval && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleApproveBankSlip(invoice)}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 text-[9px] font-bold rounded transition-colors cursor-pointer flex items-center gap-1"
+                                >
+                                  <CheckCircle className="w-3 h-3" />
+                                  Approved
+                                </button>
+                              )}
                               {notSettled ? (
                                 <button
                                   type="button"
@@ -6329,9 +6360,10 @@ export default function App() {
             {activeTab === "reports" && (
               <div className="space-y-6">
                 <ReportsAnalyticsView
-                  patients={patients}
-                  appointments={appointments}
+                  patients={hospitalPatients}
+                  appointments={tenantAppointments}
                   billingList={billing}
+                  invoiceRows={paymentLedger}
                   recalls={recalls}
                 />
               </div>
@@ -7434,7 +7466,7 @@ export default function App() {
             }
             setShowShiftChecklist(true);
           }}
-          className="fixed z-40 w-[5.75rem] h-[5.75rem] rounded-full bg-cyan-400 hover:bg-cyan-300 text-cyan-950 shadow-lg flex flex-col items-center justify-center gap-0.5 print:hidden cursor-grab active:cursor-grabbing touch-none select-none"
+          className="fixed z-40 w-[5.75rem] h-[5.75rem] rounded-full bg-teal-800 hover:bg-teal-700 text-teal-50 shadow-lg flex flex-col items-center justify-center gap-0.5 print:hidden cursor-grab active:cursor-grabbing touch-none select-none"
           style={{ left: pos.x, top: pos.y }}
           title="Clinical Shift Checklist — drag to move"
         >
@@ -7448,8 +7480,8 @@ export default function App() {
 
       {showShiftChecklist && (
         <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-end sm:items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-cyan-200 overflow-hidden">
-            <div className="bg-cyan-400 px-4 py-3 flex items-center justify-between text-cyan-950">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-teal-200 overflow-hidden">
+            <div className="bg-teal-800 px-4 py-3 flex items-center justify-between text-teal-50">
               <div className="flex items-center gap-2">
                 <ClipboardList className="w-5 h-5" />
                 <h3 className="font-black text-sm">Clinical Shift Checklist</h3>
@@ -7457,7 +7489,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setShowShiftChecklist(false)}
-                className="p-1 rounded-lg hover:bg-cyan-300"
+                className="p-1 rounded-lg hover:bg-teal-700"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -7470,15 +7502,15 @@ export default function App() {
                 <input
                   type="text"
                   placeholder="e.g. Sterilize diagnostic equipment..."
-                  className="flex-grow p-2 border rounded-lg focus:border-cyan-600 text-xs outline-none"
+                  className="flex-grow p-2 border rounded-lg focus:border-teal-700 text-xs outline-none"
                   value={newTaskText}
                   onChange={(e) => setNewTaskText(e.target.value)}
                 />
-                <button type="submit" className="bg-cyan-700 text-white px-3 py-2 rounded-lg font-bold text-xs">Add</button>
+                <button type="submit" className="bg-teal-800 text-white px-3 py-2 rounded-lg font-bold text-xs">Add</button>
               </form>
               <div className="space-y-1.5 text-xs max-h-72 overflow-y-auto">
                 {tasks.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-cyan-50 border border-transparent hover:border-cyan-100">
+                  <div key={t.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-teal-50 border border-transparent hover:border-teal-100">
                     <label className="flex items-center gap-2 cursor-pointer font-semibold flex-1">
                       <input
                         type="checkbox"

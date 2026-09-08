@@ -42,6 +42,13 @@ Keep `web/` as the exact React/Vite/Express clinic portal. Do not change Flutter
 3. Shared appointments (live): Suwasiri App bookings show as **booked times** under that doctor on GP Care **Book Active Appointment**, including when the app catalog id and the Platform Console slug differ (Chamidu Rathnayake / Chamidu Kaushal Rathnayake). Receptionist Book scheduler writes clinic/video slots to the same `appointments` collection (Home blue/purple). Receipts **Cash Settle** / app pay / bank-slip PDFs and **age/gender under the name** sync on those appointments. Remaining GP EMR charts still use the web JSON store.
 4. Role-aware access: Platform Super Admin can open every web module; Hospital Super Admin same within a tenant; committed RBAC hides staff nav. Mobile stays patient-only.
 
+## Parallel web (LankaLab)
+
+Keep `lankalab/` as the exact React/Vite/Express lab portal. Do not change Flutter or GP Care (`web/`) unless asked. Do not edit `Downloads/lankalab-portal`.
+
+1. Copy is in-repo; Gemini AI analyze / consult / parse-report still use `server.ts` + mock orders
+2. Later (when asked): Unique Health ID barcode lookup, `vault` lab-report push, Sample Dispatch job sharing — [LANKALAB.md](LANKALAB.md)
+
 ## Do not regress
 
 - Do not set `AppConstants.useDemoBackend = true` for shipping builds

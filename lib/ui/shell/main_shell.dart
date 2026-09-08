@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../widgets/common_widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -8,11 +10,13 @@ import '../../bloc/schedule/schedule_cubit.dart';
 import '../../bloc/vaccine/vaccine_cubit.dart';
 import '../../bloc/vault/vault_cubit.dart';
 import '../../core/theme/app_colors.dart';
+import '../../data/models/appointment.dart';
 import '../../localization/app_localizations.dart';
 import '../appointments/appointments_screen.dart';
 import '../help/help_desk_sheet.dart';
 import '../home/home_screen.dart';
 import '../profile/profile_screen.dart';
+import '../ratings/doctor_rating_sheet.dart';
 import '../telehealth/telehealth_screen.dart';
 import '../vaccine/vaccine_screen.dart';
 import '../vault/vault_tab.dart';
@@ -87,6 +91,19 @@ class _MainShellState extends State<MainShell> {
 
   void _goTo(int index) => setState(() => _index = index);
 
+  Future<void> _offerDoctorRating(ScheduleState state) async {
+    final completed = state.appointments
+        .where((a) => a.status == AppointmentStatus.completed)
+        .toList()
+      ..sort((a, b) => b.timeSlot.compareTo(a.timeSlot));
+    if (completed.isEmpty || !mounted) return;
+    await offerConsultationRating(
+      context,
+      completed.first,
+      requireCompletedStatus: true,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -102,6 +119,9 @@ class _MainShellState extends State<MainShell> {
     return BlocListener<AuthCubit, AuthState>(
       listenWhen: (prev, curr) => prev.activeFamilyKey != curr.activeFamilyKey,
       listener: (context, state) => _reloadForMember(state),
+      child: BlocListener<ScheduleCubit, ScheduleState>(
+      listenWhen: (prev, next) => prev.appointments != next.appointments,
+      listener: (context, state) => unawaited(_offerDoctorRating(state)),
       child: MainTabScope(
       goTo: _goTo,
       child: Scaffold(
@@ -180,6 +200,7 @@ class _MainShellState extends State<MainShell> {
         ),
       ),
       ), // MainTabScope
-    ); // BlocListener
+      ), // ScheduleCubit listener
+    ); // AuthCubit listener
   }
 }

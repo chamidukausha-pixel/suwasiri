@@ -161,7 +161,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-lg bg-emerald-700 text-white flex items-center justify-center shadow-xs">
+              <div className="w-10 h-10 rounded-lg bg-teal-800 text-white flex items-center justify-center shadow-xs">
                 <FlaskConical className="w-5 h-5" />
               </div>
               <div>
@@ -169,7 +169,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                   <h1 className="text-xl font-serif font-bold text-[#00334f]">
                     Pathology Patients & Diagnostic Laboratory Results
                   </h1>
-                  <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-200">
+                  <span className="bg-teal-100 text-teal-900 text-[10px] font-bold px-2 py-0.5 rounded-full border border-teal-200">
                     Unread reports ({unreadPathologyPatientCount} patients)
                   </span>
                 </div>
@@ -186,7 +186,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                 setOrderPatientId("");
                 setShowOrderModal(true);
               }}
-              className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+              className="bg-teal-800 hover:bg-teal-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
             >
               <Plus className="w-4 h-4" />
               Order Pathology Investigation
@@ -196,10 +196,10 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
 
         {/* Unread Pathology colourful dashboard */}
         <div className="mt-5 pt-4 border-t border-slate-100">
-          <div className="bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500 p-5 rounded-xl shadow-md text-white">
-            <span className="text-[11px] uppercase font-extrabold tracking-wider text-amber-50">Unread Pathology</span>
+          <div className="bg-gradient-to-br from-teal-800 via-emerald-800 to-sky-900 p-5 rounded-xl shadow-md text-white">
+            <span className="text-[11px] uppercase font-extrabold tracking-wider text-teal-50">Unread Pathology</span>
             <div className="text-4xl font-black mt-1">{unreadPathologyPatientCount}</div>
-            <p className="text-[12px] text-amber-50 mt-1 font-semibold">
+            <p className="text-[12px] text-teal-100/90 mt-1 font-semibold">
               Patients with unread reports. Review (or mark Critical / Alert) to lower this count.
             </p>
           </div>
@@ -213,7 +213,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
               placeholder="Search unread pathology by name, ID, or test..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:border-[#00334f] bg-slate-50 focus:bg-white"
+              className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-lg outline-none focus:border-teal-700 bg-slate-50 focus:bg-white"
             />
           </div>
         </div>
@@ -246,12 +246,12 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
             return (
               <div
                 key={patient.id}
-                className="bg-white border rounded-xl shadow-xs overflow-hidden transition-all hover:border-[#00334f]"
+                className="bg-white border rounded-xl shadow-xs overflow-hidden transition-all hover:border-teal-700"
               >
                 {/* Patient Header Row */}
-                <div className="p-5 bg-[#fbfdff] border-b flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="p-5 bg-[#e8f3f0] border-b flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-start sm:items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-900 font-serif font-bold text-sm flex items-center justify-center shrink-0 border border-emerald-200 shadow-xs">
+                    <div className="w-12 h-12 rounded-full bg-teal-100 text-teal-900 font-serif font-bold text-sm flex items-center justify-center shrink-0 border border-teal-200 shadow-xs">
                       {patient.name
                         .split(" ")
                         .map((n) => n[0])
@@ -266,7 +266,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                         <span className="text-xs text-slate-400 font-mono">[{patient.id}]</span>
 
                         {patient.medicareNumber && (
-                          <span className="bg-sky-50 text-sky-800 text-[10px] font-bold px-2 py-0.5 rounded border border-sky-200">
+                          <span className="bg-sky-50 text-sky-900 text-[10px] font-bold px-2 py-0.5 rounded border border-sky-200">
                             Medicare: {patient.medicareNumber}
                           </span>
                         )}
@@ -288,11 +288,11 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                       </p>
                       {visibleLabs.length > 0 && (
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <span className="text-[10px] font-bold uppercase text-amber-800">Unreviewed tests:</span>
+                          <span className="text-[10px] font-bold uppercase text-teal-800">Unreviewed tests:</span>
                           {visibleLabs.map((lr) => (
                             <span
                               key={lr.id || lr.testName}
-                              className="text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-full"
+                              className="text-[10px] font-bold bg-teal-50 text-teal-900 border border-teal-200 px-2 py-0.5 rounded-full"
                             >
                               {lr.testName}
                             </span>
@@ -307,7 +307,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                     <button
                       type="button"
                       onClick={() => onStartConsultation(patient)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+                      className="bg-teal-800 hover:bg-teal-700 text-white px-3.5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
                       title="Open GP Exam Room — completed reports live under Pathology history"
                     >
                       <Stethoscope className="w-3.5 h-3.5" />
@@ -320,7 +320,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                 <div className="p-5 space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                      <FlaskConical className="w-4 h-4 text-emerald-600" />
+                      <FlaskConical className="w-4 h-4 text-teal-700" />
                       Recorded unread results ({visibleLabs.length})
                     </h3>
                     <span className="text-[11px] text-slate-400">
@@ -359,7 +359,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                                 >
                                   <td className="p-2.5 font-bold text-[#00334f] flex items-center gap-1.5">
                                     <FlaskConical
-                                      className={`w-3.5 h-3.5 ${isAbnormal ? "text-rose-600" : "text-emerald-600"}`}
+                                      className={`w-3.5 h-3.5 ${isAbnormal ? "text-rose-600" : "text-teal-700"}`}
                                     />
                                     <span>{test.testName}</span>
                                   </td>
@@ -385,7 +385,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                                           ? "bg-rose-50 text-rose-700 border-rose-300 font-black"
                                           : test.status === "COMPLETED"
                                           ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                          : "bg-amber-50 text-amber-800 border-amber-200"
+                                          : "bg-sky-50 text-sky-800 border-sky-200"
                                       }`}
                                     >
                                       {test.status}
@@ -411,7 +411,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                                               setDoctorComments((prev) => ({ ...prev, [reportKey]: val }));
                                               setEditingCommentId(null);
                                             }}
-                                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1 cursor-pointer"
+                                            className="bg-teal-800 hover:bg-teal-700 text-white text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1 cursor-pointer"
                                           >
                                             <Send className="w-3 h-3" /> Save comment
                                           </button>
@@ -446,7 +446,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                                       <button
                                         type="button"
                                         onClick={() => setViewingReport({ patient, test })}
-                                        className="bg-sky-600 hover:bg-sky-700 text-white px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                        className="bg-sky-800 hover:bg-sky-700 text-white px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
                                         title="View this pathology report"
                                       >
                                         <Eye className="w-3 h-3" />
@@ -455,7 +455,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                                       <button
                                         type="button"
                                         onClick={() => markReportCompleted(patient, test)}
-                                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                        className="bg-teal-800 hover:bg-teal-700 text-white px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
                                         title="Completed: leave unread list and file under Pathology history"
                                       >
                                         <CheckCircle2 className="w-3 h-3" />
@@ -473,7 +473,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                                       <button
                                         type="button"
                                         onClick={() => handleDownloadTestPdf(patient, test)}
-                                        className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
+                                        className="bg-sky-800 hover:bg-sky-700 text-white px-2.5 py-1 rounded text-[10px] font-bold transition flex items-center gap-1 shadow-xs cursor-pointer"
                                         title="Download this individual test report as PDF"
                                       >
                                         <Download className="w-3 h-3" />
@@ -503,7 +503,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                       {patient.sampleCollections.map((sc, sIdx) => (
                         <span
                           key={sc.id || sIdx}
-                          className="bg-purple-50 text-purple-900 border border-purple-200 px-2 py-1 rounded text-[11px] flex items-center gap-1"
+                          className="bg-teal-50 text-teal-900 border border-teal-200 px-2 py-1 rounded text-[11px] flex items-center gap-1"
                         >
                           🧪 {sc.sampleCategory} • Status: <strong>{sc.status}</strong> (LankaLab Key:{" "}
                           {sc.lankaLabLedgerKey || "LL-7721"})
@@ -524,7 +524,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
             </p>
             <button
               onClick={() => setSearchQuery("")}
-              className="bg-[#00334f] text-white px-4 py-2 rounded-lg text-xs font-bold"
+              className="bg-teal-800 text-white px-4 py-2 rounded-lg text-xs font-bold"
             >
               Clear search
             </button>
@@ -537,7 +537,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
           <div className="bg-white rounded-xl max-w-2xl w-full border shadow-xl max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-start gap-3 border-b px-5 py-4">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-sky-800">Pathology report</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-teal-800">Pathology report</p>
                 <h3 className="font-serif font-bold text-base text-[#00334f]">
                   {viewingReport.test.testName}
                 </h3>
@@ -561,7 +561,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
               <button
                 type="button"
                 onClick={() => handleDownloadTestPdf(viewingReport.patient, viewingReport.test)}
-                className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3 py-1.5 rounded text-[11px] font-bold inline-flex items-center gap-1"
+                className="bg-teal-800 hover:bg-teal-700 text-white px-3 py-1.5 rounded text-[11px] font-bold inline-flex items-center gap-1"
               >
                 <Download className="w-3.5 h-3.5" />
                 PDF
@@ -569,7 +569,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
               <button
                 type="button"
                 onClick={() => markReportCompleted(viewingReport.patient, viewingReport.test)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-[11px] font-bold inline-flex items-center gap-1"
+                className="bg-sky-800 hover:bg-sky-700 text-white px-3 py-1.5 rounded text-[11px] font-bold inline-flex items-center gap-1"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 Completed
@@ -585,7 +585,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
           <div className="bg-white rounded-xl max-w-lg w-full border shadow-xl p-6 space-y-4">
             <div className="flex justify-between items-center border-b pb-3">
               <div className="flex items-center gap-2">
-                <FlaskConical className="w-5 h-5 text-emerald-700" />
+                <FlaskConical className="w-5 h-5 text-teal-800" />
                 <h3 className="font-serif font-bold text-base text-[#00334f]">
                   Order New Pathology Diagnostic Investigation
                 </h3>
@@ -617,7 +617,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                   ))}
                 </select>
                 {orderPatientId ? (
-                  <p className="text-[11px] font-bold text-emerald-800 mt-1">
+                  <p className="text-[11px] font-bold text-teal-800 mt-1">
                     Request will notify Sample Dispatch Hub under {patients.find((p) => p.id === orderPatientId)?.name}.
                   </p>
                 ) : null}
@@ -664,7 +664,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                 </button>
                 <button
                   type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-bold shadow-sm transition"
+                  className="bg-teal-800 hover:bg-teal-700 text-white px-5 py-2 rounded-lg font-bold shadow-sm transition"
                 >
                   Transmit Order to LankaLab Ledger
                 </button>

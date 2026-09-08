@@ -63,6 +63,18 @@ class NotificationCubit extends Cubit<NotificationState> {
     await load();
   }
 
+  Future<void> dismiss(String id) async {
+    await _health.deleteNotification(id);
+    await load();
+  }
+
+  Future<void> clearAll() async {
+    final id = _patientId;
+    if (id == null || id.isEmpty) return;
+    await _health.deleteAllNotifications(id);
+    await load();
+  }
+
   Future<void> markAllRead() async {
     for (final n in state.items.where((e) => !e.read)) {
       await _health.markNotificationRead(n.id);

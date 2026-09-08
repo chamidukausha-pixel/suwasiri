@@ -13,6 +13,7 @@ import '../models/app_notification.dart';
 import '../models/appointment.dart';
 import '../models/clinic_fee_item.dart';
 import '../models/clinic_patient_registration.dart';
+import '../models/doctor_rating.dart';
 import '../models/sos_location.dart';
 import '../models/vaccine_models.dart';
 import '../models/vault_report.dart';
@@ -29,6 +30,7 @@ class DemoHealthRepository implements HealthRepository {
 
   static const _kReports = 'suwasiri_vault';
   static const _kNotifs = 'suwasiri_notifs';
+  static const _kRatings = 'suwasiri_doctor_ratings';
   static const _kAppts = 'suwasiri_appts';
   static const _kBookings = 'suwasiri_vax_bookings';
   static const _kMohSync = 'suwasiri_moh_sync';
@@ -682,10 +684,87 @@ class DemoHealthRepository implements HealthRepository {
   }
 
   @override
+  Future<void> deleteNotification(String id) async {
+    final list = await _loadNotifs();
+    list.removeWhere((n) => n.id == id);
+    await _saveNotifs(list);
+  }
+
+  @override
+  Future<void> deleteAllNotifications(String patientId) async {
+    final list = await getNotifications(patientId: patientId);
+    final ids = list.map((n) => n.id).toSet();
+    final remaining = (await _loadNotifs())
+        .where((n) => !ids.contains(n.id))
+        .toList();
+    await _saveNotifs(remaining);
+  }
+
+  @override
   Future<void> pushNotification(AppNotification notification) async {
     final list = await _loadNotifs();
     list.insert(0, notification);
     await _saveNotifs(list);
+  }
+
+  List<DoctorRating> _loadRatings() {
+    final raw = _prefs.getString(_kRatings);
+    if (raw == null || raw.isEmpty) return [];
+    final list = jsonDecode(raw) as List<dynamic>;
+    return list.map((e) {
+      final m = Map<String, dynamic>.from(e as Map);
+      final id = m['appointmentId'] as String? ?? '';
+      return DoctorRating.fromMap(id, m);
+    }).toList();
+  }
+
+  Future<void> _saveRatings(List<DoctorRating> list) async {
+    await _prefs.setString(
+      _kRatings,
+      jsonEncode(list.map((r) => r.toMap()).toList()),
+    );
+  }
+
+  @override
+  Future<bool> hasRatedAppointment(String appointmentId) async {
+    return _loadRatings().any((r) => r.appointmentId == appointmentId);
+  }
+
+  @override
+  Future<void> submitDoctorRating({
+    required String appointmentId,
+    required String patientId,
+    required String doctorId,
+    required String doctorName,
+    required int stars,
+    required List<String> tags,
+    String consultMode = '',
+  }) async {
+    final list = _loadRatings();
+    list.removeWhere((r) => r.appointmentId == appointmentId);
+    list.add(
+      DoctorRating(
+        appointmentId: appointmentId,
+        patientId: patientId,
+        doctorId: doctorId,
+        doctorName: doctorName,
+        stars: stars.clamp(1, 5),
+        tags: tags,
+        createdAt: DateTime.now(),
+        consultMode: consultMode,
+      ),
+    );
+    await _saveRatings(list);
+    await pushNotification(
+      AppNotification(
+        id: _uuid.v4(),
+        title: 'Thanks for rating $doctorName',
+        body: 'Your consultation feedback was saved.',
+        timestamp: DateTime.now(),
+        type: NotificationPayloadType.system,
+        patientId: patientId,
+      ),
+    );
   }
 
   @override

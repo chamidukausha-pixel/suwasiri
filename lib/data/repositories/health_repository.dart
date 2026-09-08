@@ -104,7 +104,20 @@ abstract class HealthRepository {
 
   Future<List<AppNotification>> getNotifications({String? patientId});
   Future<void> markNotificationRead(String id);
+  Future<void> deleteNotification(String id);
+  Future<void> deleteAllNotifications(String patientId);
   Future<void> pushNotification(AppNotification notification);
+
+  Future<bool> hasRatedAppointment(String appointmentId);
+  Future<void> submitDoctorRating({
+    required String appointmentId,
+    required String patientId,
+    required String doctorId,
+    required String doctorName,
+    required int stars,
+    required List<String> tags,
+    String consultMode = '',
+  });
 
   Future<LabAiReview> askReportAssistant({
     required VaultReport report,

@@ -1,0 +1,6 @@
+{
+  "name": "LankaLab Portal",
+  "description": "LankaLab Portal clinical diagnostics dashboard with real-time lab order tracking, active logistics mapping, and integrated Gemini Pathologist AI reports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

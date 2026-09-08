@@ -217,4 +217,23 @@ class ScheduleCubit extends Cubit<ScheduleState> {
     _reminder.dispose();
     return super.close();
   }
+
+  Future<bool> hasRatedAppointment(String appointmentId) =>
+      _health.hasRatedAppointment(appointmentId);
+
+  Future<void> submitDoctorRating({
+    required Appointment appointment,
+    required int stars,
+    required List<String> tags,
+  }) {
+    return _health.submitDoctorRating(
+      appointmentId: appointment.id,
+      patientId: appointment.patientId,
+      doctorId: appointment.doctorId,
+      doctorName: appointment.doctorName,
+      stars: stars,
+      tags: tags,
+      consultMode: appointment.consultMode.name,
+    );
+  }
 }

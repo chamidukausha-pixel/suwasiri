@@ -475,6 +475,8 @@ export interface Appointment {
   paymentStatus?: string;
   paidBySuwasiri?: boolean;
   suwasiriReceiptUrl?: string;
+  /** False while a bank slip is waiting for receptionist approval. */
+  receiptApproved?: boolean;
   patientAge?: number;
   patientGender?: string;
   /** Reception lobby queue position (1 = next). Independent of booked `time`. */
@@ -513,6 +515,9 @@ export interface Billing {
   suwasiriReceiptUrl?: string;
   appointmentId?: string;
   claimId?: string;
+  paymentStatus?: string;
+  /** False until receptionist clicks Approved on a bank-slip invoice. */
+  receiptApproved?: boolean;
 }
 
 export interface PatientAccessRequest {

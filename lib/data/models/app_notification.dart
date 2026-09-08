@@ -28,6 +28,25 @@ class AppNotification extends Equatable {
   final bool read;
   final String patientId;
 
+  bool get isMessage => type == NotificationPayloadType.appointment;
+
+  String get sourceLabel {
+    switch (type) {
+      case NotificationPayloadType.appointment:
+        return 'DOCTOR';
+      case NotificationPayloadType.labResult:
+        return 'LAB';
+      case NotificationPayloadType.vaccine:
+        return 'VACCINES';
+      case NotificationPayloadType.sync:
+        return 'PORTAL';
+      case NotificationPayloadType.dose:
+        return 'MEDICINE';
+      case NotificationPayloadType.system:
+        return 'SUWASIRI';
+    }
+  }
+
   AppNotification copyWith({bool? read}) => AppNotification(
         id: id,
         title: title,

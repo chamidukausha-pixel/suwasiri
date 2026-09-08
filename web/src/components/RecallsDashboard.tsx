@@ -47,42 +47,42 @@ export default function RecallsDashboard({
       id: "All",
       label: "All Active Recalls",
       count: activeRecalls.length,
-      card: "from-sky-500 via-blue-500 to-indigo-600",
+      card: "from-sky-800 via-blue-800 to-teal-800",
       Icon: BellRing,
     },
     {
       id: "Diabetes Review",
       label: "Diabetes Review",
       count: activeRecalls.filter((r) => r.category === "Diabetes Review").length,
-      card: "from-rose-500 via-red-500 to-orange-500",
+      card: "from-teal-800 via-emerald-800 to-cyan-900",
       Icon: Activity,
     },
     {
       id: "Immunisation",
       label: "Immunisation Due",
       count: activeRecalls.filter((r) => r.category === "Immunisation").length,
-      card: "from-emerald-500 via-green-500 to-teal-500",
+      card: "from-emerald-800 via-teal-700 to-green-900",
       Icon: Syringe,
     },
     {
       id: "Cervical Screening",
       label: "Cervical Screening",
       count: activeRecalls.filter((r) => r.category === "Cervical Screening").length,
-      card: "from-amber-400 via-orange-500 to-rose-500",
+      card: "from-blue-800 via-sky-800 to-teal-900",
       Icon: UserCheck,
     },
     {
       id: "Pathology Follow-up",
       label: "Pathology Follow-up",
       count: activeRecalls.filter((r) => r.category === "Pathology Follow-up").length,
-      card: "from-violet-500 via-purple-600 to-fuchsia-600",
+      card: "from-cyan-900 via-teal-800 to-sky-900",
       Icon: FlaskConical,
     },
     {
       id: "Care Plan Review",
       label: "Care Plan Review",
       count: activeRecalls.filter((r) => r.category === "Care Plan Review").length,
-      card: "from-teal-500 via-cyan-500 to-sky-600",
+      card: "from-teal-700 via-sky-800 to-blue-900",
       Icon: Heart,
     },
   ];
@@ -153,8 +153,8 @@ export default function RecallsDashboard({
       
       {/* Toast */}
       {successToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#00334f] text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-bottom-3">
-          <CheckCircle className="w-4 h-4 text-emerald-400" />
+        <div className="fixed bottom-6 right-6 z-50 bg-teal-800 text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-bottom-3">
+          <CheckCircle className="w-4 h-4 text-teal-200" />
           <span>{successToast}</span>
         </div>
       )}
@@ -162,7 +162,7 @@ export default function RecallsDashboard({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-red-100 text-red-700 rounded-xl">
+          <div className="p-3 bg-teal-100 text-teal-800 rounded-xl">
             <BellRing className="w-6 h-6" />
           </div>
           <div>
@@ -175,7 +175,7 @@ export default function RecallsDashboard({
 
         <button
           onClick={() => setShowCreateModal(true)}
-          className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-4 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all self-start sm:self-auto"
+          className="bg-teal-800 hover:bg-teal-700 text-white px-4 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all self-start sm:self-auto"
         >
           <Plus className="w-4 h-4" />
           <span>Add Patient Recall</span>
@@ -229,7 +229,7 @@ export default function RecallsDashboard({
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 text-slate-600 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200">
+            <thead className="bg-[#e8f3f0] text-teal-900 font-bold uppercase tracking-wider text-[10px] border-b border-teal-100">
               <tr>
                 <th className="py-3 px-4">Patient</th>
                 <th className="py-3 px-4">Recall Category</th>
@@ -243,7 +243,7 @@ export default function RecallsDashboard({
               {filteredRecalls.map(r => {
                 const isOverdue = new Date(r.dueDate) < new Date();
                 return (
-                  <tr key={r.id} className={`hover:bg-slate-50/80 transition-colors ${r.urgency === "HIGH" && r.category === "Pathology Follow-up" ? "bg-red-50" : ""}`}>
+                  <tr key={r.id} className={`hover:bg-teal-50/50 transition-colors ${r.urgency === "HIGH" && r.category === "Pathology Follow-up" ? "bg-sky-50" : ""}`}>
                     <td className="py-3 px-4 font-bold text-slate-900">
                       <div>{r.patientName}</div>
                       <div className="text-[10px] font-normal text-slate-500">{r.patientPhone} • {r.patientEmail}</div>
@@ -258,11 +258,11 @@ export default function RecallsDashboard({
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-1.5">
                         <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase ${
-                          r.urgency === "HIGH" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                          r.urgency === "HIGH" ? "bg-teal-800 text-teal-50" : "bg-sky-100 text-sky-800"
                         }`}>
                           {r.urgency}
                         </span>
-                        <span className={`font-mono text-xs font-semibold ${isOverdue ? "text-red-600 font-bold" : "text-slate-600"}`}>
+                        <span className={`font-mono text-xs font-semibold ${isOverdue ? "text-sky-900 font-bold" : "text-slate-600"}`}>
                           {r.dueDate} {isOverdue && "⚠️ OVERDUE"}
                         </span>
                       </div>
@@ -276,9 +276,9 @@ export default function RecallsDashboard({
                     <td className="py-3 px-4">
                       <div className="space-y-1">
                         <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          r.status === "DUE" ? "bg-amber-100 text-amber-800" :
-                          r.status === "SMS_SENT" ? "bg-sky-100 text-sky-800" :
-                          r.status === "BOOKED" ? "bg-purple-100 text-purple-800" :
+                          r.status === "DUE" ? "bg-sky-100 text-sky-800" :
+                          r.status === "SMS_SENT" ? "bg-teal-100 text-teal-800" :
+                          r.status === "BOOKED" ? "bg-blue-100 text-blue-800" :
                           "bg-emerald-100 text-emerald-800"
                         }`}>
                           {r.status.replace("_", " ")}
@@ -333,7 +333,7 @@ export default function RecallsDashboard({
                         <button
                           onClick={() => onBookAppointment(r, "clinic")}
                           title="Rebook in-person clinic visit"
-                          className="p-1.5 bg-[#00334f] text-white hover:bg-[#0c4a6e] rounded text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                          className="p-1.5 bg-teal-800 text-white hover:bg-teal-700 rounded text-[11px] font-bold flex items-center gap-1 cursor-pointer"
                         >
                           <Calendar className="w-3.5 h-3.5" />
                           <span>In person</span>
@@ -341,7 +341,7 @@ export default function RecallsDashboard({
                         <button
                           onClick={() => onBookAppointment(r, "video")}
                           title="Rebook video / online consult"
-                          className="p-1.5 bg-purple-700 text-white hover:bg-purple-800 rounded text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                          className="p-1.5 bg-sky-800 text-white hover:bg-sky-700 rounded text-[11px] font-bold flex items-center gap-1 cursor-pointer"
                         >
                           <Smartphone className="w-3.5 h-3.5" />
                           <span>Video</span>
@@ -369,9 +369,9 @@ export default function RecallsDashboard({
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
           <div className="bg-white rounded-xl shadow-2xl border border-slate-300 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-150">
-            <div className="bg-[#00334f] text-white px-5 py-3.5 flex justify-between items-center">
+            <div className="bg-teal-800 text-white px-5 py-3.5 flex justify-between items-center">
               <div className="flex items-center gap-2">
-                <BellRing className="w-5 h-5 text-sky-300" />
+                <BellRing className="w-5 h-5 text-teal-200" />
                 <h3 className="font-bold text-sm">Add Clinical Recall / Health Reminder</h3>
               </div>
               <button onClick={() => setShowCreateModal(false)} className="text-slate-300 hover:text-white">✕</button>
@@ -459,7 +459,7 @@ export default function RecallsDashboard({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#00334f] hover:bg-[#0c4a6e] text-white font-bold rounded-lg cursor-pointer shadow-xs"
+                  className="px-4 py-2 bg-teal-800 hover:bg-teal-700 text-white font-bold rounded-lg cursor-pointer shadow-xs"
                 >
                   Save Recall
                 </button>

@@ -51,6 +51,7 @@ Aligned with `firestore.rules` and `FirebaseHealthRepository` / `FirebaseAuthRep
 | `medical_certificates` | `patientId`, `patientName`, `title`, `doctor`, `body`, `certificateNo`, `source` (`gp_care`) | read/create: signed-in; update: household or staff. App Vault filters by the active patient’s `patientId` |
 | `sos_sessions` | `patientId`, lat/lng, `accuracyMeters`, `address`, `shareLiveGps`, `active` | owner write; readable when `shareLiveGps` |
 | `notifications` | `title`, `body`, `timestamp`, `type`, `read` | any signed-in (tighten later) |
+| `doctor_ratings` | One doc per `appointmentId`: `patientId`, `doctorId`, `doctorName`, `stars` (1–5), `tags[]`, `consultMode`, `createdAt`, `source` (`suwasiri_app`) | household create; signed-in read; immutable after write |
 | `telehealth_sessions` | WebRTC offer/answer + `ice_doctor` / `ice_patient` ICE candidates; subcollection `messages` (in-call chat) | any signed-in (patient app + GP Care doctor) |
 | `consultation_notes` | `patientId`, `patientName`, `doctor`, `clinicName`, `title`, `body`, `date`, `appointmentId`, `source` (`gp_care`) | read/create: signed-in; update/delete: household or same patientId. Suwasiri Call + Vault treatment notes + GP Care history |
 | `clinic_doctors` | `name`, `specialty`, `hospital`, `address`, `region`, `rosterHours`, `hospitalId`, `branchId`, `photoUrl`, `active`, `staffId`, `source` (`gp_care`) | signed-in read/write. Platform Console / Practice Manager publish doctors (photo optional) so Suwasiri Doctors can search by name, clinic, and district |

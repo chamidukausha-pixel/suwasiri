@@ -2393,7 +2393,7 @@ app.delete("/api/alerts/:id", (req, res) => {
 app.patch("/api/billing/:id", (req, res) => {
   const store = getStore();
   const { id } = req.params;
-  const { status, paidBySuwasiri, paymentMethod, suwasiriReceiptUrl } = req.body;
+  const { status, paidBySuwasiri, paymentMethod, suwasiriReceiptUrl, receiptApproved, paymentStatus } = req.body;
 
   const billIndex = store.billing.findIndex(b => b.id === id);
   if (billIndex === -1) {
@@ -2406,6 +2406,10 @@ app.patch("/api/billing/:id", (req, res) => {
   }
   if (paymentMethod) store.billing[billIndex].paymentMethod = paymentMethod;
   if (suwasiriReceiptUrl) store.billing[billIndex].suwasiriReceiptUrl = suwasiriReceiptUrl;
+  if (receiptApproved !== undefined) {
+    store.billing[billIndex].receiptApproved = receiptApproved === true;
+  }
+  if (paymentStatus) store.billing[billIndex].paymentStatus = paymentStatus;
   saveStore(store);
   res.json({ bill: store.billing[billIndex], state: store });
 });
@@ -2425,6 +2429,9 @@ app.post("/api/billing", (req, res) => {
     paidBySuwasiri: req.body.paidBySuwasiri === true,
     suwasiriReceiptUrl: req.body.suwasiriReceiptUrl,
     appointmentId: req.body.appointmentId,
+    paymentStatus: req.body.paymentStatus,
+    receiptApproved:
+      req.body.receiptApproved === true ? true : req.body.receiptApproved === false ? false : undefined,
   };
   store.billing.push(bill);
   saveStore(store);
@@ -2470,15 +2477,18 @@ app.post("/api/billing/:id/upload-receipt", (req, res) => {
   }
 
   store.billing[billIndex].suwasiriReceiptUrl = receiptUrl || "https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?q=80&w=260&auto=format&fit=crop";
-  store.billing[billIndex].status = "PAID";
+  store.billing[billIndex].status = "PENDING";
+  store.billing[billIndex].paymentStatus = "PENDING";
+  store.billing[billIndex].receiptApproved = false;
   store.billing[billIndex].paidBySuwasiri = paidBySuwasiri !== undefined ? paidBySuwasiri : true;
+  store.billing[billIndex].paymentMethod = store.billing[billIndex].paymentMethod || "Suwasiri Manual";
 
   // Post system message log
   store.clinicMessages.push({
     id: `msg-billing-receipt-${Date.now()}`,
     sender: "Suwasiri Payment Service",
     senderRole: "System BOT",
-    text: `🧾 Payment Receipt Uploaded: Received verified receipt image for "${store.billing[billIndex].patientName}" (Invoice: ${store.billing[billIndex].id}) paid via Suwasiri App!`,
+    text: `🧾 Bank slip uploaded for "${store.billing[billIndex].patientName}" (Invoice: ${store.billing[billIndex].id}). Awaiting receptionist approval.`,
     timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
     channel: "#general-clinical"
   });

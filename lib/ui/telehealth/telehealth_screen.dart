@@ -19,6 +19,7 @@ import '../../data/models/vault_report.dart';
 import '../../data/repositories/health_repository.dart';
 import '../../data/services/telehealth_call_session.dart';
 import '../../localization/app_localizations.dart';
+import '../ratings/doctor_rating_sheet.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/suwasiri_brand_header.dart';
@@ -392,14 +393,26 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
   }
 
   void _endCall() {
+    final hadLive = _liveConnected;
+    final appt = _videoAppt;
     _liveJoinBlocked = true;
     _rxTimer?.cancel();
     unawaited(_hangupLiveCall());
     unawaited(_disposeCamera());
     if (mounted) setState(() => _camOff = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AppLocalizations.of(context).t('callEndedRestart'))),
-    );
+    if (hadLive && appt != null) {
+      unawaited(_promptDoctorRating(appt));
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context).t('callEndedRestart'))),
+      );
+    }
+  }
+
+  Future<void> _promptDoctorRating(Appointment appt) async {
+    await Future<void>.delayed(const Duration(milliseconds: 450));
+    if (!mounted) return;
+    await offerConsultationRating(context, appt);
   }
 
   Future<void> _hangupLiveCall() async {
@@ -452,7 +465,12 @@ class _TelehealthScreenState extends State<TelehealthScreen> {
         onStatus: (status) {
           if (!mounted) return;
           if (status == 'ended') {
+            final hadLive = _liveConnected;
+            final endedAppt = _videoAppt;
             unawaited(_hangupLiveCall());
+            if (hadLive && endedAppt != null) {
+              unawaited(_promptDoctorRating(endedAppt));
+            }
             return;
           }
           setState(() {

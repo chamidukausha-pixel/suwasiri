@@ -201,6 +201,8 @@ export function mapFirestoreAppointment(
     paymentStatus: data.paymentStatus ? String(data.paymentStatus) : undefined,
     paidBySuwasiri: data.paidBySuwasiri === true,
     suwasiriReceiptUrl: data.suwasiriReceiptUrl ? String(data.suwasiriReceiptUrl) : undefined,
+    receiptApproved:
+      data.receiptApproved === true ? true : data.receiptApproved === false ? false : undefined,
     patientAge: typeof data.patientAge === "number" ? data.patientAge : Number(data.patientAge) || undefined,
     patientGender: data.patientGender ? String(data.patientGender) : undefined,
     queuePlace: typeof data.queuePlace === "number" ? data.queuePlace : undefined,
@@ -416,6 +418,7 @@ export async function updateSuwasiriAppointmentPayment(
     paymentMethod?: string;
     paidBySuwasiri?: boolean;
     suwasiriReceiptUrl?: string;
+    receiptApproved?: boolean;
   }
 ): Promise<void> {
   if (!isFirebaseConfigured() || !appointmentId) return;
@@ -425,6 +428,7 @@ export async function updateSuwasiriAppointmentPayment(
     ...(patch.paymentMethod ? { paymentMethod: patch.paymentMethod } : {}),
     ...(patch.paidBySuwasiri !== undefined ? { paidBySuwasiri: patch.paidBySuwasiri } : {}),
     ...(patch.suwasiriReceiptUrl ? { suwasiriReceiptUrl: patch.suwasiriReceiptUrl } : {}),
+    ...(patch.receiptApproved !== undefined ? { receiptApproved: patch.receiptApproved } : {}),
   });
 }
 

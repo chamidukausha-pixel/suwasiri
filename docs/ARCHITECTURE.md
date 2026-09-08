@@ -70,7 +70,7 @@ Stable `barcodeNumber` is generated once from uid + NIC and shown on Profile Uni
 
 ## Home / Call schedule
 
-`ScheduleCubit` holds live appointments. Home **blue** card = latest in-person (`ConsultMode.clinic`) booking; Home **purple** card and Call = latest video (`ConsultMode.video`) booking. Each new checkout replaces that mode’s card via `bookedAt` + `recordBooking`.
+`ScheduleCubit` holds live appointments. Home **blue** card = latest in-person (`ConsultMode.clinic`) booking; Home **purple** card and Call = latest video (`ConsultMode.video`) booking. Each new checkout replaces that mode’s card via `bookedAt` + `recordBooking`. After a live video hang-up or when GP Care marks the booking **COMPLETED**, `offerConsultationRating` prompts a star rating saved to Firestore `doctor_ratings`.
 
 Home **green** card lists **every** confirmed vaccine booking still in its calendar day (`ScheduleState.upcomingVaccines`) in a **single** section. No bookings → the green section is hidden. After checkout, `recordVaccineBooking` updates Home immediately.
 

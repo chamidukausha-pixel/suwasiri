@@ -11,6 +11,7 @@ import '../models/app_notification.dart';
 import '../models/appointment.dart';
 import '../models/clinic_fee_item.dart';
 import '../models/clinic_patient_registration.dart';
+import '../models/doctor_rating.dart';
 import '../models/sos_location.dart';
 import '../models/vaccine_models.dart';
 import '../models/vault_report.dart';
@@ -38,6 +39,8 @@ class FirebaseHealthRepository implements HealthRepository {
       _db.collection('appointment_slots');
   CollectionReference<Map<String, dynamic>> get _notifications =>
       _db.collection('notifications');
+  CollectionReference<Map<String, dynamic>> get _doctorRatings =>
+      _db.collection('doctor_ratings');
   CollectionReference<Map<String, dynamic>> get _prescriptions =>
       _db.collection('prescriptions');
   CollectionReference<Map<String, dynamic>> get _certificates =>
@@ -935,8 +938,73 @@ class FirebaseHealthRepository implements HealthRepository {
   }
 
   @override
+  Future<void> deleteNotification(String id) async {
+    await _notifications.doc(id).delete();
+  }
+
+  @override
+  Future<void> deleteAllNotifications(String patientId) async {
+    final list = await getNotifications(patientId: patientId);
+    if (list.isEmpty) return;
+    var batch = _db.batch();
+    var n = 0;
+    for (final item in list) {
+      batch.delete(_notifications.doc(item.id));
+      n++;
+      if (n == 450) {
+        await batch.commit();
+        batch = _db.batch();
+        n = 0;
+      }
+    }
+    if (n > 0) await batch.commit();
+  }
+
+  @override
   Future<void> pushNotification(AppNotification notification) async {
     await _notifications.doc(notification.id).set(notification.toMap());
+  }
+
+  @override
+  Future<bool> hasRatedAppointment(String appointmentId) async {
+    if (appointmentId.isEmpty) return false;
+    final snap = await _doctorRatings.doc(appointmentId).get();
+    return snap.exists;
+  }
+
+  @override
+  Future<void> submitDoctorRating({
+    required String appointmentId,
+    required String patientId,
+    required String doctorId,
+    required String doctorName,
+    required int stars,
+    required List<String> tags,
+    String consultMode = '',
+  }) async {
+    final clamped = stars.clamp(1, 5);
+    final rating = DoctorRating(
+      appointmentId: appointmentId,
+      patientId: patientId,
+      doctorId: doctorId,
+      doctorName: doctorName,
+      stars: clamped,
+      tags: tags,
+      createdAt: DateTime.now(),
+      consultMode: consultMode,
+    );
+    await _doctorRatings.doc(appointmentId).set(rating.toMap());
+    await pushNotification(
+      AppNotification(
+        id: _uuid.v4(),
+        title: 'Thanks for rating $doctorName',
+        body: 'Your $clamped-star consultation feedback was saved.',
+        timestamp: DateTime.now(),
+        type: NotificationPayloadType.system,
+        read: false,
+        patientId: patientId,
+      ),
+    );
   }
 
   @override

@@ -596,7 +596,7 @@ class _PaymentChannelStepState extends State<_PaymentChannelStep> {
         }
         await widget.onConfirm(
           paymentMethod: l.t('manualBankSlip'),
-          paymentStatus: 'PAID',
+          paymentStatus: 'PENDING',
           paidBySuwasiri: true,
           suwasiriReceiptUrl: _slipDataUrl,
         );

@@ -10,7 +10,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 | Project ID | `suwasiri-91824` |
 | Package / bundle | `com.thepatientcare.suwasiri` |
 | Auth | Firebase Auth → Firestore `users/{uid}` |
-| Health data | Firestore (`vault`, `vaccinations`, `appointments`, `notifications`) |
+| Health data | Firestore (`vault`, `vaccinations`, `appointments`, `notifications`, `doctor_ratings`) |
 | Rules deployed | Yes (`firestore.rules` → `firebase deploy --only firestore:rules`) |
 
 ## Done
@@ -59,6 +59,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Home bookings (blue clinic / purple video / green vaccine) hide automatically at local midnight after the slot date
 - [x] Profile: family member selector dropdown + dummy wife/child (switches Home/Vault/Vaccines identity)
 - [x] Web GP Care copied into `web/` (exact React/Vite/Express stack; Downloads source left untouched)
+- [x] Web LankaLab copied into `lankalab/` (exact React/Vite/Express stack; `Downloads/lankalab-portal` left untouched)
 - [x] Web tenancy: Platform + Hospital Super Admin, multi-hospital isolation, multi-branch staff, RBAC add/remove roles (persisted in `patient_store.json`)
 - [x] Web Firebase Auth login (email / Google / phone OTP stub) on `suwasiri-91824`; staff via email membership match
 - [x] Platform Super Admin can open Doctor / Reception / Operations modules; committed RBAC hides nav items immediately
@@ -96,7 +97,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Unique Health ID Sync to Portal is clinic-scoped. Lookup/save uses that person’s Unique Health ID and name (Manel stays Manel; household members who share an email are not merged). Never save the Auth placeholder “Patient”.
 - [x] Platform Console: **Edit** hospital name/district/branches and **Edit** each employee. Security & RBAC **Add designation** syncs to Platform Console Add staff. New hospitals/branches appear in Assign staff to branches. Retention policies can be added and notify doctors/receptionists. Break-glass override is doctor-only. Clinical Audit Trail records consultations, notes, medicines, prescriptions, labs, certificates (cannot delete); date + doctor or All filters the log.
 - [x] Reception **Delete** / **Block** on Patient Clinical Records needs a comment and is sent to **Operations & Governance** (Platform Console) as a notification. Super Admin approves or rejects there. The file stays until approved.
-- [x] Receipts & Invoices: **Cash Settle** on booked (and issued) invoices writes a clinic bill and Firestore `paymentStatus: SETTLED` / `paymentMethod: Cash` so status shows **Settled**. Suwasiri app card/debit or manual bank slip writes `paidBySuwasiri` so status shows **Paid by Suwasiri App**. Reception clicks a PDF or photo slip to view it. Age and gender sit under the patient name on Lobby, Patient Clinical Records, Unique Health ID sync, and invoices (from the clinic file or the booking).
+- [x] Receipts & Invoices: **Cash Settle** writes `paymentStatus: SETTLED` / Cash and counts as **collected** in Reports. Suwasiri **debit/card** counts as collected immediately (**Paid by Suwasiri App**). **Manual bank slip** stays **pending** until reception clicks **Approved** on Invoice actions; then it is collected. Unpaid counter bookings and unapproved slips show as **pending payments** in Reports & Analytics.
 - [x] Sample Dispatch Hub delete with yes/no confirm; Team Secure Chat is shared by all clinic staff
 - [x] Telehealth: day’s video bookings only; click name → Active Clinical Consultation Room; Call start from 2 minutes before the slot
 - [x] Telehealth e-Rx matches GP Exam Room (formulary + Sinhala meal timing); attached prescription image removed
@@ -143,14 +144,16 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Platform Console **Operations & Governance**: add employees and **Remove (resigned)**
 - [x] Practice Manager MBS & Private Fees: inline edit, add MBS item, bulk-billable column removed
 - [x] Security & RBAC: Super Admin can edit MFA / password / session / backup / retention; light colourful tabs
-- [x] Reports & Analytics: month calendar; This Month / Last Quarter / YTD 2026 filters the results panel; export Excel, Notepad, PDF; click a date for collected, outstanding, invoices, and completed consults
+- [x] Reports & Analytics: **Daily financial situation** sits above **Results for** the selected period. Click a date to list **registered patients** (Patient Clinical Records) for that day. **Total Registered** is every clinic patient on file to date.
+- [x] GP Care **Doctor Dashboard**, **Pathology & Diagnostics**, and **Recalls & Reminders** use dark pastel teal / sage / dusty blue (health-sector palette) instead of bright orange, red, and purple cards.
 - [x] GP Exam Room **Appointments**: during a consult the doctor books a follow-up on **their own** available/booked times (other clinic doctors are hidden). Confirm writes Firestore `appointments` for that Suwasiri patient (Home **blue** / **purple**) **and** the clinic appointment store so reception / doctor calendars show the name on that date. Works when the signed-in clinician is not in the published doctor roster.
 - [x] GP Exam Room **Allergies**: doctor can **add, edit, and delete** each allergy (or **Clear all** → NKDA). Saves on the clinic file and Suwasiri Unique Health ID (clinicAllergies; empty delete does not fall back to old intake allergies)
 - [x] GP Exam Room Consultation is one **Doctor notes** field (Subjective, medical issues this visit, and Plan & Management removed)
 - [x] Reception Recalls & Reminders In person / Video book writes Firestore `appointments` for that Suwasiri patient (Home **blue** / **purple**) and shows on the GP Care calendar that date
 - [x] Booked vs available times stay in sync under each doctor: Suwasiri Doctors booking, GP Care **Book Active Appointment**, exam-room **Appointments**, and Lobby **Check walk-in availability**. Catalog **Dr. Chamidu Rathnayake** (`d-chamidu-rathnayake`) and Platform Console **Dr. Chamidu Kaushal Rathnayake** (`d-chamidu-kaushal-rathnayake`) are the same clinician — Denuk’s 6 Sep 2026 slot shows as **Booked** for that doctor on GP Care and as **BOOKED** when Sakuni (or anyone) opens the same doctor/day in the app. Clicking a doctor name shows that grid immediately (not hidden behind slot-sync). Lobby **Book Appointment** removed — book from Book Active Appointment or the patient file.
 - [x] Unique Health ID: receptionist **Sync to Portal** loads the live Suwasiri file; **Save to Patient Clinical Records** writes that file onto this clinic’s Patient Clinical Records list (name, age, gender, NIC, labs, vaccines). New-patient registration in the Suwasiri app (`clinic_patient_registrations`) also creates that clinic file automatically.
-- [x] GP Care **Patient Portal** removed (patients use the Suwasiri app; unmatched Firebase emails are blocked from the clinic EMR)
+- [x] Suwasiri **Notifications** inbox redesigned (filters, card actions, clear all / dismiss)
+- [x] After a doctor consult (video hang-up or GP Care **COMPLETED**), the patient can star-rate the doctor with attribute tags (`doctor_ratings`)
 
 ## In progress / next
 
@@ -165,6 +168,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [ ] Deploy updated `firestore.rules` (vault **read** for Unique Health ID lab sync + GP Care immunisations + allergy merge + `clinic_centers`) if not already: `firebase deploy --only firestore:rules`
 - [ ] Telehealth/Call: live WebRTC to GP Care is wired (STUN); a TURN server may be needed on some mobile networks
 - [ ] Web + mobile sync: appointments (including **payment status / bank slips** and **patientAge / patientGender**), Unique Health ID lookup, telehealth notes/chat, e-Rx, medical certificates, clinical calculator snapshots, GP Care–published `clinic_doctors`, **exam-room consult notes / immunisations / allergies / pathology / imaging / certificates**, and GP Care–issued e-Rx (Vault vs Call by session) are on Firestore; Vault → GP Care sync is **vaccine history only**. Remaining GP EMR charts still use the web JSON store. Tenancy/RBAC is in the web JSON store; tenancy collections are documented, not deployed.
+- [ ] LankaLab (`lankalab/`): copied as-is (mock orders + Gemini). Not on Firebase yet. Sync plan in [LANKALAB.md](LANKALAB.md).
 
 ## Known caveats
 
@@ -183,4 +187,5 @@ Living tracker for implementation. **Update this file when you finish or start a
 | [ROADMAP.md](ROADMAP.md) | Prioritized upcoming work |
 | [NEXT.md](NEXT.md) | Ordered next implementation (Auth Console, tenancy Firestore, clinical sync) |
 | [WEB.md](WEB.md) | GP Care web app (`web/`), run commands, mobile/web sync |
+| [LANKALAB.md](LANKALAB.md) | LankaLab portal (`lankalab/`), run commands, lab/mobile/GP sync plan |
 | [../README.md](../README.md) | How to run the apps |

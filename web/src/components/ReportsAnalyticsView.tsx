@@ -29,19 +29,26 @@ import {
   Filter,
   Layers,
   Sparkles,
-  ArrowUpRight,
-  ArrowDownRight,
   FileSpreadsheet,
   FileText
 } from "lucide-react";
 import { Patient, Appointment, Billing, RecallRecord } from "../types";
 import ClinicMonthCalendar from "./ClinicMonthCalendar";
 import { formatDateKey, formatLongDate } from "../utils/clinicCalendar";
+import {
+  invoicePaymentLabel,
+  isCashPayment,
+  isDirectDebitPayment,
+  isInvoiceSettled,
+  isReceiptAwaitingApproval,
+  type PaymentLedgerRow,
+} from "../sync/suwasiriBilling";
 
 interface Props {
   patients?: Patient[];
   appointments?: Appointment[];
   billingList?: Billing[];
+  invoiceRows?: PaymentLedgerRow[];
   recalls?: RecallRecord[];
 }
 
@@ -52,13 +59,6 @@ const APPOINTMENT_TRENDS_DATA = [
   { day: "Thu", booked: 45, completed: 42, cancelled: 1, dna: 2 },
   { day: "Fri", booked: 48, completed: 44, cancelled: 3, dna: 1 },
   { day: "Sat", booked: 28, completed: 27, cancelled: 1, dna: 0 }
-];
-
-const REVENUE_BREAKDOWN_DATA = [
-  { name: "Private Cash & EFTPOS (Counter)", value: 845000, color: "#00334f" },
-  { name: "Corporate & Private Insurance (Ceylinco/SLIC/AIA)", value: 580000, color: "#0284c7" },
-  { name: "Telehealth IPG / LankaQR (FriMi/Genie)", value: 310000, color: "#10b981" },
-  { name: "Agrahara & Public Sector Welfare", value: 110000, color: "#8b5cf6" }
 ];
 
 const DOCTOR_WORKLOAD_DATA = [
@@ -103,6 +103,7 @@ export default function ReportsAnalyticsView({
   patients = [],
   appointments = [],
   billingList = [],
+  invoiceRows,
   recalls = []
 }: Props) {
   const [reportTab, setReportTab] = useState<"PRACTICE" | "CLINICAL">("PRACTICE");
@@ -114,7 +115,7 @@ export default function ReportsAnalyticsView({
     return { year: n.getFullYear(), month: n.getMonth() };
   });
 
-  const settled = (inv: Billing) => inv.status === "PAID" || inv.status === "BULK_BILLED";
+  const ledger: PaymentLedgerRow[] = invoiceRows ?? billingList;
 
   const dateInRange = (iso?: string) => {
     if (!iso || iso.length < 7) return false;
@@ -158,10 +159,17 @@ export default function ReportsAnalyticsView({
           return `${months[start]}–${months[start + 2]} ${year}`;
         })();
 
-  const rangeBilling = billingList.filter((inv) => dateInRange(inv.date));
-  const rangeAppointments = appointments.filter((a) => dateInRange(a.date));
-  const rangeCollected = rangeBilling.filter(settled).reduce((sum, b) => sum + (b.amount || 0), 0);
-  const rangeOutstanding = rangeBilling.filter((b) => !settled(b)).reduce((sum, b) => sum + (b.amount || 0), 0);
+  const isRegisteredPatient = (patientId?: string, patientName?: string) => {
+    if (patientId && patients.some((p) => p.id === patientId)) return true;
+    const name = (patientName || "").trim().toLowerCase();
+    if (!name) return false;
+    return patients.some((p) => (p.name || "").trim().toLowerCase() === name);
+  };
+
+  const rangeBilling = ledger.filter((inv) => dateInRange(inv.date) && isRegisteredPatient(inv.patientId, inv.patientName));
+  const rangeAppointments = appointments.filter((a) => dateInRange(a.date) && isRegisteredPatient(a.patientId, a.patientName));
+  const rangeCollected = rangeBilling.filter((b) => isInvoiceSettled(b)).reduce((sum, b) => sum + (b.amount || 0), 0);
+  const rangeOutstanding = rangeBilling.filter((b) => !isInvoiceSettled(b)).reduce((sum, b) => sum + (b.amount || 0), 0);
   const rangeCompleted = rangeAppointments.filter((a) => a.status === "COMPLETED");
   const rangeDna = rangeAppointments.filter((a) => /dna|no.?show|cancelled/i.test(a.status || "")).length;
 
@@ -170,25 +178,58 @@ export default function ReportsAnalyticsView({
   const completedConsultsAll = rangeCompleted.length;
   const dnaAppointments = rangeDna;
 
-  const dayInvoices = billingList.filter((inv) => inv.date === selectedDate);
-  const dayAppointments = appointments.filter((a) => a.date === selectedDate);
+  const dayInvoices = ledger.filter(
+    (inv) => inv.date === selectedDate && isRegisteredPatient(inv.patientId, inv.patientName)
+  );
+  const dayAppointments = appointments.filter(
+    (a) => a.date === selectedDate && isRegisteredPatient(a.patientId, a.patientName)
+  );
   const dayCompleted = dayAppointments.filter((a) => a.status === "COMPLETED");
-  const dayCollected = dayInvoices.filter(settled).reduce((sum, b) => sum + (b.amount || 0), 0);
-  const dayOutstanding = dayInvoices.filter((b) => !settled(b)).reduce((sum, b) => sum + (b.amount || 0), 0);
+  const dayCollected = dayInvoices.filter((b) => isInvoiceSettled(b)).reduce((sum, b) => sum + (b.amount || 0), 0);
+  const dayOutstanding = dayInvoices.filter((b) => !isInvoiceSettled(b)).reduce((sum, b) => sum + (b.amount || 0), 0);
   const dayInvoiceTotal = dayInvoices.reduce((sum, b) => sum + (b.amount || 0), 0);
+  const dayRegisteredPatients = patients.filter((p) =>
+    dayInvoices.some(
+      (inv) => inv.patientId === p.id || (inv.patientName || "").trim().toLowerCase() === p.name.trim().toLowerCase()
+    ) ||
+    dayAppointments.some(
+      (a) => a.patientId === p.id || (a.patientName || "").trim().toLowerCase() === p.name.trim().toLowerCase()
+    )
+  );
 
-  const countsByDate = appointments.reduce((acc, a) => {
-    if (!a.date) return acc;
-    acc[a.date] = (acc[a.date] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-  billingList.forEach((inv) => {
-    if (!inv.date) return;
-    countsByDate[inv.date] = (countsByDate[inv.date] || 0) + 1;
-  });
+  const paymentBucket = (inv: PaymentLedgerRow) => {
+    if (!isInvoiceSettled(inv) || isReceiptAwaitingApproval(inv)) return "pending";
+    if (isCashPayment(inv)) return "cash";
+    if (inv.receiptApproved === true || /slip|manual|bank/i.test(String(inv.paymentMethod || ""))) return "slip";
+    if (isDirectDebitPayment(inv)) return "debit";
+    return "debit";
+  };
+  const sumBucket = (rows: PaymentLedgerRow[], bucket: string) =>
+    rows.filter((r) => paymentBucket(r) === bucket).reduce((sum, b) => sum + (b.amount || 0), 0);
+  const revenueBreakdown = [
+    { name: "Cash settle (counter)", value: sumBucket(rangeBilling, "cash"), color: "#00334f" },
+    { name: "Suwasiri debit / card", value: sumBucket(rangeBilling, "debit"), color: "#10b981" },
+    { name: "Bank slip approved", value: sumBucket(rangeBilling, "slip"), color: "#0284c7" },
+    { name: "Pending payment", value: sumBucket(rangeBilling, "pending"), color: "#f59e0b" },
+  ];
+  const revenueChartData = revenueBreakdown.filter((item) => item.value > 0);
+  const pieData = revenueChartData.length > 0 ? revenueChartData : revenueBreakdown;
+
+  const registeredKeysByDate: Record<string, Set<string>> = {};
+  const addRegisteredDate = (date?: string, patientId?: string, patientName?: string) => {
+    if (!date || !isRegisteredPatient(patientId, patientName)) return;
+    const key = patientId || (patientName || "").trim().toLowerCase();
+    if (!key) return;
+    if (!registeredKeysByDate[date]) registeredKeysByDate[date] = new Set();
+    registeredKeysByDate[date].add(key);
+  };
+  appointments.forEach((a) => addRegisteredDate(a.date, a.patientId, a.patientName));
+  ledger.forEach((inv) => addRegisteredDate(inv.date, inv.patientId, inv.patientName));
+  const countsByDate = Object.fromEntries(
+    Object.entries(registeredKeysByDate).map(([date, keys]) => [date, keys.size])
+  );
 
   const totalPatients = patients.length || 0;
-  const newPatientsThisMonth = patients.filter((p) => (p as Patient & { createdAt?: string }).createdAt?.startsWith(todayKey.slice(0, 7))).length;
   const totalConsultsMonth = completedConsultsAll;
   const dnaRate = rangeAppointments.length ? `${((dnaAppointments / rangeAppointments.length) * 100).toFixed(1)}%` : "0%";
   const avgWaitTimeMinutes = 8.5;
@@ -214,15 +255,15 @@ export default function ReportsAnalyticsView({
       `Generated: ${todayKey}`,
       "",
       `Collected (paid): Rs. ${rangeCollected.toLocaleString()}`,
-      `Outstanding: Rs. ${rangeOutstanding.toLocaleString()}`,
+      `Pending payments: Rs. ${rangeOutstanding.toLocaleString()}`,
       `Invoices in period: ${rangeBilling.length}`,
       `Completed consults: ${rangeCompleted.length}`,
       `Booked appointments: ${rangeAppointments.length}`,
       `DNA / cancelled: ${rangeDna}`,
       "",
-      "INVOICES",
-      "Date,Patient,Service,Status,Amount",
-      ...rangeBilling.map((b) => `${b.date},${b.patientName},${(b.service || "").replace(/,/g, " ")},${b.status},${b.amount}`),
+      "INVOICES (Receipts & Invoices)",
+      "Date,Patient,Service,Payment,Amount",
+      ...rangeBilling.map((b) => `${b.date},${b.patientName},${(b.service || "").replace(/,/g, " ")},${invoicePaymentLabel(b)},${b.amount}`),
       "",
       "COMPLETED CONSULTS",
       "Date,Time,Patient,Reason,Status",
@@ -234,7 +275,7 @@ export default function ReportsAnalyticsView({
   const exportExcel = () => {
     const csv = [
       "Type,Date,Patient,Detail,Status,Amount (LKR)",
-      ...rangeBilling.map((b) => `Invoice,${b.date},"${b.patientName}","${(b.service || "").replace(/"/g, "'")}",${b.status},${b.amount}`),
+      ...rangeBilling.map((b) => `Invoice,${b.date},"${b.patientName}","${(b.service || "").replace(/"/g, "'")}",${invoicePaymentLabel(b)},${b.amount}`),
       ...rangeCompleted.map((a) => `Completed consult,${a.date},"${a.patientName || a.patientId}","${(a.reason || "").replace(/"/g, "'")}",${a.status},`),
     ].join("\n");
     downloadBlob("\uFEFF" + csv, `GP_Care_Report_${timeRange}.csv`, "text/csv;charset=utf-8");
@@ -367,12 +408,115 @@ export default function ReportsAnalyticsView({
         </div>
       </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div className="lg:col-span-8 space-y-4">
+          <div className="bg-white p-5 border rounded-xl shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 mb-3">
+              <div>
+                <h3 className="font-bold text-sm text-[#00334f]">Daily financial situation</h3>
+                <p className="text-[11px] text-slate-500">
+                  {formatLongDate(selectedDate)} — registered patients on Patient Clinical Records only (collected vs pending).
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                <span className="text-[10px] font-bold uppercase text-emerald-800">Collected</span>
+                <div className="text-lg font-black text-emerald-900">Rs. {dayCollected.toLocaleString()}</div>
+              </div>
+              <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                <span className="text-[10px] font-bold uppercase text-amber-900">Pending payments</span>
+                <div className="text-lg font-black text-amber-950">Rs. {dayOutstanding.toLocaleString()}</div>
+              </div>
+              <div className="bg-sky-50 border border-sky-100 rounded-xl p-3">
+                <span className="text-[10px] font-bold uppercase text-sky-800">Registered patients</span>
+                <div className="text-lg font-black text-sky-950">{dayRegisteredPatients.length}</div>
+                <p className="text-[10px] text-slate-500">On this date</p>
+              </div>
+              <div className="bg-violet-50 border border-violet-100 rounded-xl p-3">
+                <span className="text-[10px] font-bold uppercase text-violet-800">Completed consults</span>
+                <div className="text-lg font-black text-violet-950">{dayCompleted.length}</div>
+                <p className="text-[10px] text-slate-500">Rs. {dayInvoiceTotal.toLocaleString()} invoiced</p>
+              </div>
+            </div>
+            <div className="mt-4 overflow-x-auto max-h-64 overflow-y-auto border rounded-lg">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 text-slate-600 sticky top-0">
+                  <tr>
+                    <th className="p-2 font-bold">Registered patient</th>
+                    <th className="p-2 font-bold">Payment</th>
+                    <th className="p-2 font-bold text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {dayRegisteredPatients.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="p-4 text-center text-slate-400 italic">
+                        No registered patients on {formatLongDate(selectedDate)}.
+                      </td>
+                    </tr>
+                  ) : (
+                    dayRegisteredPatients.map((p) => {
+                      const inv = dayInvoices.find(
+                        (row) =>
+                          row.patientId === p.id ||
+                          (row.patientName || "").trim().toLowerCase() === p.name.trim().toLowerCase()
+                      );
+                      const apt = dayAppointments.find(
+                        (a) =>
+                          a.patientId === p.id ||
+                          (a.patientName || "").trim().toLowerCase() === p.name.trim().toLowerCase()
+                      );
+                      const pending = inv ? !isInvoiceSettled(inv) : false;
+                      return (
+                        <tr key={p.id} className={pending ? "bg-amber-50/80" : ""}>
+                          <td className="p-2">
+                            <span className="font-bold text-slate-900">{p.name}</span>
+                            <span className="block text-[10px] text-slate-500">
+                              {[p.gender, p.age ? `${p.age} yrs` : "", inv?.service || apt?.reason]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </span>
+                          </td>
+                          <td className={`p-2 font-bold ${pending ? "text-amber-900" : "text-emerald-800"}`}>
+                            {inv ? invoicePaymentLabel(inv) : apt?.status === "COMPLETED" ? "COMPLETED" : "Booked"}
+                          </td>
+                          <td className="p-2 text-right font-mono">
+                            {inv ? `Rs. ${inv.amount.toLocaleString()}` : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div className="lg:col-span-4">
+          <ClinicMonthCalendar
+            year={calendarMonth.year}
+            month={calendarMonth.month}
+            selectedDate={selectedDate}
+            todayKey={todayKey}
+            countsByDate={countsByDate}
+            onSelectDate={setSelectedDate}
+            onChangeMonth={(year, month) => setCalendarMonth({ year, month })}
+            onJumpToToday={() => {
+              const n = new Date();
+              setCalendarMonth({ year: n.getFullYear(), month: n.getMonth() });
+              setSelectedDate(formatDateKey(n));
+            }}
+          />
+        </div>
+      </div>
+
       <div className="bg-white p-5 border rounded-xl shadow-xs space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-2 border-b pb-3">
           <div>
             <h2 className="font-bold text-sm text-[#00334f]">Results for {rangeLabel}</h2>
             <p className="text-[11px] text-slate-500">
-              Synced with Receipts & Invoices and completed consultations. Change This Month / Last Quarter / YTD 2026 above to refresh this panel.
+              Registered patients only. Synced with Receipts & Invoices: cash settle, Suwasiri debit/card, approved bank slips, and pending payments.
             </p>
           </div>
         </div>
@@ -382,7 +526,7 @@ export default function ReportsAnalyticsView({
             <div className="text-lg font-black text-emerald-900">Rs. {rangeCollected.toLocaleString()}</div>
           </div>
           <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
-            <span className="text-[10px] font-bold uppercase text-amber-900">Outstanding</span>
+            <span className="text-[10px] font-bold uppercase text-amber-900">Pending payments</span>
             <div className="text-lg font-black text-amber-950">Rs. {rangeOutstanding.toLocaleString()}</div>
           </div>
           <div className="bg-sky-50 border border-sky-100 rounded-xl p-3">
@@ -399,26 +543,28 @@ export default function ReportsAnalyticsView({
             <thead className="bg-slate-50 text-slate-600 sticky top-0">
               <tr>
                 <th className="p-2 font-bold">Date</th>
-                <th className="p-2 font-bold">Patient / service</th>
-                <th className="p-2 font-bold">Status</th>
+                <th className="p-2 font-bold">Registered patient / service</th>
+                <th className="p-2 font-bold">Payment</th>
                 <th className="p-2 font-bold text-right">Amount</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {rangeBilling.length === 0 && rangeCompleted.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-4 text-center text-slate-400 italic">No invoices or completed consults in this period.</td>
+                  <td colSpan={4} className="p-4 text-center text-slate-400 italic">No registered-patient invoices or completed consults in this period.</td>
                 </tr>
               ) : (
                 <>
                   {rangeBilling.map((inv) => (
-                    <tr key={inv.id} className={!settled(inv) ? "bg-amber-50/80" : ""}>
+                    <tr key={inv.id} className={!isInvoiceSettled(inv) ? "bg-amber-50/80" : ""}>
                       <td className="p-2 font-mono text-slate-500">{inv.date}</td>
                       <td className="p-2">
                         <span className="font-bold text-slate-900">{inv.patientName}</span>
                         <span className="block text-[10px] text-slate-500">{inv.service}</span>
                       </td>
-                      <td className="p-2 font-bold">{inv.status}</td>
+                      <td className={`p-2 font-bold ${!isInvoiceSettled(inv) ? "text-amber-900" : "text-emerald-800"}`}>
+                        {invoicePaymentLabel(inv)}
+                      </td>
                       <td className="p-2 text-right font-mono">Rs. {inv.amount.toLocaleString()}</td>
                     </tr>
                   ))}
@@ -445,105 +591,12 @@ export default function ReportsAnalyticsView({
       {/* ============================================================ */}
       {reportTab === "PRACTICE" && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            <div className="lg:col-span-8 space-y-4">
-              <div className="bg-white p-5 border rounded-xl shadow-xs">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 mb-3">
-                  <div>
-                    <h3 className="font-bold text-sm text-[#00334f]">Daily financial situation</h3>
-                    <p className="text-[11px] text-slate-500">
-                      {formatLongDate(selectedDate)} — synced with Receipts & Invoices and completed consultations.
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
-                    <span className="text-[10px] font-bold uppercase text-emerald-800">Collected</span>
-                    <div className="text-lg font-black text-emerald-900">Rs. {dayCollected.toLocaleString()}</div>
-                  </div>
-                  <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
-                    <span className="text-[10px] font-bold uppercase text-amber-900">Outstanding</span>
-                    <div className="text-lg font-black text-amber-950">Rs. {dayOutstanding.toLocaleString()}</div>
-                  </div>
-                  <div className="bg-sky-50 border border-sky-100 rounded-xl p-3">
-                    <span className="text-[10px] font-bold uppercase text-sky-800">Invoiced</span>
-                    <div className="text-lg font-black text-sky-950">Rs. {dayInvoiceTotal.toLocaleString()}</div>
-                    <p className="text-[10px] text-slate-500">{dayInvoices.length} receipt{dayInvoices.length === 1 ? "" : "s"}</p>
-                  </div>
-                  <div className="bg-violet-50 border border-violet-100 rounded-xl p-3">
-                    <span className="text-[10px] font-bold uppercase text-violet-800">Completed consults</span>
-                    <div className="text-lg font-black text-violet-950">{dayCompleted.length}</div>
-                    <p className="text-[10px] text-slate-500">{dayAppointments.length} booked that day</p>
-                  </div>
-                </div>
-                <div className="mt-4 overflow-x-auto max-h-64 overflow-y-auto border rounded-lg">
-                  <table className="w-full text-xs text-left">
-                    <thead className="bg-slate-50 text-slate-600 sticky top-0">
-                      <tr>
-                        <th className="p-2 font-bold">Patient / service</th>
-                        <th className="p-2 font-bold">Status</th>
-                        <th className="p-2 font-bold text-right">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {dayInvoices.length === 0 && dayCompleted.length === 0 ? (
-                        <tr>
-                          <td colSpan={3} className="p-4 text-center text-slate-400 italic">No invoices or completed consults on this date.</td>
-                        </tr>
-                      ) : (
-                        <>
-                          {dayInvoices.map((inv) => (
-                            <tr key={inv.id} className={!settled(inv) ? "bg-amber-50/80" : ""}>
-                              <td className="p-2">
-                                <span className="font-bold text-slate-900">{inv.patientName}</span>
-                                <span className="block text-[10px] text-slate-500">{inv.service}</span>
-                              </td>
-                              <td className="p-2 font-bold">{inv.status}</td>
-                              <td className="p-2 text-right font-mono">Rs. {inv.amount.toLocaleString()}</td>
-                            </tr>
-                          ))}
-                          {dayCompleted.map((apt) => (
-                            <tr key={`c-${apt.id}`} className="bg-violet-50/50">
-                              <td className="p-2">
-                                <span className="font-bold text-slate-900">{apt.patientName || apt.patientId}</span>
-                                <span className="block text-[10px] text-slate-500">Completed consult · {apt.time} · {apt.reason}</span>
-                              </td>
-                              <td className="p-2 font-bold text-emerald-800">COMPLETED</td>
-                              <td className="p-2 text-right text-slate-400">—</td>
-                            </tr>
-                          ))}
-                        </>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-            <div className="lg:col-span-4">
-              <ClinicMonthCalendar
-                year={calendarMonth.year}
-                month={calendarMonth.month}
-                selectedDate={selectedDate}
-                todayKey={todayKey}
-                countsByDate={countsByDate}
-                onSelectDate={setSelectedDate}
-                onChangeMonth={(year, month) => setCalendarMonth({ year, month })}
-                onJumpToToday={() => {
-                  const n = new Date();
-                  setCalendarMonth({ year: n.getFullYear(), month: n.getMonth() });
-                  setSelectedDate(formatDateKey(n));
-                }}
-              />
-            </div>
-          </div>
           {/* Key Stat Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="bg-white p-4 border rounded-xl shadow-xs">
               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Total Registered</span>
               <div className="text-2xl font-black text-[#00334f] mt-1">{totalPatients}</div>
-              <p className="text-[10px] text-emerald-600 font-bold mt-0.5 flex items-center">
-                <ArrowUpRight className="w-3 h-3" /> +{newPatientsThisMonth} this month
-              </p>
+              <p className="text-[10px] text-slate-500 mt-0.5">All registered patients to date</p>
             </div>
 
             <div className="bg-white p-4 border rounded-xl shadow-xs">
@@ -567,13 +620,13 @@ export default function ReportsAnalyticsView({
             <div className="bg-white p-4 border rounded-xl shadow-xs">
               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Total Revenue</span>
               <div className="text-2xl font-black text-emerald-900 mt-1">Rs. {totalRevenueMonth.toLocaleString()}</div>
-              <p className="text-[10px] text-emerald-600 font-bold mt-0.5">Paid invoices (Receipts & Invoices)</p>
+              <p className="text-[10px] text-emerald-600 font-bold mt-0.5">Cash, debit, and approved slips</p>
             </div>
 
             <div className="bg-white p-4 border rounded-xl shadow-xs">
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Outstanding</span>
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Pending payments</span>
               <div className="text-2xl font-black text-amber-900 mt-1">Rs. {outstandingInvoices.toLocaleString()}</div>
-              <p className="text-[10px] text-slate-400 mt-0.5">Pending / overdue invoices</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Counter unpaid + slips awaiting approval</p>
             </div>
           </div>
 
@@ -608,8 +661,8 @@ export default function ReportsAnalyticsView({
             <div className="lg:col-span-5 bg-white p-6 border rounded-xl shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b pb-3">
                 <div>
-                  <h3 className="font-bold text-sm text-[#00334f]">Billing Revenue Breakdown (Rs. LKR)</h3>
-                  <p className="text-[11px] text-slate-500">Private Cash vs Insurance Claims vs Telehealth Payments</p>
+                  <h3 className="font-bold text-sm text-[#00334f]">Billing from Receipts & Invoices (Rs. LKR)</h3>
+                  <p className="text-[11px] text-slate-500">Cash settle, Suwasiri debit/card, approved bank slips, and pending payments</p>
                 </div>
               </div>
 
@@ -617,7 +670,7 @@ export default function ReportsAnalyticsView({
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={REVENUE_BREAKDOWN_DATA}
+                      data={pieData}
                       dataKey="value"
                       nameKey="name"
                       cx="50%"
@@ -626,7 +679,7 @@ export default function ReportsAnalyticsView({
                       innerRadius={45}
                       label={({ percent }: any) => `${((percent || 0) * 100).toFixed(0)}%`}
                     >
-                      {REVENUE_BREAKDOWN_DATA.map((entry, index) => (
+                      {pieData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
@@ -636,7 +689,7 @@ export default function ReportsAnalyticsView({
               </div>
 
               <div className="space-y-1.5 text-xs">
-                {REVENUE_BREAKDOWN_DATA.map((item) => (
+                {revenueBreakdown.map((item) => (
                   <div key={item.name} className="flex items-center justify-between">
                     <span className="flex items-center gap-2 text-slate-600 text-[11px]">
                       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />

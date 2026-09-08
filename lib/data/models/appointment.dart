@@ -182,6 +182,17 @@ class Doctor extends Equatable {
 
 enum AppointmentStatus { upcoming, completed, cancelled }
 
+AppointmentStatus appointmentStatusFrom(dynamic raw) {
+  final s = (raw as String? ?? '').trim().toLowerCase().replaceAll(' ', '_');
+  if (s == 'completed' || s == 'complete') {
+    return AppointmentStatus.completed;
+  }
+  if (s == 'cancelled' || s == 'canceled') {
+    return AppointmentStatus.cancelled;
+  }
+  return AppointmentStatus.upcoming;
+}
+
 /// Clinic visit vs video/telehealth consult.
 enum ConsultMode { clinic, video }
 
@@ -295,6 +306,11 @@ class Appointment extends Equatable {
         'paymentMethod': paymentMethod,
         'paidBySuwasiri': paidBySuwasiri,
         'suwasiriReceiptUrl': suwasiriReceiptUrl,
+        if (suwasiriReceiptUrl != null &&
+            suwasiriReceiptUrl!.isNotEmpty &&
+            paymentStatus.toUpperCase() != 'PAID' &&
+            paymentStatus.toUpperCase() != 'SETTLED')
+          'receiptApproved': false,
         if (patientAge != null) 'patientAge': patientAge,
         if (patientGender.isNotEmpty) 'patientGender': patientGender,
         'feeAmount': feeLkr,
@@ -319,10 +335,7 @@ class Appointment extends Equatable {
       specialty: map['specialty'] as String? ?? '',
       timeSlot:
           DateTime.tryParse(map['timeSlot'] as String? ?? '') ?? DateTime.now(),
-      status: AppointmentStatus.values.firstWhere(
-        (e) => e.name == map['status'],
-        orElse: () => AppointmentStatus.upcoming,
-      ),
+      status: appointmentStatusFrom(map['status']),
       token: map['token'] as String?,
       consultMode: isVideo ? ConsultMode.video : ConsultMode.clinic,
       hospital: map['hospital'] as String? ??
