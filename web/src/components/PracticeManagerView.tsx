@@ -470,19 +470,6 @@ export default function PracticeManagerView({
               </div>
             ))}
           </div>
-
-          {isAdmin && (
-            <div className="flex justify-end pt-3 border-t">
-              <button
-                type="button"
-                onClick={handleSaveRoster}
-                className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer"
-              >
-                <Save className="w-4 h-4" />
-                Save & Commit Weekly Schedule
-              </button>
-            </div>
-          )}
         </div>
       )}
 

@@ -570,6 +570,10 @@ export interface ClinicMessage {
   text: string;
   timestamp: string;
   channel: string;
+  senderId?: string;
+  recipientId?: string;
+  recipientName?: string;
+  hospitalId?: string;
   isPatientMessage?: boolean;
   patientId?: string;
   subject?: string;

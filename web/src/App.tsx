@@ -111,6 +111,7 @@ import {
   matchSessionDoctor,
   staffUserAsDoctor,
   suwasiriPatientIdForClinicFile,
+  resolveSuwasiriNotifyId,
   appointmentDateKey,
   isSameDoctor,
 } from "./sync/suwasiriAppointments";
@@ -838,9 +839,6 @@ export default function App() {
   const [ledgerSearchQuery, setLedgerSearchQuery] = useState<string>("");
   const [ledgerFilterTab, setLedgerFilterTab] = useState<"all" | "income" | "expense">("all");
   const [ledgerCategoryFilter, setLedgerCategoryFilter] = useState<string>("all");
-
-  // Secure clinic chat active channel
-  const [activeChannel, setActiveChannel] = useState<string>("#clinic-team");
 
   // Fetch initial client-server state
   const fetchState = async () => {
@@ -1636,6 +1634,16 @@ export default function App() {
       return;
     }
     handleStartConsultation(person, apt);
+  };
+
+  const openReceptionPatientFile = (patient: Patient, apt?: Appointment | null) => {
+    const person = apt ? overlayBookingIdentity(apt, patient) : patient;
+    setActiveHubPatient(null);
+    setHubDispatchProfile(false);
+    setExamFileOnlyView(true);
+    setExamAppointmentId(apt?.id || null);
+    setExamInitialTab("consultation");
+    setActiveDoctorRecordPatient(person);
   };
 
   // Tasks checklist controls
@@ -2739,7 +2747,7 @@ export default function App() {
             paidBySuwasiri: true,
             suwasiriReceiptUrl: invoice.suwasiriReceiptUrl,
             appointmentId,
-            paymentStatus: "PAID",
+            paymentStatus: "SETTLED",
             receiptApproved: true,
           }),
         });
@@ -2754,7 +2762,7 @@ export default function App() {
             status: "PAID",
             paidBySuwasiri: true,
             paymentMethod: invoice.paymentMethod || "Suwasiri Manual",
-            paymentStatus: "PAID",
+            paymentStatus: "SETTLED",
             receiptApproved: true,
           }),
         });
@@ -2764,13 +2772,13 @@ export default function App() {
       }
       if (appointmentId) {
         await updateSuwasiriAppointmentPayment(appointmentId, {
-          paymentStatus: "PAID",
+          paymentStatus: "SETTLED",
           paymentMethod: invoice.paymentMethod || "Suwasiri Manual",
           paidBySuwasiri: true,
           receiptApproved: true,
         });
         const patch = {
-          paymentStatus: "PAID",
+          paymentStatus: "SETTLED",
           paymentMethod: invoice.paymentMethod || "Suwasiri Manual",
           paidBySuwasiri: true,
           receiptApproved: true,
@@ -2927,7 +2935,10 @@ export default function App() {
     setFocusedSearchPatientId(null);
     setSearchQuery("");
     setActiveHubPatient(null);
-    if (isFrontDeskStaff) return;
+    if (isFrontDeskStaff) {
+      openReceptionPatientFile(patient);
+      return;
+    }
     handleStartConsultation(patient);
   };
 
@@ -2989,8 +3000,14 @@ export default function App() {
     }
   };
 
-  const handlePostSecureClinicChat = async (text: string, channel: string) => {
+  const handlePostSecureClinicChat = async (
+    text: string,
+    recipient: { id: string; name: string; role?: string }
+  ) => {
     const sName = sessionUser?.name || currentRole;
+    const senderId = sessionUser?.id || sessionUserId || sName;
+    const pair = [senderId, recipient.id].sort();
+    const channel = `dm:${pair[0]}__${pair[1]}`;
 
     try {
       const res = await fetch("/api/clinical-chat", {
@@ -2999,6 +3016,10 @@ export default function App() {
         body: JSON.stringify({
           sender: sName,
           senderRole: currentRole,
+          senderId,
+          recipientId: recipient.id,
+          recipientName: recipient.name,
+          hospitalId: sessionHospitalId,
           text,
           channel
         })
@@ -4635,12 +4656,17 @@ export default function App() {
                                 {/* Patient Bio */}
                                 <td className="p-3">
                                   <div 
-                                    className={`flex items-start gap-2.5 ${isFrontDeskStaff ? "" : "cursor-pointer group"}`}
+                                    className="flex items-start gap-2.5 cursor-pointer group"
                                     onClick={() => {
-                                      if (isFrontDeskStaff) return;
+                                      if (isFrontDeskStaff) {
+                                        openReceptionPatientFile(p || stubPatientFromBooking(apt), apt);
+                                        return;
+                                      }
                                       openBookedPatient(apt, p);
                                     }}
-                                    title={isFrontDeskStaff ? undefined : (isVideoBooking(apt) ? "Open Telehealth room and call this patient" : "Click patient name to launch GP Exam Room")}
+                                    title={isFrontDeskStaff
+                                      ? "View this patient’s clinical file (read-only)"
+                                      : (isVideoBooking(apt) ? "Open Telehealth room and call this patient" : "Click patient name to launch GP Exam Room")}
                                   >
                                     <div className="w-8 h-8 rounded-full bg-[#dee8ff] text-[#00334f] font-bold text-xs flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                                       {(appointmentPatientName(apt, p) || "P").split(" ").map(n => n[0]).join("").slice(0, 2)}
@@ -4777,7 +4803,7 @@ export default function App() {
                     </h2>
                     <p className="text-xs text-slate-500 font-sans">
                       {isFrontDeskStaff
-                        ? "Walk-in: enter the Unique Health ID, Sync to Portal, then Save to Patient Clinical Records. Suwasiri app new-patient registrations at this clinic appear here automatically."
+                        ? "Click a patient name to view their clinical file (read-only). Walk-in: enter the Unique Health ID, Sync to Portal, then Save to Patient Clinical Records. Suwasiri app new-patient registrations at this clinic appear here automatically."
                         : "Click a patient name to open their GP Exam Room clinical profile."}
                     </p>
                   </div>
@@ -4860,6 +4886,10 @@ export default function App() {
                       key={pat.id}
                       className="border p-4 rounded-lg bg-slate-50/50 hover:bg-white hover:border-[#00334f] hover:shadow transition-all space-y-3 cursor-pointer"
                       onClick={() => {
+                        if (isFrontDeskStaff) {
+                          openReceptionPatientFile(pat);
+                          return;
+                        }
                         if (hideLiveConsultChrome) {
                           setHubDispatchProfile(false);
                           setExamInitialTab("consultation");
@@ -5547,9 +5577,13 @@ export default function App() {
                 messages={clinicMessages}
                 currentRole={currentRole}
                 currentUserName={sessionUser?.name || currentRole}
-                staffNames={hospitalStaff.map((s) => s.name).filter(Boolean)}
-                activeChannel={activeChannel}
-                setActiveChannel={setActiveChannel}
+                currentUserId={sessionUser?.id || sessionUserId}
+                hospitalId={sessionHospitalId}
+                staff={hospitalStaff.map((s) => ({
+                  id: s.userId || s.id,
+                  name: s.name,
+                  role: s.role,
+                }))}
                 onPostMessage={handlePostSecureClinicChat}
               />
             )}
@@ -6388,6 +6422,18 @@ export default function App() {
                       patientEmail: live?.email || rec.patientEmail,
                     } : r);
                     void persistRecalls(next);
+                    if (method === "SMS") {
+                      const notifyId = resolveSuwasiriNotifyId(
+                        live || { id: rec.patientId, name: rec.patientName },
+                        [...patients, ...suwasiriAppointments]
+                      );
+                      void pushSuwasiriNotification({
+                        patientId: notifyId,
+                        title: "Clinic reminder",
+                        body: `Please book your ${rec.category}${rec.notes ? ` — ${rec.notes}` : ""}. Due ${rec.dueDate}.`,
+                        type: "system",
+                      });
+                    }
                   }}
                   onBookAppointment={(recall, consultMode) => {
                     setNewAptPatientId(recall.patientId);
@@ -7372,8 +7418,13 @@ export default function App() {
       {/* 16-TAB DOCTOR CLINICAL RECORD (BP PREMIER / SRI LANKAN STANDARD CONSULTATION) */}
       {activeDoctorRecordPatient && (
         <DoctorClinicalRecordModal
+          embedded={isFrontDeskStaff}
+          asOverlay
+          readOnly={isFrontDeskStaff}
+          heightMode={isFrontDeskStaff ? "fill" : "viewport"}
           initialTab={examInitialTab}
-          hideActiveConsultDetails={examFileOnlyView || hideLiveConsultChrome}
+          hideActiveConsultDetails={!isFrontDeskStaff && (examFileOnlyView || hideLiveConsultChrome)}
+          linkedAppointmentId={isFrontDeskStaff ? (examAppointmentId || undefined) : undefined}
           patient={mergeClinicalDocuments(applySuwasiriChart(
             patients.find((p) => p.id === activeDoctorRecordPatient.id) || activeDoctorRecordPatient,
             suwasiriCharts[activeDoctorRecordPatient.id]
@@ -7384,19 +7435,23 @@ export default function App() {
           clinicName={activeHospital?.name}
           sessionDoctorName={sessionUser?.name || "GP"}
           sessionDoctor={examBookingDoctor}
-          onClose={() => setActiveDoctorRecordPatient(null)}
-          onUpdatePatient={persistClinicalFile}
-          onBookAppointment={bookFromClinicalRecord}
-          onOrderPathology={(testName, remarks) => {
+          onClose={() => {
+            setActiveDoctorRecordPatient(null);
+            setExamFileOnlyView(false);
+            setExamAppointmentId(null);
+          }}
+          onUpdatePatient={isFrontDeskStaff ? () => undefined : persistClinicalFile}
+          onBookAppointment={isFrontDeskStaff ? undefined : bookFromClinicalRecord}
+          onOrderPathology={isFrontDeskStaff ? undefined : ((testName, remarks) => {
             void handleHubOrderLabTest(
               activeDoctorRecordPatient.id,
               testName,
               remarks,
               activeDoctorRecordPatient.name
             );
-          }}
-          onUpdateAppointment={applyDoctorAppointmentPatch}
-          onRenderPrescription={(rx) => {
+          })}
+          onUpdateAppointment={isFrontDeskStaff ? undefined : applyDoctorAppointmentPatch}
+          onRenderPrescription={isFrontDeskStaff ? undefined : ((rx) => {
             if (activeDoctorRecordPatient) {
               const updated = {
                 ...activeDoctorRecordPatient,
@@ -7405,11 +7460,11 @@ export default function App() {
               setPatients(prev => prev.map(p => p.id === updated.id ? updated : p));
               setActiveDoctorRecordPatient(updated);
             }
-          }}
-          onLaunchTelehealth={(apt) => {
+          })}
+          onLaunchTelehealth={isFrontDeskStaff ? undefined : ((apt) => {
             setActiveDoctorRecordPatient(null);
             setActiveTab("telehealth");
-          }}
+          })}
         />
       )}
 

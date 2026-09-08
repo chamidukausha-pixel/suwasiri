@@ -9,6 +9,7 @@ import '../../core/theme/app_colors.dart';
 import '../../data/models/appointment.dart';
 import '../../data/services/help_desk_replies.dart';
 import '../../localization/app_localizations.dart';
+import '../appointments/doctor_directory_intent.dart';
 import '../widgets/profile_avatar.dart';
 import '../widgets/sheet_close_bar.dart';
 
@@ -163,12 +164,14 @@ class _ChatBubble {
     required this.isUser,
     this.imagePath,
     this.suggestedDoctors = const [],
+    this.specialties = const [],
   });
 
   final String text;
   final bool isUser;
   final String? imagePath;
   final List<Doctor> suggestedDoctors;
+  final List<String> specialties;
 }
 
 class _HelpDeskSheet extends StatefulWidget {
@@ -334,6 +337,7 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
           text: answer.text,
           isUser: false,
           suggestedDoctors: answer.suggestedDoctors,
+          specialties: answer.specialties,
         ),
       );
       _busy = false;
@@ -410,6 +414,15 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
         ),
       ),
     );
+  }
+
+  void _openDoctorsTab({List<String> specialties = const []}) {
+    final categoryId = specialties.isEmpty
+        ? 'all'
+        : HelpDeskReplies.categoryIdForSpecialties(specialties);
+    DoctorDirectoryIntent.set(categoryId: categoryId);
+    Navigator.of(context).pop();
+    MainTabScope.go(context, 1);
   }
 
   @override
@@ -554,10 +567,13 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
                   final m = _messages[i];
                   return _BubbleTile(
                     message: m,
-                    onOpenDoctors: () {
-                      Navigator.of(context).pop();
-                      MainTabScope.go(context, 1);
-                    },
+                    onOpenDoctors: () =>
+                        _openDoctorsTab(specialties: m.specialties),
+                    onDoctorTap: (doctor) => _openDoctorsTab(
+                      specialties: m.specialties.isNotEmpty
+                          ? m.specialties
+                          : [doctor.specialty],
+                    ),
                   );
                 },
               ),
@@ -745,10 +761,12 @@ class _BubbleTile extends StatelessWidget {
   const _BubbleTile({
     required this.message,
     this.onOpenDoctors,
+    this.onDoctorTap,
   });
 
   final _ChatBubble message;
   final VoidCallback? onOpenDoctors;
+  final ValueChanged<Doctor>? onDoctorTap;
 
   @override
   Widget build(BuildContext context) {
@@ -815,41 +833,62 @@ class _BubbleTile extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               for (final d in message.suggestedDoctors)
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 6),
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.trustBlueSoft,
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: onDoctorTap == null ? null : () => onDoctorTap!(d),
                     borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        d.name,
-                        style: const TextStyle(
-                          color: AppColors.trustBlueDark,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
+                    child: Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.trustBlueSoft,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppColors.trustBlue.withValues(alpha: 0.2),
                         ),
                       ),
-                      Text(
-                        d.specialty,
-                        style: const TextStyle(
-                          color: AppColors.trustBlue,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
-                        ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  d.name,
+                                  style: const TextStyle(
+                                    color: AppColors.trustBlueDark,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                Text(
+                                  d.specialty,
+                                  style: const TextStyle(
+                                    color: AppColors.trustBlue,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Text(
+                                  d.hospital,
+                                  style: const TextStyle(
+                                    color: AppColors.slateMuted,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.chevron_right_rounded,
+                            color: AppColors.trustBlue,
+                            size: 22,
+                          ),
+                        ],
                       ),
-                      Text(
-                        d.hospital,
-                        style: const TextStyle(
-                          color: AppColors.slateMuted,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               SizedBox(

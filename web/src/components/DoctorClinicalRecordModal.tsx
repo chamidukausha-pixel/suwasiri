@@ -28,7 +28,7 @@ import { issueVaccineHistoryToSuwasiri } from "../sync/suwasiriVaccinations";
 import { issueMedicalCertificateToSuwasiri } from "../sync/suwasiriCertificates";
 import { pushSuwasiriNotification } from "../sync/suwasiriNotifications";
 import ReceptionBookingScheduler from "./ReceptionBookingScheduler";
-import { appointmentBelongsToPatient, staffUserAsDoctor } from "../sync/suwasiriAppointments";
+import { appointmentBelongsToPatient, resolveSuwasiriNotifyId, staffUserAsDoctor } from "../sync/suwasiriAppointments";
 
 export type ClinicalTab = 
   | "summary"
@@ -82,6 +82,10 @@ interface Props {
   heightMode?: "viewport" | "fill" | "natural";
   /** Live e-Rx / Active Clinical Consultation block under SOAP (doctor exam room only). */
   consultationFooter?: React.ReactNode;
+  /** Reception / front-desk file view: left clinical sections, no add or edit. */
+  readOnly?: boolean;
+  /** Wrap in a modal backdrop even when using the embedded (left-nav) layout. */
+  asOverlay?: boolean;
 }
 
 export default function DoctorClinicalRecordModal({
@@ -106,7 +110,10 @@ export default function DoctorClinicalRecordModal({
   hideActiveConsultDetails = false,
   heightMode = "viewport",
   consultationFooter,
+  readOnly = false,
+  asOverlay = false,
 }: Props) {
+  const locked = Boolean(readOnly);
   const issuedDoctor = sessionDoctorName || "Dr. Priyantha Silva";
   const issuedClinic = clinicName || patient.medicalCenter || "PrimeCare Medical Centre - Colombo Central";
   const bookingDoctor =
@@ -133,6 +140,7 @@ export default function DoctorClinicalRecordModal({
   const [soapObjective, setSoapObjective] = useState(embedded ? "" : "Alert and orientated. Chest: Clear bilaterally, vesicular breath sounds. CVS: Dual heart sounds, no murmurs. Abdomen: Soft, non-tender. BP: 130/82 mmHg, Pulse: 72 bpm, SpO2: 98% on room air.");
   const [soapAssessment, setSoapAssessment] = useState(embedded ? "" : "1. Bronchial Asthma (mild, well-controlled)\n2. Essential Hypertension (stable on monotherapy)\n3. Osteoarthritis (stable, advised gentle range of motion exercises)");
   const [soapPlan, setSoapPlan] = useState(embedded ? "" : "1. Continue regular Ventolin PRN\n2. Repeat FBC and fasting lipid profile in 3 months\n3. Review in clinic in 6 weeks or sooner if symptoms escalate\n4. Reassure regarding lifestyle and hydration");
+  const [showSoapSubjective, setShowSoapSubjective] = useState(true);
 
   // Live Anthropometry & Observations with AUTO BMI calculation
   const [obsHeightCm, setObsHeightCm] = useState<number>(168);
@@ -345,6 +353,7 @@ export default function DoctorClinicalRecordModal({
     });
 
   const persistAllergies = (items: string[]) => {
+    if (locked) return;
     const joined = items.length ? items.join(", ") : "NKDA";
     onUpdatePatient({ ...patient, allergies: joined });
   };
@@ -361,6 +370,11 @@ export default function DoctorClinicalRecordModal({
   const pastAppointments = [...patientAppointments].sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
   const viewingApt = patientAppointments.find((a) => a.id === selectedAppointmentId) || currentBooking;
   const bookingFeeLkr = currentBooking && typeof currentBooking.feeAmount === "number" ? currentBooking.feeAmount : consultFeeLkr;
+  const encounterBookingLabel = currentBooking
+    ? `${currentBooking.reason || currentBooking.type || "Consultation"}${currentBooking.time ? ` (${currentBooking.time})` : ""}`
+    : "Walk-in unscheduled consultation (today)";
+  const encounterModalityLabel =
+    currentBooking && isVideoApt(currentBooking) ? "Telehealth Video" : consultModality;
   const viewingPastEncounter = Boolean(currentBooking && viewingApt && viewingApt.id !== currentBooking.id);
   const dayKey = (value?: string) => (value || "").slice(0, 10);
 
@@ -393,6 +407,7 @@ export default function DoctorClinicalRecordModal({
   };
 
   const fileClinicalDocFromFile = (file: File, scanned: boolean) => {
+    if (locked) return;
     const reader = new FileReader();
     reader.onload = () => {
       const doc: ClinicalDocument = {
@@ -495,6 +510,7 @@ export default function DoctorClinicalRecordModal({
 
   // Add observation record
   const handleSaveObservation = () => {
+    if (locked) return;
     const newObs: ObservationRecord = {
       id: `obs-${Date.now()}`,
       date: new Date().toISOString().split("T")[0],
@@ -527,7 +543,7 @@ export default function DoctorClinicalRecordModal({
   // Add Diagnosis
   const handleAddDiagnosis = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newDiagnosisInput.trim()) return;
+    if (locked || !newDiagnosisInput.trim()) return;
 
     const newDiag = {
       id: `diag-${Date.now()}`,
@@ -554,7 +570,7 @@ export default function DoctorClinicalRecordModal({
   // Add Medication
   const handleAddMedication = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMedName.trim()) return;
+    if (locked || !newMedName.trim()) return;
 
     const newRx: PrescriptionRecord = {
       id: `rx-${Date.now()}`,
@@ -606,6 +622,7 @@ export default function DoctorClinicalRecordModal({
   // Add Pathology Order
   const handleOrderPathology = (e: React.FormEvent) => {
     e.preventDefault();
+    if (locked) return;
     const newLab: LabResult = {
       id: `lab-${Date.now()}`,
       testName: pathTestSelection,
@@ -646,6 +663,7 @@ export default function DoctorClinicalRecordModal({
     ].join("\n");
 
   const savePathologyNote = (labId: string) => {
+    if (locked) return;
     const note = (pathNoteDrafts[labId] ?? "").trim();
     const nextLabs = (patient.labResults || []).map((lr) =>
       lr.id === labId ? { ...lr, doctorNotes: note } : lr
@@ -669,6 +687,7 @@ export default function DoctorClinicalRecordModal({
   // Add Imaging Order
   const handleOrderImaging = (e: React.FormEvent) => {
     e.preventDefault();
+    if (locked) return;
     const newImg: ImagingRecord = {
       id: `img-${Date.now()}`,
       patientId: patient.id,
@@ -713,6 +732,7 @@ export default function DoctorClinicalRecordModal({
       .join("\n");
 
   const fileIssuedImagingReport = (img: ImagingRecord) => {
+    if (locked) return;
     const report = (imagingReportDrafts[img.id] || img.radiologistReport || "").trim();
     if (!report) {
       showToast("Enter the imaging laboratory report before filing it.");
@@ -741,9 +761,10 @@ export default function DoctorClinicalRecordModal({
     showToast(`Issued ${img.modality} report filed under ${patient.name} and synced to Suwasiri Vault → Lab reports.`);
   };
 
-  // Add Referral
-  const handleCreateReferral = (e: React.FormEvent) => {
+  // Add Referral — Save eReferral writes the letter and notifies the patient in Suwasiri.
+  const handleCreateReferral = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (locked) return;
     const newRef: ReferralRecord = {
       id: `ref-${Date.now()}`,
       patientId: patient.id,
@@ -756,7 +777,7 @@ export default function DoctorClinicalRecordModal({
       urgency: "ROUTINE",
       status: "SENT_E_REFERRAL",
       attachedDocuments: ["Shared Health Summary.pdf", "Recent Pathology Results.pdf"],
-      referringDoctor: "Dr. Priyantha Silva",
+      referringDoctor: issuedDoctor,
       doctorProviderNo: "4829102A"
     };
 
@@ -765,13 +786,24 @@ export default function DoctorClinicalRecordModal({
       referralsList: [newRef, ...(patient.referralsList || [])]
     };
     onUpdatePatient(updated);
-    showToast(`Referral sent to ${refSpecialist}. ${patient.name} was notified in Suwasiri.`);
-    void pushSuwasiriNotification({
-      patientId: patient.id,
-      title: "Specialist referral issued",
-      body: `${issuedDoctor} referred you to ${refSpecialist} (${refSpecialty}). Open Suwasiri for the clinic details.`,
-      type: "appointment",
-    });
+
+    const notifyId = resolveSuwasiriNotifyId(patient, appointments);
+    let notified = false;
+    try {
+      notified = await pushSuwasiriNotification({
+        patientId: notifyId,
+        title: "Specialist referral issued",
+        body: `${issuedDoctor} referred you to ${refSpecialist} (${refSpecialty}). ${refClinicalSummary || "Open Suwasiri for the clinic details."}`.trim(),
+        type: "appointment",
+      });
+    } catch (err) {
+      console.warn("Suwasiri referral notification failed", err);
+    }
+    showToast(
+      notified
+        ? `eReferral saved. ${patient.name} was notified in the Suwasiri app.`
+        : `eReferral saved for ${refSpecialist}. Could not reach the Suwasiri app — check this patient is a registered Suwasiri user.`
+    );
   };
 
   // Tabs — exam room hides Summary, Medications, My Health Record
@@ -925,11 +957,11 @@ export default function DoctorClinicalRecordModal({
                 <button
                   key={t.id}
                   type="button"
-                  draggable
-                  onDragStart={() => setDragNavId(t.id)}
-                  onDragOver={(e) => e.preventDefault()}
+                  draggable={!locked}
+                  onDragStart={() => { if (!locked) setDragNavId(t.id); }}
+                  onDragOver={(e) => { if (!locked) e.preventDefault(); }}
                   onDrop={() => {
-                    if (!dragNavId || dragNavId === t.id) return;
+                    if (locked || !dragNavId || dragNavId === t.id) return;
                     const next = [...examNavOrder];
                     const from = next.indexOf(dragNavId as ClinicalTab);
                     const to = next.indexOf(t.id as ClinicalTab);
@@ -941,7 +973,9 @@ export default function DoctorClinicalRecordModal({
                     setDragNavId(null);
                   }}
                   onClick={() => setActiveTab(t.id as ClinicalTab)}
-                  className={`w-full text-left rounded-xl border-2 px-3 py-2.5 text-xs font-extrabold flex items-center gap-2 transition shadow-xs cursor-grab active:cursor-grabbing ${
+                  className={`w-full text-left rounded-xl border-2 px-3 py-2.5 text-xs font-extrabold flex items-center gap-2 transition shadow-xs ${
+                    locked ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"
+                  } ${
                     isActive ? `${t.active} ring-2 ring-offset-1 ring-slate-300` : `${t.box} hover:brightness-95`
                   }`}
                 >
@@ -1040,10 +1074,12 @@ export default function DoctorClinicalRecordModal({
               <div className="border-b pb-4">
                 <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
                   <Stethoscope className="w-4 h-4 text-sky-600" />
-                  Doctor Clinical Consultation
+                  {locked ? "Doctor Clinical Consultation & Activity Record" : "Doctor Clinical Consultation"}
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Write one doctor note for this visit. Completed notes sync to Suwasiri Vault.
+                  {locked
+                    ? "View-only clinical file. Reception cannot edit or add records."
+                    : "Write one doctor note for this visit. Completed notes sync to Suwasiri Vault."}
                 </p>
               </div>
 
@@ -1062,17 +1098,77 @@ export default function DoctorClinicalRecordModal({
                 </div>
               )}
 
+              {locked && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Encounter / current booking</label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={encounterBookingLabel}
+                      className="w-full p-2 bg-slate-100 border border-slate-300 rounded-lg font-semibold text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Consultation Modality</label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={encounterModalityLabel}
+                      className="w-full p-2 bg-slate-100 border border-slate-300 rounded-lg font-semibold text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Consultation Fee (LKR)</label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={`Rs. ${bookingFeeLkr.toLocaleString()}`}
+                      className="w-full p-2 bg-slate-100 border border-slate-300 rounded-lg font-semibold text-slate-800"
+                    />
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Reason for Visit / Chief Complaint:</label>
                 <input
                   type="text"
                   value={soapReason}
                   onChange={e => setSoapReason(e.target.value)}
-                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg font-semibold"
-                  readOnly={viewingPastEncounter}
+                  className={`w-full p-2 border border-slate-300 rounded-lg font-semibold ${locked || viewingPastEncounter ? "bg-slate-100 text-slate-800" : "bg-slate-50"}`}
+                  readOnly={locked || viewingPastEncounter}
                 />
               </div>
 
+              {locked ? (
+                <div className="rounded-xl border-2 border-sky-300 bg-sky-50 overflow-hidden">
+                  <div className="px-3 py-2 flex items-center justify-between gap-2">
+                    <div>
+                      <span className="block font-extrabold text-slate-900 text-[11px]">Subjective (History of Presenting Complaint)</span>
+                      <span className="block text-[10px] text-slate-600">Recorded doctor notes for this visit</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowSoapSubjective((v) => !v)}
+                      className="text-[10px] font-extrabold uppercase tracking-wide text-sky-800 bg-white border border-sky-200 px-2 py-1 rounded-md"
+                    >
+                      {showSoapSubjective ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                  {showSoapSubjective && (
+                    <div className="px-3 pb-3">
+                      <textarea
+                        rows={10}
+                        value={soapSubjective || doctorNote}
+                        readOnly
+                        className="w-full h-56 overflow-y-auto p-2 bg-white border border-slate-200 rounded-lg text-xs resize-none"
+                        placeholder="No subjective notes on this file."
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
               <div className="rounded-xl border-2 border-sky-300 bg-sky-50 overflow-hidden">
                 <div className="px-3 py-2">
                   <span className="block font-extrabold text-slate-900 text-[11px]">Doctor notes</span>
@@ -1089,13 +1185,14 @@ export default function DoctorClinicalRecordModal({
                   />
                 </div>
               </div>
+              )}
 
               <div className="flex justify-between items-center pt-3 border-t">
                 <div className="flex items-center gap-2 text-slate-500 text-[11px]">
                   <ShieldCheck className="w-4 h-4 text-emerald-600" />
                   <span>SLMC • <strong>{issuedDoctor}</strong> • {issuedClinic}</span>
                 </div>
-                {!viewingPastEncounter && (
+                {!locked && !viewingPastEncounter && (
                 <button
                   onClick={() => {
                     const diagnosisLine = (patient.diagnosesList || [])
@@ -1229,7 +1326,7 @@ export default function DoctorClinicalRecordModal({
                 )}
               </div>
             </div>
-            {consultationFooter}
+            {!locked && consultationFooter}
             </div>
           )}
 
@@ -1258,6 +1355,7 @@ export default function DoctorClinicalRecordModal({
                 <h3 className="font-bold text-sm text-slate-900">Active & Resolved Medical Diagnoses (ICD-10)</h3>
               </div>
 
+              {!locked && (
               <form onSubmit={handleAddDiagnosis} className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row gap-3 items-end">
                 <div className="flex-1">
                   <label className="block font-bold text-slate-700 mb-1">Diagnosis / Condition Name:</label>
@@ -1286,6 +1384,7 @@ export default function DoctorClinicalRecordModal({
                   Add Diagnosis
                 </button>
               </form>
+              )}
 
               <div className="divide-y divide-slate-100">
                 {patient.medicalHistory.map((d, i) => (
@@ -1310,6 +1409,7 @@ export default function DoctorClinicalRecordModal({
                 </div>
               </div>
 
+              {!locked && (
               <form onSubmit={handleAddMedication} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
@@ -1359,6 +1459,7 @@ export default function DoctorClinicalRecordModal({
                   </button>
                 </div>
               </form>
+              )}
 
               <div className="divide-y divide-slate-100">
                 {patient.prescriptionsList.map(rx => (
@@ -1393,7 +1494,9 @@ export default function DoctorClinicalRecordModal({
               <div>
                 <h3 className="font-bold text-sm text-slate-900">Patient Allergies &amp; Adverse Drug Reactions</h3>
                 <p className="text-slate-500 text-[11px] mt-0.5">
-                  Edit or delete any listed allergy. Changes save on this file, the header badge, and {patient.name}’s Suwasiri Unique Health ID.
+                  {locked
+                    ? "Declared allergies on this file (view only)."
+                    : `Edit or delete any listed allergy. Changes save on this file, the header badge, and ${patient.name}’s Suwasiri Unique Health ID.`}
                 </p>
               </div>
 
@@ -1403,7 +1506,7 @@ export default function DoctorClinicalRecordModal({
                     <ShieldAlert className="w-4 h-4" />
                     <span>Declared allergies</span>
                   </div>
-                  {allergyItems.length > 0 && (
+                  {allergyItems.length > 0 && !locked && (
                     <button
                       type="button"
                       className="px-2.5 py-1 bg-white border border-red-300 text-red-800 font-bold rounded-lg"
@@ -1474,6 +1577,8 @@ export default function DoctorClinicalRecordModal({
                         ) : (
                           <>
                             <span className="flex-1 min-w-[120px] text-red-900 font-extrabold text-sm">{item}</span>
+                            {!locked && (
+                            <>
                             <button
                               type="button"
                               className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-red-200 text-red-800 font-bold rounded-lg"
@@ -1501,6 +1606,8 @@ export default function DoctorClinicalRecordModal({
                               <Trash2 className="w-3.5 h-3.5" />
                               Delete
                             </button>
+                            </>
+                            )}
                           </>
                         )}
                       </li>
@@ -1509,6 +1616,7 @@ export default function DoctorClinicalRecordModal({
                 )}
               </div>
 
+              {!locked && (
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
                 <label className="block font-bold text-slate-700">Add allergy</label>
                 <div className="flex gap-2">
@@ -1541,6 +1649,7 @@ export default function DoctorClinicalRecordModal({
                   </button>
                 </div>
               </div>
+              )}
             </div>
           )}
 
@@ -1664,15 +1773,16 @@ export default function DoctorClinicalRecordModal({
               <div className="flex justify-between items-center">
                 <div>
                   <h3 className="font-bold text-sm text-slate-900">Immunisation records</h3>
-                  <p className="text-slate-500">Record a clinic dose to sync it to Suwasiri Vault → Vaccine history.</p>
+                  <p className="text-slate-500">{locked ? "Immunisation history for this file." : "Record a clinic dose to sync it to Suwasiri Vault → Vaccine history."}</p>
                 </div>
               </div>
 
+              {!locked && (
               <form
                 className="p-4 bg-lime-50 rounded-xl border border-lime-200 space-y-3"
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  if (!vaxName.trim() || vaxSaving) return;
+                  if (locked || !vaxName.trim() || vaxSaving) return;
                   setVaxSaving(true);
                   const record: VaccineRecord = {
                     vaccineName: vaxName.trim(),
@@ -1734,6 +1844,7 @@ export default function DoctorClinicalRecordModal({
                   </button>
                 </div>
               </form>
+              )}
 
               <div className="divide-y divide-slate-100">
                 {(patient.vaccineRecords || []).map((v, i) => (
@@ -1759,9 +1870,10 @@ export default function DoctorClinicalRecordModal({
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-5 text-xs">
               <div>
                 <h3 className="font-bold text-sm text-slate-900">Pathology</h3>
-                <p className="text-slate-500 text-[11px]">Previous reports stay under Pathology history. Request a new test for Sample Dispatch Hub.</p>
+                <p className="text-slate-500 text-[11px]">{locked ? "Previous reports stay under Pathology history." : "Previous reports stay under Pathology history. Request a new test for Sample Dispatch Hub."}</p>
               </div>
 
+              {!locked && (
               <form onSubmit={handleOrderPathology} className="p-4 bg-purple-50 rounded-xl border border-purple-200 space-y-3">
                 <h4 className="font-extrabold text-purple-950 text-xs uppercase tracking-wide">Request a pathology test</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1793,10 +1905,11 @@ export default function DoctorClinicalRecordModal({
                   </button>
                 </div>
               </form>
+              )}
 
               <div>
                 <h4 className="font-extrabold text-slate-800 text-xs uppercase tracking-wide mb-2">Pathology history</h4>
-                <p className="text-[11px] text-slate-500 mb-2">Reports marked Completed on Pathology leave the unread inbox and are filed here. Open a report to view it and add a doctor note.</p>
+                <p className="text-[11px] text-slate-500 mb-2">{locked ? "Reports marked Completed on Pathology are filed here. Open a report to view it." : "Reports marked Completed on Pathology leave the unread inbox and are filed here. Open a report to view it and add a doctor note."}</p>
                 <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl max-h-[28rem] overflow-y-auto">
                   {(patient.labResults || []).length === 0 ? (
                     <p className="text-slate-400 italic p-4">No previous pathology reports on this file yet.</p>
@@ -1824,6 +1937,7 @@ export default function DoctorClinicalRecordModal({
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${critical ? "text-red-800 bg-red-100" : "text-purple-800 bg-purple-50"}`}>{res.status}</span>
                           </div>
                         </div>
+                        {!locked && (
                         <label className="block">
                           <span className="text-[10px] font-bold uppercase text-slate-500">Doctor note</span>
                           <textarea
@@ -1834,8 +1948,13 @@ export default function DoctorClinicalRecordModal({
                             className="mt-1 w-full p-2 border border-purple-200 rounded-lg bg-purple-50/50 text-[11px] outline-none focus:border-purple-400"
                           />
                         </label>
+                        )}
+                        {locked && (res.doctorNotes || "").trim() && (
+                          <p className="text-[11px] text-slate-600"><span className="font-bold">Doctor note:</span> {res.doctorNotes}</p>
+                        )}
                         <div className="flex flex-wrap gap-1.5 pt-1">
                           <button type="button" onClick={() => setViewingPathLab(res)} className="inline-flex items-center gap-1 px-2 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded font-bold text-[10px]"><Eye className="w-3 h-3" /> View</button>
+                          {!locked && (
                           <button
                             type="button"
                             onClick={() => savePathologyNote(res.id)}
@@ -1843,6 +1962,7 @@ export default function DoctorClinicalRecordModal({
                           >
                             {savingPathNoteId === res.id ? "Saved" : "Save note"}
                           </button>
+                          )}
                           <button type="button" onClick={() => printDocument(res.testName, body)} className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded font-bold text-[10px]"><Printer className="w-3 h-3" /> Print</button>
                           <button type="button" onClick={() => sendByEmail(patient.email, `Pathology: ${res.testName}`, body)} className="inline-flex items-center gap-1 px-2 py-1 bg-sky-50 hover:bg-sky-100 text-sky-900 rounded font-bold text-[10px]"><Mail className="w-3 h-3" /> Email</button>
                           <button type="button" onClick={() => sendByPhone(patient.phone, `${res.testName} ${res.date}: ${res.result}`)} className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 rounded font-bold text-[10px]"><Phone className="w-3 h-3" /> Phone</button>
@@ -1870,6 +1990,8 @@ export default function DoctorClinicalRecordModal({
                       {pathReportText(viewingPathLab)}
                     </pre>
                     <div className="border-t px-5 py-3 space-y-2">
+                      {!locked && (
+                      <>
                       <label className="block">
                         <span className="text-[10px] font-bold uppercase text-slate-500">Doctor note</span>
                         <textarea
@@ -1891,6 +2013,12 @@ export default function DoctorClinicalRecordModal({
                           Save note
                         </button>
                       </div>
+                      </>
+                      )}
+                      <div className="flex justify-end gap-2">
+                        <button type="button" onClick={() => printDocument(viewingPathLab.testName, pathReportText(viewingPathLab))} className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded font-bold text-[11px]"><Printer className="w-3.5 h-3.5" /> Print</button>
+                        <button type="button" onClick={() => setViewingPathLab(null)} className="px-3 py-1.5 bg-[#00334f] text-white rounded font-bold text-[11px]">Close</button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1903,9 +2031,10 @@ export default function DoctorClinicalRecordModal({
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-5 text-xs">
               <div>
                 <h3 className="font-bold text-sm text-slate-900">Imaging</h3>
-                <p className="text-slate-500 text-[11px]">Previous reports stay under Imaging history. Request a new study from here.</p>
+                <p className="text-slate-500 text-[11px]">{locked ? "Previous reports stay under Imaging history." : "Previous reports stay under Imaging history. Request a new study from here."}</p>
               </div>
 
+              {!locked && (
               <form onSubmit={handleOrderImaging} className="p-4 bg-cyan-50 rounded-xl border border-cyan-200 space-y-3">
                 <h4 className="font-extrabold text-cyan-950 text-xs uppercase tracking-wide">Request an imaging study</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1937,6 +2066,7 @@ export default function DoctorClinicalRecordModal({
                   <button type="submit" className="px-4 py-2 bg-[#00334f] text-white font-bold rounded-lg">Request imaging</button>
                 </div>
               </form>
+              )}
 
               <div>
                 <h4 className="font-extrabold text-slate-800 text-xs uppercase tracking-wide mb-2">Imaging history</h4>
@@ -1958,7 +2088,7 @@ export default function DoctorClinicalRecordModal({
                           </div>
                           <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded h-fit">{img.status}</span>
                         </div>
-                        {!issued && (
+                        {!issued && !locked && (
                           <label className="block">
                             <span className="text-[10px] font-bold uppercase text-slate-500">Imaging laboratory report</span>
                             <textarea
@@ -1972,7 +2102,7 @@ export default function DoctorClinicalRecordModal({
                         )}
                         <div className="flex flex-wrap gap-1.5 pt-1">
                           <button type="button" onClick={() => setViewingImaging(img)} className="inline-flex items-center gap-1 px-2 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded font-bold text-[10px]"><Eye className="w-3 h-3" /> View</button>
-                          {!issued && (
+                          {!issued && !locked && (
                             <button type="button" onClick={() => fileIssuedImagingReport(img)} className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-[10px]">File issued report</button>
                           )}
                           <button type="button" onClick={() => printDocument(`${img.modality} ${img.bodyPart}`, body)} className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded font-bold text-[10px]"><Printer className="w-3 h-3" /> Print</button>
@@ -2016,9 +2146,11 @@ export default function DoctorClinicalRecordModal({
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-5 text-xs">
               <div>
                 <h3 className="font-bold text-sm text-slate-900">Specialist eReferrals</h3>
-                <p className="text-slate-500 text-[11px]">Refer a specialist. The Suwasiri patient is notified in the app.</p>
+                <p className="text-slate-500 text-[11px]">{locked ? "Specialist letters on this file (view only)." : "Refer a specialist. The Suwasiri patient is notified in the app."}</p>
               </div>
 
+              {!locked && (
+              <>
               <div className="flex flex-wrap gap-1.5">
                 {[
                   { label: "Cardiology review", specialist: "Dr. Lalith Fernando (Cardiologist)", specialty: "Cardiology", email: "lalith.fernando@asiri.lk", summary: "Thank you for reviewing this patient regarding cardiovascular risk stratification and echocardiogram evaluation." },
@@ -2101,6 +2233,8 @@ export default function DoctorClinicalRecordModal({
                   </button>
                 </div>
               </form>
+              </>
+              )}
 
               <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
                 {(patient.referralsList || []).map((ref) => {
@@ -2156,9 +2290,9 @@ export default function DoctorClinicalRecordModal({
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                 <div>
                   <h3 className="font-bold text-sm text-slate-900">Medical Certificate</h3>
-                  <p className="text-slate-500 text-[11px]">Issue a certificate for {patient.name}. It is saved here, can be viewed and printed, and syncs to Suwasiri Vault → Medical certificates.</p>
+                  <p className="text-slate-500 text-[11px]">{locked ? `Certificates and supporting files for ${patient.name}. View and print only.` : `Issue a certificate for ${patient.name}. It is saved here, can be viewed and printed, and syncs to Suwasiri Vault → Medical certificates.`}</p>
                 </div>
-                {examAddDocMode !== "chooser" && (
+                {!locked && examAddDocMode !== "chooser" && (
                 <button
                   type="button"
                   onClick={() => setExamAddDocMode("chooser")}
@@ -2169,11 +2303,12 @@ export default function DoctorClinicalRecordModal({
                 )}
               </div>
 
+              {!locked && (
               <form
                 className="p-4 bg-amber-50 rounded-xl border border-amber-200 space-y-3"
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  if (!mcDiagnosis.trim() || mcSaving) return;
+                  if (locked || !mcDiagnosis.trim() || mcSaving) return;
                   setMcSaving(true);
                   const newMC: MedicalCertificateRecord = {
                     id: `MC-${patient.id}-${Date.now()}`,
@@ -2258,8 +2393,9 @@ export default function DoctorClinicalRecordModal({
                   </button>
                 </div>
               </form>
+              )}
 
-              {examAddDocMode && (
+              {!locked && examAddDocMode && (
                 <div className="bg-white rounded-xl border border-slate-200 shadow-md overflow-hidden">
                   <div className="px-5 pt-4 pb-3 flex items-start justify-between gap-3">
                     <h4 className="font-bold text-base text-[#00334f]">Add document.</h4>
@@ -2350,6 +2486,7 @@ export default function DoctorClinicalRecordModal({
                 </div>
               )}
 
+              {!locked && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border">
                 <div>
                   <label className="block font-bold text-slate-600 mb-1">Send-to email</label>
@@ -2360,6 +2497,7 @@ export default function DoctorClinicalRecordModal({
                   <input type="tel" defaultValue={patient.phone} onChange={(e) => setDocPhone(e.target.value)} placeholder={patient.phone || "+94 …"} className="w-full p-2 border rounded-lg bg-white" />
                 </div>
               </div>
+              )}
               <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
                 {[
                   ...(patient.clinicalDocuments || []).map((d) => ({
@@ -2482,9 +2620,9 @@ ${viewingCertificate.additionalRemarks || ""}`}
                     Appointments &amp; clinic calendar
                   </h3>
                   <p className="text-slate-500 text-[11px]">
-                    {bookingDoctor && onBookAppointment && !hideActiveConsultDetails
+                    {bookingDoctor && onBookAppointment && !hideActiveConsultDetails && !locked
                       ? `Book a follow-up with ${bookingDoctor.name} only. The right-hand times are this doctor’s available and booked slots — other clinic doctors are not shown. Confirm writes to ${patient.name}’s Suwasiri Home (blue in-person / purple video) and the reception / clinic calendars.`
-                      : hideActiveConsultDetails
+                      : hideActiveConsultDetails || locked
                         ? "Appointment history for this file."
                         : "Sign in as a clinic doctor to book a follow-up on your own available times."}
                   </p>
@@ -2506,7 +2644,7 @@ ${viewingCertificate.additionalRemarks || ""}`}
                 );
               })()}
 
-              {onBookAppointment && bookingDoctor && !hideActiveConsultDetails && (
+              {onBookAppointment && bookingDoctor && !hideActiveConsultDetails && !locked && (
                 <ReceptionBookingScheduler
                   embedded
                   lockDoctor
@@ -2681,7 +2819,7 @@ ${viewingCertificate.additionalRemarks || ""}`}
             onClick={onClose}
             className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg transition-colors cursor-pointer"
           >
-            {embedded ? "Return to Exam Dashboard" : "Close Record"}
+            {embedded && !locked ? "Return to Exam Dashboard" : "Close Record"}
           </button>
         </div>
       </div>
@@ -2689,9 +2827,11 @@ ${viewingCertificate.additionalRemarks || ""}`}
 
   return (
     <>
-      {embedded ? frame : (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3">
-          {frame}
+      {embedded && !asOverlay ? frame : (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3">
+          {asOverlay && embedded ? (
+            <div className="w-full max-w-7xl h-[92vh]">{frame}</div>
+          ) : frame}
         </div>
       )}
       {showCalculatorModal && (
@@ -2699,11 +2839,11 @@ ${viewingCertificate.additionalRemarks || ""}`}
           patient={patient}
           calculatedBy={issuedDoctor}
           onClose={() => setShowCalculatorModal(false)}
-          onSaveToConsultation={(text) => {
+          onSaveToConsultation={locked ? () => undefined : (text) => {
             setDoctorNote(prev => `${prev}\n${text}`.trim());
             showToast("Calculated score inserted into doctor notes.");
           }}
-          onPersistPatient={(updated) => {
+          onPersistPatient={locked ? () => undefined : (updated) => {
             onUpdatePatient({
               ...updated,
               medicalCenter: updated.medicalCenter || issuedClinic,

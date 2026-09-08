@@ -49,8 +49,8 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Home: removed doctor categories + My Lab Reports; upcoming maps sync + clinic name; Doctors: all districts → clinics/hospitals → doctors + maps; removed upcoming list; Vault lab AI+download; larger vaccine book CTA; greener Health ID card
 - [x] Doctors page always lists doctors (name + hospital/clinic + address); Call View digital e-prescription opens formal form with email / MediLanka / PDF even while draft is updating
 - [x] Global yellow Help FAB + AI Help Desk chat (EN/SI/TA): app features, diseases/symptoms, medical certificate upload & explain
-- [x] Help Desk symptom chat explains what may be happening and suggests matching specialties + sample doctors (opens Doctors tab)
-- [x] Help Desk: typing + voice mic input; ask-anything guidance kept; Doctors cards show specialty category + full details again
+- [x] Help Desk symptom chat explains what may be happening and suggests matching specialties + sample doctors (opens Doctors tab with category filter)
+- [x] Help Desk: any healthcare/illness question (EN/SI/TA) gets educational answer + doctor recommendations; tappable doctor cards
 - [x] Home: booked doctor sessions on blue card and vaccine bookings on green card; expired slots hide; vaccination status removed
 - [x] Sub-pages: Close + X to dismiss sheets; Help Desk EN/සිංහල/தமிழ் for all topics; vaccine search covers MOH offices, government and private hospitals in all 25 districts
 - [x] Home: blue card = in-person clinic only; purple card = video consult (also on Call); green = vaccine; expired bookings hide (blank)
@@ -137,10 +137,10 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Telehealth: video consult name opens the exam-room **patient profile** beside the call (Consultation SOAP + clinical sections); **Live Consultation Notes** removed; the profile pane has its own scrollbar so the video stays still
 - [x] Telehealth lists **today’s video consults for that doctor** under the Virtual Exam Room heading; a patient file opens only after clicking a name in that list; if there is no video appointment, no profile is shown
 - [x] Doctor Dashboard: queue place cannot be changed (no ⬆️⬇️ / Manage Places); Record overlay removed from the queue; **Completed** finishes a consult and writes SOAP/diagnoses/meds/docs onto that patient’s profile (the extra completed-patient list under the green card is removed — those visits stay in the appointment queue)
-- [x] Lobby Patient queue is a scrollable list; reception **Up / Down** changes that patient’s place (saved as `queuePlace`); no #1 / #2 / #3 place dropdown; **Check In Now** shows **Waiting in lobby** plus **Call to GP Exam Room** (status only — does not open the exam room); **Active Exam Room** is a status label only; reception cannot open the patient clinical profile from Lobby, Patient Clinical Records, Unique Health ID sync, or Sample Dispatch File ID
+- [x] Lobby Patient queue is a scrollable list; reception **Up / Down** changes that patient’s place (saved as `queuePlace`); no #1 / #2 / #3 place dropdown; **Check In Now** shows **Waiting in lobby** plus **Call to GP Exam Room** (status only — does not open the exam room); **Active Exam Room** is a status label only; reception **can click the patient name** on Lobby and Patient Clinical Records to open the GP Exam Room layout **read-only** (left clinical sections, encounter/modality/fee visible, no add/edit). Unique Health ID sync and Sample Dispatch File ID still do not open a live consult.
 - [x] Sample Dispatch Hub: **Register my name** removed; **Delivered** still opens courier Sample Collections + Documents only (no Open clinical profile for reception)
 - [x] GP Exam Room Pathology history: **View** report + **Save note** on each filed result
-- [x] Super Admin / clinicians click a name on Patient Clinical Records to open the GP Exam Room profile (reception still cannot)
+- [x] Super Admin / clinicians click a name on Patient Clinical Records to open the GP Exam Room profile; reception opens the same left-nav clinical file **read-only** (no old history-hub overlay, no add/edit)
 - [x] Platform Console **Operations & Governance**: add employees and **Remove (resigned)**
 - [x] Practice Manager MBS & Private Fees: inline edit, add MBS item, bulk-billable column removed
 - [x] Security & RBAC: Super Admin can edit MFA / password / session / backup / retention; light colourful tabs
@@ -154,6 +154,10 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Unique Health ID: receptionist **Sync to Portal** loads the live Suwasiri file; **Save to Patient Clinical Records** writes that file onto this clinic’s Patient Clinical Records list (name, age, gender, NIC, labs, vaccines). New-patient registration in the Suwasiri app (`clinic_patient_registrations`) also creates that clinic file automatically.
 - [x] Suwasiri **Notifications** inbox redesigned (filters, card actions, clear all / dismiss)
 - [x] After a doctor consult (video hang-up or GP Care **COMPLETED**), the patient can star-rate the doctor with attribute tags (`doctor_ratings`)
+- [x] GP Exam Room **Save eReferral** notifies that patient on Suwasiri Notifications; Recalls **SMS** does the same
+- [x] Receipts **Approved** on a Suwasiri bank slip marks the invoice **Settled** and Reports collected
+- [x] Team Secure Chat is person-to-person (pick registered staff); Practice Manager weekly roster has one **Save Weekly Rosters** control (bottom Save & commit block removed)
+- [x] Reception Lobby / Patient Clinical Records: click the patient name for a **read-only** GP Exam Room file (left Clinical sections). Reception cannot edit or add. Check In / Call to Exam Room stay status-only.
 
 ## In progress / next
 

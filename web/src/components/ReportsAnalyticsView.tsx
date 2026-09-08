@@ -209,7 +209,7 @@ export default function ReportsAnalyticsView({
   const revenueBreakdown = [
     { name: "Cash settle (counter)", value: sumBucket(rangeBilling, "cash"), color: "#00334f" },
     { name: "Suwasiri debit / card", value: sumBucket(rangeBilling, "debit"), color: "#10b981" },
-    { name: "Bank slip approved", value: sumBucket(rangeBilling, "slip"), color: "#0284c7" },
+    { name: "Bank slip (settled)", value: sumBucket(rangeBilling, "slip"), color: "#0284c7" },
     { name: "Pending payment", value: sumBucket(rangeBilling, "pending"), color: "#f59e0b" },
   ];
   const revenueChartData = revenueBreakdown.filter((item) => item.value > 0);

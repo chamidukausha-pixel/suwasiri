@@ -2147,19 +2147,26 @@ app.get("/api/clinical-chat", (req, res) => {
 
 app.post("/api/clinical-chat", (req, res) => {
   const store = getStore();
-  const { sender, senderRole, text, channel } = req.body;
+  const { sender, senderRole, text, channel, senderId, recipientId, recipientName, hospitalId } = req.body;
 
   if (!sender || !text) {
     return res.status(400).json({ error: "Missing sender name or message text" });
+  }
+  if (!recipientId) {
+    return res.status(400).json({ error: "Select a staff member to message" });
   }
 
   const newMsg = {
     id: `msg-${Date.now()}`,
     sender,
     senderRole: senderRole || "Doctor",
+    senderId: senderId || sender,
+    recipientId,
+    recipientName: recipientName || "",
+    hospitalId: hospitalId || "",
     text,
     timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
-    channel: channel || "#general-clinical"
+    channel: channel || `dm:${[senderId || sender, recipientId].sort().join("__")}`
   };
 
   store.clinicMessages.push(newMsg);

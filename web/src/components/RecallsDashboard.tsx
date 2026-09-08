@@ -143,8 +143,11 @@ export default function RecallsDashboard({
       window.open(`mailto:${email}?subject=${encodeURIComponent("Clinic recall reminder")}&body=${body}`);
     }
     onSendNotification(recall.id, method);
-    const dest = method === "SMS" ? phone : email;
-    setSuccessToast(`Sent ${method} recall reminder to ${recall.patientName} via ${dest}`);
+    setSuccessToast(
+      method === "SMS"
+        ? `SMS sent and ${recall.patientName} was notified in the Suwasiri app`
+        : `Sent ${method} recall reminder to ${recall.patientName} via ${email}`
+    );
     setTimeout(() => setSuccessToast(null), 3000);
   };
 

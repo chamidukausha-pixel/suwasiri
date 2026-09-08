@@ -509,7 +509,7 @@ export function staffUserAsDoctor(
   };
 }
 
-function looksLikeSuwasiriUid(id: string): boolean {
+export function looksLikeSuwasiriUid(id: string): boolean {
   return id.length >= 16 && !/^\d{3,5}-LK$/i.test(id) && !id.startsWith("apt-") && !id.startsWith("p-");
 }
 
@@ -527,6 +527,32 @@ export function suwasiriPatientIdForClinicFile(
     if (hit) return hit.id;
   }
   return patient.id;
+}
+
+/** Best Firebase uid for a Suwasiri app notification (clinic file id, barcode, or booking name). */
+export function resolveSuwasiriNotifyId(
+  patient: { id?: string; name?: string; suwasiriBarcode?: string } | undefined,
+  extras: Array<{
+    id?: string;
+    name?: string;
+    suwasiriBarcode?: string;
+    patientId?: string;
+    patientName?: string;
+  }> = []
+): string {
+  if (!patient?.id && !patient?.name) return "";
+  const asPatient = patient as Patient;
+  const fromFile = suwasiriPatientIdForClinicFile(asPatient, extras.filter((e) => e.id) as Patient[]);
+  if (looksLikeSuwasiriUid(fromFile)) return fromFile;
+  const name = (patient.name || "").trim().toLowerCase();
+  if (name) {
+    for (const e of extras) {
+      const pid = (e.patientId || e.id || "").trim();
+      const ename = (e.patientName || e.name || "").trim().toLowerCase();
+      if (ename === name && looksLikeSuwasiriUid(pid)) return pid;
+    }
+  }
+  return fromFile || patient.id || "";
 }
 
 export function appointmentBelongsToPatient(apt: Appointment, patient: Patient): boolean {

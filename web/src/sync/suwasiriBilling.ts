@@ -102,7 +102,7 @@ export function invoicePaymentLabel(inv: {
   if (!isInvoiceSettled(inv)) return "Pending payment";
   if (isCashPayment(inv)) return "Settled";
   if (inv.receiptApproved === true || (isBankSlipPayment(inv) && isInvoiceSettled(inv))) {
-    return "Bank slip approved";
+    return "Settled";
   }
   if (isDirectDebitPayment(inv) || isPaidViaSuwasiriApp(inv)) return "Paid by Suwasiri App";
   return "Settled";

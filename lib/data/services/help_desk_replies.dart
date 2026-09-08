@@ -102,7 +102,37 @@ abstract final class HelpDeskReplies {
       );
     }
 
+    // Any other healthcare / illness question → explain + recommend doctors.
+    if (_isHealthRelated(q)) {
+      final mapped = _mapSymptoms(q);
+      return _symptomAnswer(
+        lang: lang,
+        question: question,
+        mapped: mapped ??
+            const _SymptomMap(
+              topicKey: 'general',
+              specialties: [
+                'General Practitioner',
+                'Physician / Consultant Physician',
+              ],
+            ),
+      );
+    }
+
     return HelpDeskAnswer(text: _general(lang, question));
+  }
+
+  /// Maps a catalog specialty string to a Doctors-tab category id.
+  static String categoryIdForSpecialties(List<String> specialties) {
+    for (final s in specialties) {
+      final id = _categoryIdForSpecialty(s);
+      if (id != null && id != 'general') return id;
+    }
+    for (final s in specialties) {
+      final id = _categoryIdForSpecialty(s);
+      if (id != null) return id;
+    }
+    return 'all';
   }
 
   /// Back-compat string API.
@@ -172,18 +202,125 @@ abstract final class HelpDeskReplies {
         'symptoms',
         'i have',
         'i feel',
+        'i am',
+        "i'm",
         'pain',
         'ache',
+        'hurting',
+        'unwell',
+        'not feeling',
+        'feel sick',
+        'feel unwell',
+        'what is wrong',
+        'what could',
+        'help me',
         'රෝග ලක්ෂණ',
         'ලක්ෂණ',
         'මට තියෙනවා',
+        'මට වේදන',
         'වේදනා',
+        'අසනීප',
         'அறிகுறி',
         'எனக்கு',
         'வலி',
+        'உடல்நிலை சரியில்லை',
       ]);
 
-  static bool _looksLikeSymptoms(String q) => _mapSymptoms(q) != null;
+  static bool _isHealthRelated(String q) =>
+      _isSymptomPrompt(q) ||
+      _mapSymptoms(q) != null ||
+      _match(q, const [
+        'health',
+        'healthcare',
+        'health care',
+        'medical',
+        'medicine',
+        'ill',
+        'illness',
+        'sick',
+        'disease',
+        'condition',
+        'infection',
+        'infected',
+        'allergy',
+        'allergic',
+        'chronic',
+        'acute',
+        'treatment',
+        'therapy',
+        'diagnos',
+        'prognos',
+        'which doctor',
+        'what doctor',
+        'recommend doctor',
+        'need doctor',
+        'see doctor',
+        'consult',
+        'specialist',
+        'clinic',
+        'hospital',
+        'blood test',
+        'lab result',
+        'scan',
+        'x-ray',
+        'xray',
+        'mri',
+        'surgery',
+        'operation',
+        'pregnant',
+        'pregnancy',
+        'period',
+        'menstr',
+        'cancer',
+        'tumor',
+        'tumour',
+        'thyroid',
+        'cholesterol',
+        'arthritis',
+        'stroke',
+        'paralysis',
+        'bleeding',
+        'swelling',
+        'lump',
+        'weight loss',
+        'weight gain',
+        'tired',
+        'fatigue',
+        'weakness',
+        'dizzy',
+        'nausea',
+        'vomit',
+        'tooth',
+        'dental',
+        'gum',
+        'sinus',
+        'allergy',
+        'asthma',
+        'eczema',
+        'psoriasis',
+        'hepatitis',
+        'malaria',
+        'typhoid',
+        'covid',
+        'corona',
+        'flu',
+        'influenza',
+        'සෞඛ්‍ය',
+        'රෝග',
+        'අසනීප',
+        'බෙහෙත්',
+        'වෛද්‍ය නිර්දේශ',
+        'சுகாதார',
+        'நோய',
+        'நோய்',
+        'அசுத்தம்',
+        'மருத்துவ',
+        'மருந்து',
+        'மருத்துவர் பரிந்துரை',
+      ]);
+
+  static bool _looksLikeSymptoms(String q) =>
+      _mapSymptoms(q) != null || _isHealthRelated(q);
 
   static _SymptomMap? _mapSymptoms(String q) {
     if (_match(q, const ['dengue', 'ඩෙංගු', 'டெங்கு'])) {
@@ -411,7 +548,110 @@ abstract final class HelpDeskReplies {
         specialties: ['Nephrologist', 'Urologist'],
       );
     }
+    if (_match(q, const [
+      'tooth',
+      'teeth',
+      'dental',
+      'gum',
+      'දත්',
+      'பல்',
+      'பற்கள்',
+    ])) {
+      return const _SymptomMap(
+        topicKey: 'dental',
+        specialties: ['Dental Surgeon', 'General Practitioner'],
+      );
+    }
+    if (_match(q, const [
+      'pregnant',
+      'pregnancy',
+      'period',
+      'menstr',
+      'obgyn',
+      'ගර්භ',
+      'ගර්භණී',
+      'ගර්භධාර',
+      'கர்ப்ப',
+      'மாதவிடாய்',
+    ])) {
+      return const _SymptomMap(
+        topicKey: 'pregnancy',
+        specialties: ['Obstetrician / Gynecologist', 'General Practitioner'],
+      );
+    }
+    if (_match(q, const [
+      'cancer',
+      'tumor',
+      'tumour',
+      'oncolog',
+      'පිළික',
+      'புற்றுநோய',
+      'கட்டி',
+    ])) {
+      return const _SymptomMap(
+        topicKey: 'cancer',
+        specialties: ['Oncologist', 'Physician / Consultant Physician'],
+      );
+    }
+    if (_match(q, const [
+      'thyroid',
+      'cholesterol',
+      'hormone',
+      'thyrox',
+      'උණුසුම්',
+      'தைராய்டு',
+      'கொலஸ்ட்ரால்',
+    ])) {
+      return const _SymptomMap(
+        topicKey: 'endocrine',
+        specialties: ['Endocrinologist', 'Physician / Consultant Physician'],
+      );
+    }
+    if (_match(q, const [
+      'allergy',
+      'allergic',
+      'hay fever',
+      'hives',
+      'අලර්ජි',
+      'ஒவ்வாமை',
+    ])) {
+      return const _SymptomMap(
+        topicKey: 'allergy',
+        specialties: ['Physician / Consultant Physician', 'Dermatologist'],
+      );
+    }
+    if (_match(q, const [
+      'arthritis',
+      'rheumat',
+      'lupus',
+      'සන්ධි',
+      'மூட்டுவலி',
+    ])) {
+      return const _SymptomMap(
+        topicKey: 'rheum',
+        specialties: ['Rheumatologist', 'Orthopedic Surgeon'],
+      );
+    }
     return null;
+  }
+
+  static String? _categoryIdForSpecialty(String specialty) {
+    final needle = specialty.toLowerCase();
+    for (final cat in DoctorCatalog.browseCategories) {
+      for (final spec in cat.specialties) {
+        final s = spec.toLowerCase();
+        if (needle == s || needle.contains(s) || s.contains(needle)) {
+          return cat.id;
+        }
+      }
+    }
+    return null;
+  }
+
+  static bool _specialtyMatches(Doctor doctor, String specialty) {
+    final ds = doctor.specialty.toLowerCase();
+    final ss = specialty.toLowerCase();
+    return ds == ss || ds.contains(ss) || ss.contains(ds);
   }
 
   static HelpDeskAnswer _symptomAnswer({
@@ -433,12 +673,21 @@ abstract final class HelpDeskReplies {
     final picked = <Doctor>[];
     for (final s in specialties) {
       for (final d in DoctorCatalog.doctors) {
-        if (d.specialty == s && !picked.any((x) => x.id == d.id)) {
+        if (_specialtyMatches(d, s) && !picked.any((x) => x.id == d.id)) {
           picked.add(d);
           break;
         }
       }
       if (picked.length >= 4) break;
+    }
+    if (picked.isEmpty) {
+      for (final d in DoctorCatalog.doctors) {
+        if (DoctorCatalog.doctorMatchesBrowseCategory(d, 'general') ||
+            DoctorCatalog.doctorMatchesBrowseCategory(d, 'physician')) {
+          picked.add(d);
+          if (picked.length >= 3) break;
+        }
+      }
     }
     if (picked.isEmpty) {
       picked.addAll(DoctorCatalog.doctors.take(3));
@@ -498,6 +747,56 @@ abstract final class HelpDeskReplies {
               'රුධිර සීනි සම්බන්ධව (“$short”):\n\nසිදුවිය හැක්කේ: ඉහළ/අස්ථාවර සීනි නිසා පිපාසය, මහන්සිය හෝ පෙනීම නොපැහැදිලි වීම. ආහාර සමබරව තබන්න; උපදෙස් නැතිව ඖෂධ වෙනස් නොකරන්න. Endocrinologist හෝ Physician වෛද්‍යවරයෙකු රසායනාගාර වාර්තා (HbA1c) පරීක්ෂා කළ හැක.',
           ta:
               'இரத்த சர்க்கரை தொடர்பாக (“$short”):\n\nஎன்ன நடக்கலாம்: உயர்/நிலையற்ற சர்க்கரை தாகம், சோர்வு அல்லது மங்கலான பார்வையை ஏற்படுத்தலாம். உணவை சமநிலையில் வையுங்கள்; ஆலோசனையின்றி மருந்து மாற்ற வேண்டாம். Endocrinologist அல்லது Physician ஆய்வக அறிக்கைகளை (HbA1c) பார்க்கலாம்.',
+        );
+      case 'neuro':
+        return _t(
+          lang,
+          en:
+              'Head or nerve-related symptoms (“$short”) need careful review.\n\nWhat may be happening: causes can include tension headache, migraine, infection, blood pressure changes, or neurological conditions. Seek urgent care for sudden severe headache, weakness on one side, confusion, or seizures.',
+          si:
+              'හිස/නර්ව් සම්බන්ධ ලක්ෂණ (“$short”) ප්‍රවේශමෙන් සලකන්න.\n\nසිදුවිය හැක්කේ: ආතති හිසරදය, migraine, ආසාදන, රුධිර පීඩන වෙනස්වීම හෝ න්‍යායාත්මක තත්ත්ව. හදිසි දැඩි හිසරදය, එක් පැත්තක දුර්වලතාව, confusion හෝ seizure ඇත්නම් වහාම රෝහලට යන්න.',
+          ta:
+              'தலை/நரம்பு அறிகுறிகள் (“$short”) கவனமாக பார்க்க வேண்டும்.\n\nஎன்ன நடக்கலாம்: அழுத்த தலைவலி, migraine, தொற்று, இரத்த அழுத்த மாற்றம் அல்லது நரம்பியல் நிலை. திடீர் கடும் தலைவலி, ஒரு பக்கம் பலவீனம், confusion அல்லது seizure இருந்தால் உடனடி மருத்துவம்.',
+        );
+      case 'gastro':
+        return _t(
+          lang,
+          en:
+              'Stomach or digestive symptoms (“$short”) are often due to infection, food irritation, or acid reflux.\n\nWhat may be happening: nausea, cramps, or diarrhoea usually settle with rest and fluids. See a clinician if pain is severe, there is blood in stool/vomit, or symptoms persist beyond 48 hours.',
+          si:
+              'බඩ/ආහාර නාලිකා ලක්ෂණ (“$short”) බොහෝ විට ආසාදන, ආහාර අපහසුතාව හෝ acid reflux නිසා.\n\nසිදුවිය හැක්කේ: ඔක්කාරය, cramps, diarrhoea බොහෝ විට විවේකය සහ fluids සමඟ හැරෙයි. වේදනාව දැඩි නම්, මල/වමනයේ ලේ ඇත්නම් හෝ 48 පැයකට වඩා ඇත්නම් වෛද්‍යවරයෙකු හමුවන්න.',
+          ta:
+              'வயிறு/செரிமான அறிகுறிகள் (“$short”) பெரும்பாலும் தொற்று, உணவு எரிச்சல் அல்லது acid reflux.\n\nஎன்ன நடக்கலாம்: nausea, cramps, diarrhoea ஓய்வு மற்றும் fluids-இல் சரியாகலாம். வலி கடுமையாக இருந்தால், மல/வாந்தியில் இரத்தம் இருந்தால் அல்லது 48 மணி நேரத்திற்கு மேல் இருந்தால் மருத்துவரை அணுகவும்.',
+        );
+      case 'skin':
+        return _t(
+          lang,
+          en:
+              'Skin symptoms (“$short”) can reflect allergy, infection, eczema, or other dermatology issues.\n\nWhat may be happening: rashes often improve with gentle skin care and avoiding triggers. See a dermatologist if spreading quickly, painful, with fever, or not improving in a few days.',
+          si:
+              'සම ලක්ෂණ (“$short”) අලර්ජි, ආසාදන, eczema හෝ වෙනත් dermatology ගැටලු විය හැක.\n\nසිදුවිය හැක්කේ: පැල්ලම් බොහෝ විට සැහැල්ලු skin care සහ triggers වළකීමෙන් හොඳ වේ. වේගයෙන් පැතිරෙන, painful, උණ සමඟ හෝ දින කිහිපයකින් නොහැරෙන නම් Dermatologist හමුවන්න.',
+          ta:
+              'தோல் அறிகுறிகள் (“$short”) ஒவ்வாமை, தொற்று, eczema அல்லது dermatology பிரச்சினை.\n\nஎன்ன நடக்கலாம்: rash மென்மையான skin care மற்றும் triggers தவிர்ப்பால் மேம்படலாம். விரைவாக பரவினால், painful, காய்ச்சலுடன் அல்லது சில நாட்களில் சரியாகாவிட்டால் Dermatologist-ஐ அணுகவும்.',
+        );
+      case 'mental':
+        return _t(
+          lang,
+          en:
+              'Mental health concerns (“$short”) are common and treatable.\n\nWhat may be happening: stress, anxiety, low mood, or sleep problems can affect daily life. A GP or psychiatrist can assess safely. Seek urgent help if you have thoughts of self-harm.',
+          si:
+              'මානසික සෞඛ්‍ය ගැටලු (“$short”) සාමාන්‍ය සහ ප්‍රතිකාර කළ හැක.\n\nසිදුවිය හැක්කේ: ආතතිය, anxiety, මනෝභාවය අඩුවීම හෝ නින්ද ගැටලු දිනචරයට බලපායි. GP හෝ Psychiatrist ආරක්ෂිතව තක්සේරු කළ හැක. තමාට හානිය කිරීමේ සිතුවිලි ඇත්නම් හදිසි උපකාර ලබා ගන්න.',
+          ta:
+              'மனநல கவலைகள் (“$short”) பொதுவானவை மற்றும் சிகிச்சை செய்யக்கூடியவை.\n\nஎன்ன நடக்கலாம்: மன அழுத்தம், anxiety, மனநிலை குறைவு அல்லது தூக்க பிரச்சினை தினசரி வாழ்க்கையை பாதிக்கலாம். GP அல்லது Psychiatrist பாதுகாப்பாக மதிப்பீடு செய்யலாம். தற்கொலை எண்ணங்கள் இருந்தால் அவசர உதவி தேவை.',
+        );
+      case 'pregnancy':
+        return _t(
+          lang,
+          en:
+              'Women’s health / pregnancy-related concerns (“$short”) should be reviewed by a specialist when possible.\n\nWhat may be happening: many symptoms are normal in pregnancy or menstrual cycles, but severe pain, heavy bleeding, or reduced baby movement needs urgent review.',
+          si:
+              'කාන්තා සෞඛ්‍ය / ගර්භණී සම්බන්ධ (“$short”) හැකි නම් විශේෂඥ වෛද්‍යවරයෙකු හමුවන්න.\n\nසිදුවිය හැක්කේ: ගර්භණී/මාසික චක්‍රයේදී බොහෝ ලක්ෂණ සාමාන්‍යය. දැඩි වේදනාව, අධික ලේ ගැලීම හෝ ශිශු චලනය අඩු වීම ඇත්නම් වහාම පරීක්ෂාව.',
+          ta:
+              'பெண்கள் சுகாதார / கர்ப்ப தொடர்பான (“$short”) சிறப்பு மருத்துவரால் பார்க்கப்பட வேண்டும்.\n\nஎன்ன நடக்கலாம்: கர்ப்ப/மாதவிடாயில் பல அறிகுறிகள் இயல்பானவை. கடும் வலி, அதிக இரத்தப்போக்கு அல்லது குழந்தை அசைவு குறைவு இருந்தால் உடனடி பரிசோதனை.',
         );
       case 'general':
       default:
