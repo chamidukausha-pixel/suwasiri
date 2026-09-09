@@ -51,15 +51,7 @@ export function isReceiptAwaitingApproval(inv: {
 }): boolean {
   if (inv.receiptApproved === true) return false;
   if (isCashPayment(inv)) return false;
-  const hasSlip =
-    Boolean(inv.suwasiriReceiptUrl) || /slip|manual|bank/i.test(String(inv.paymentMethod || ""));
-  if (!hasSlip) return false;
-  if (inv.receiptApproved === false) return true;
-  const pay = String(inv.paymentStatus || "").toUpperCase();
-  const s = String(inv.status || "").toUpperCase();
-  if (pay === "PAID" || pay === "SETTLED" || pay === "BULK_BILLED") return false;
-  if (s === "PAID" || s === "SETTLED" || s === "BULK_BILLED") return false;
-  return true;
+  return isBankSlipPayment(inv);
 }
 
 export function isInvoiceSettled(inv: {
@@ -71,6 +63,7 @@ export function isInvoiceSettled(inv: {
   receiptApproved?: boolean;
 }): boolean {
   if (isReceiptAwaitingApproval(inv)) return false;
+  if (inv.receiptApproved === true) return true;
   const pay = String(inv.paymentStatus || "").toUpperCase();
   if (pay === "PAID" || pay === "SETTLED" || pay === "BULK_BILLED") return true;
   const s = String(inv.status || "").toUpperCase();
@@ -99,11 +92,10 @@ export function invoicePaymentLabel(inv: {
   receiptApproved?: boolean;
 }): string {
   if (isReceiptAwaitingApproval(inv)) return "Slip awaiting approval";
+  if (inv.receiptApproved === true) return "Approved";
   if (!isInvoiceSettled(inv)) return "Pending payment";
   if (isCashPayment(inv)) return "Settled";
-  if (inv.receiptApproved === true || (isBankSlipPayment(inv) && isInvoiceSettled(inv))) {
-    return "Settled";
-  }
+  if (isBankSlipPayment(inv)) return "Approved";
   if (isDirectDebitPayment(inv) || isPaidViaSuwasiriApp(inv)) return "Paid by Suwasiri App";
   return "Settled";
 }

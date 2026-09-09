@@ -224,14 +224,16 @@ export default function PlatformConsoleView({
             const hospitalStaff = staffDirectory.filter((s) => s.hospitalId === h.id && s.active !== false);
             const hospitalBranches = branches.filter((b) => b.hospitalId === h.id);
             const hospitalRoles = roles.filter((r) => r.hospitalId === h.id && r.enabled && r.name !== "Patient");
-            const open = openHospitalId === h.id;
+            const open = openHospitalId === h.id && h.status !== "SUSPENDED";
+            const suspended = h.status === "SUSPENDED";
             return (
-              <div key={h.id} className="border rounded-xl overflow-hidden">
+              <div key={h.id} className={`border rounded-xl overflow-hidden ${suspended ? "opacity-80 bg-slate-50" : ""}`}>
                 <div className="p-4 flex flex-wrap items-center justify-between gap-3">
                   <button
                     type="button"
                     className="text-left flex items-start gap-3 min-w-0"
                     onClick={() => {
+                      if (suspended) return;
                       setOpenHospitalId(open ? null : h.id);
                       setStaffBranches(hospitalBranches.map((b) => b.id));
                       setStaffPhotoUrl("");
@@ -247,6 +249,13 @@ export default function PlatformConsoleView({
                     <div>
                     <p className="font-bold text-sm text-slate-900 hover:underline">{h.name}</p>
                     <p className="text-[11px] text-slate-500 font-mono">{h.id}{h.district ? ` · ${h.district}` : ""}</p>
+                    {suspended && (
+                      <p className="text-[11px] text-amber-800 font-semibold mt-1">
+                        Deactivated — hidden from Suwasiri until reactivated.
+                      </p>
+                    )}
+                    {!suspended && (
+                    <>
                     <p className="text-[11px] text-slate-600 mt-1 flex items-center gap-1">
                       <UserCheck className="w-3.5 h-3.5" />
                       Hospital Super Admin: {admins.length ? admins.join(", ") : "Not assigned"}
@@ -255,19 +264,23 @@ export default function PlatformConsoleView({
                       <Users className="w-3.5 h-3.5" />
                       {hospitalStaff.length} employees · click name to add or remove staff
                     </p>
+                    </>
+                    )}
                     </div>
                   </button>
                   <div className="flex flex-wrap items-center gap-2">
+                    {!suspended && (
                     <ClinicImageField
                       label="Centre logo"
                       value={h.logoUrl || ""}
                       storagePath={`clinic_media/hospitals/${h.id}/logo.jpg`}
                       onChange={(url) => void onUpdateHospitalLogo(h.id, url)}
                     />
+                    )}
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                       h.status === "ACTIVE" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
                     }`}>
-                      {h.status}
+                      {h.status === "ACTIVE" ? "ACTIVE" : "DEACTIVATED"}
                     </span>
                     <button
                       type="button"
@@ -279,14 +292,22 @@ export default function PlatformConsoleView({
                         setNewBranchAddress("");
                         setOpenHospitalId(h.id);
                       }}
-                      className="text-xs font-bold border border-sky-200 text-sky-800 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-lg flex items-center gap-1"
+                      className="text-xs font-bold border border-sky-200 text-sky-800 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-lg flex items-center gap-1 disabled:opacity-40"
+                      disabled={suspended}
                     >
                       <Pencil className="w-3.5 h-3.5" />
                       Edit
                     </button>
                     <button
                       type="button"
-                      onClick={() => onToggleHospitalStatus(h.id, h.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE")}
+                      onClick={() => {
+                        const next = h.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
+                        if (next === "SUSPENDED") {
+                          if (!window.confirm(`Deactivate ${h.name}? Patients will not see this clinic in the Suwasiri app until you reactivate it.`)) return;
+                          setOpenHospitalId(null);
+                        }
+                        onToggleHospitalStatus(h.id, next);
+                      }}
                       className="text-xs font-bold border px-3 py-1.5 rounded-lg hover:bg-slate-50"
                     >
                       {h.status === "ACTIVE" ? "Suspend" : "Reactivate"}

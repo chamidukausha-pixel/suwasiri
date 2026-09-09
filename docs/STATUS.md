@@ -155,9 +155,10 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Suwasiri **Notifications** inbox redesigned (filters, card actions, clear all / dismiss)
 - [x] After a doctor consult (video hang-up or GP Care **COMPLETED**), the patient can star-rate the doctor with attribute tags (`doctor_ratings`)
 - [x] GP Exam Room **Save eReferral** notifies that patient on Suwasiri Notifications; Recalls **SMS** does the same
-- [x] Receipts **Approved** on a Suwasiri bank slip marks the invoice **Settled** and Reports collected
+- [x] Receipts: receptionist **Approve** on a Suwasiri bank slip; invoice then shows **Approved** and Reports collected
 - [x] Team Secure Chat is person-to-person (pick registered staff); Practice Manager weekly roster has one **Save Weekly Rosters** control (bottom Save & commit block removed)
 - [x] Reception Lobby / Patient Clinical Records: click the patient name for a **read-only** GP Exam Room file (left Clinical sections). Reception cannot edit or add. Check In / Call to Exam Room stay status-only.
+- [x] Platform Console **Suspend** deactivates a medical centre: hidden from Suwasiri Doctors search and from the GP Care top-bar clinic picker until **Reactivate**
 
 ## In progress / next
 

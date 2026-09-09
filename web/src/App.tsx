@@ -156,6 +156,7 @@ import {
   republishStaffDoctorsToSuwasiri,
   subscribeClinicDoctors,
   unpublishClinicDoctorFromSuwasiri,
+  unpublishHospitalFromSuwasiri,
   doctorWorksAtClinic,
 } from "./sync/suwasiriClinicDoctors";
 import { publishFeeScheduleToSuwasiri } from "./sync/suwasiriFeeSchedule";
@@ -578,6 +579,22 @@ export default function App() {
     currentRole === "Hospital Super Admin";
   const activeHospital = hospitals.find((h) => h.id === sessionHospitalId);
   const activeBranch = branches.find((b) => b.id === sessionBranchId);
+
+  useEffect(() => {
+    if (hospitals.length === 0) return;
+    const current = hospitals.find((h) => h.id === sessionHospitalId);
+    if (current && current.status !== "SUSPENDED") return;
+    const allowed = isPlatformSA
+      ? hospitals
+      : hospitals.filter((h) =>
+          memberships.some((m) => m.userId === resolvedUserId && m.hospitalId === h.id && m.active)
+        );
+    const next = allowed.find((h) => h.status === "ACTIVE");
+    if (!next || next.id === sessionHospitalId) return;
+    setSessionHospitalId(next.id);
+    const nextBranch = branches.find((b) => b.hospitalId === next.id);
+    if (nextBranch) setSessionBranchId(nextBranch.id);
+  }, [hospitals, sessionHospitalId, isPlatformSA, memberships, resolvedUserId, branches]);
   const canEditRbac = isGovernanceEditor(activeRole, isPlatformSA);
   const canOpen = (tab: string) => {
     return tabAllowed(tab, activeRole, isPlatformSA);
@@ -903,6 +920,7 @@ export default function App() {
     if (activeTab !== "platform" || !isFirebaseConfigured()) return;
     for (const h of hospitals) {
       const hospitalBranches = branches.filter((b) => b.hospitalId === h.id);
+      const active = h.status !== "SUSPENDED";
       void publishClinicCenterToSuwasiri({
         hospitalId: h.id,
         name: h.name,
@@ -910,14 +928,19 @@ export default function App() {
         address: hospitalBranches[0]?.address,
         branchName: hospitalBranches[0]?.name,
         logoUrl: h.logoUrl || "",
+        active,
       });
-      void republishStaffDoctorsToSuwasiri({
-        staff: staffDirectory.filter((s) => s.hospitalId === h.id),
-        hospitalName: h.name,
-        hospitalId: h.id,
-        branches: hospitalBranches,
-        region: h.district || "Colombo",
-      });
+      if (active) {
+        void republishStaffDoctorsToSuwasiri({
+          staff: staffDirectory.filter((s) => s.hospitalId === h.id),
+          hospitalName: h.name,
+          hospitalId: h.id,
+          branches: hospitalBranches,
+          region: h.district || "Colombo",
+        });
+      } else {
+        void unpublishHospitalFromSuwasiri(h.id);
+      }
     }
     // Publish once when opening Operations & Governance.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1244,6 +1267,10 @@ export default function App() {
     });
     setStaffDirectory((prev) => [...prev.filter((s) => s.hospitalId !== hospitalId), ...next]);
     const hospital = hospitals.find((h) => h.id === hospitalId);
+    if (hospital?.status === "SUSPENDED") {
+      await unpublishHospitalFromSuwasiri(hospitalId);
+      return;
+    }
     await republishStaffDoctorsToSuwasiri({
       staff: next,
       hospitalName: hospital?.name || "GP Care Clinic",
@@ -1278,6 +1305,7 @@ export default function App() {
         address: branch?.address,
         branchName: branch?.name,
         logoUrl: promoted,
+        active: (hospital || data.hospital)?.status !== "SUSPENDED",
       });
     } catch (err) {
       console.warn("Could not publish clinic logo to Suwasiri:", err);
@@ -1306,6 +1334,7 @@ export default function App() {
         address: branch?.address,
         branchName: branch?.name,
         logoUrl: next?.logoUrl || "",
+        active: next?.status !== "SUSPENDED",
       });
     } catch (err) {
       console.warn("Could not publish hospital edit to Suwasiri:", err);
@@ -1339,6 +1368,7 @@ export default function App() {
     const staff = data.staff as StaffProvider | undefined;
     if (staff && /doctor|medical officer/i.test(staff.role || payload.roleName)) {
       const hospital = hospitals.find((h) => h.id === payload.hospitalId);
+      if (hospital?.status === "SUSPENDED") return;
       const branch = branches.find((b) => (staff.branchIds || []).includes(b.id))
         || branches.find((b) => b.hospitalId === payload.hospitalId);
       try {
@@ -1416,6 +1446,10 @@ export default function App() {
     }
     if (payload.roleName === "Doctor" && staff) {
       const hospital = hospitals.find((h) => h.id === payload.hospitalId);
+      if (hospital?.status === "SUSPENDED") {
+        alert(`${hospital.name} is deactivated. Reactivate it in Platform Console before listing doctors on Suwasiri.`);
+        return;
+      }
       const branch = branches.find((b) => payload.branchIds?.includes(b.id))
         || branches.find((b) => b.hospitalId === payload.hospitalId);
       try {
@@ -1441,6 +1475,7 @@ export default function App() {
           address: branch?.address,
           branchName: branch?.name,
           logoUrl: hospital?.logoUrl || "",
+          active: hospital?.status !== "SUSPENDED",
         });
         if (doctorSynced) {
           alert(`${payload.name} is listed at ${hospital?.name || "this clinic"} in the Suwasiri app. Patients can search the clinic or doctor and book available times (booked slots stay locked).`);
@@ -6178,7 +6213,7 @@ export default function App() {
                     onJumpToToday={jumpToBillingToday}
                   />
                   <p className="text-[11px] text-slate-500 mt-2 px-1">
-                    Click a date to show invoices for patients booked that day. <strong>Cash Settle</strong> marks counter payment as Settled. Suwasiri debit/card is collected immediately. A bank slip stays pending until you click <strong>Approved</strong>. All of these update Reports & Analytics.
+                    Click a date to show invoices for patients booked that day. <strong>Cash Settle</strong> marks counter payment as Settled. Suwasiri debit/card is collected immediately. When a patient uploads a <strong>manual bank slip</strong>, click <strong>Approve</strong> after you check it — the invoice then shows <strong>Approved</strong>. All of these update Reports & Analytics.
                   </p>
                 </div>
               <div className="xl:col-span-8 bg-white p-6 border rounded space-y-4 min-h-0">
@@ -6361,7 +6396,7 @@ export default function App() {
                                   className="bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 text-[9px] font-bold rounded transition-colors cursor-pointer flex items-center gap-1"
                                 >
                                   <CheckCircle className="w-3 h-3" />
-                                  Approved
+                                  Approve
                                 </button>
                               )}
                               {notSettled ? (
@@ -6562,8 +6597,38 @@ export default function App() {
                     body: JSON.stringify({ status }),
                   });
                   const data = await res.json();
+                  const hospital = (data.hospital || hospitals.find((h) => h.id === hospitalId)) as Hospital | undefined;
                   if (data.hospital) {
                     setHospitals((prev) => prev.map((h) => (h.id === data.hospital.id ? data.hospital : h)));
+                  } else if (hospital) {
+                    setHospitals((prev) => prev.map((h) => (h.id === hospitalId ? { ...h, status } : h)));
+                  }
+                  const next = { ...(hospital || { id: hospitalId, name: "GP Care Clinic", status }), status };
+                  const hospitalBranches = branches.filter((b) => b.hospitalId === hospitalId);
+                  try {
+                    if (status === "SUSPENDED") {
+                      await unpublishHospitalFromSuwasiri(hospitalId);
+                    } else {
+                      await publishClinicCenterToSuwasiri({
+                        hospitalId,
+                        name: next.name,
+                        region: next.district || "Colombo",
+                        address: hospitalBranches[0]?.address,
+                        branchName: hospitalBranches[0]?.name,
+                        logoUrl: next.logoUrl || "",
+                        active: true,
+                      });
+                      await republishStaffDoctorsToSuwasiri({
+                        staff: staffDirectory.filter((s) => s.hospitalId === hospitalId),
+                        hospitalName: next.name,
+                        hospitalId,
+                        branches: hospitalBranches,
+                        region: next.district || "Colombo",
+                      });
+                    }
+                  } catch (err) {
+                    console.warn("Could not sync clinic suspend/reactivate to Suwasiri:", err);
+                    alert("Clinic status saved here, but Suwasiri sync failed. Check the Firebase connection and try again.");
                   }
                 }}
                 onUpdateHospitalLogo={updateHospitalLogo}

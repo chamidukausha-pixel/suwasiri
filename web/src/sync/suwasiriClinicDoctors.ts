@@ -240,6 +240,7 @@ export async function publishClinicCenterToSuwasiri(opts: {
   address?: string;
   branchName?: string;
   logoUrl?: string;
+  active?: boolean;
 }): Promise<boolean> {
   if (!isFirebaseConfigured()) return false;
   const name = opts.name.trim();
@@ -250,13 +251,33 @@ export async function publishClinicCenterToSuwasiri(opts: {
     address: opts.address || opts.branchName || `${opts.region || "Colombo"}, Sri Lanka`,
     hospitalId: opts.hospitalId,
     source: "gp_care",
-    active: true,
+    active: opts.active !== false,
+    status: opts.active === false ? "SUSPENDED" : "ACTIVE",
     updatedAt: new Date().toISOString(),
   };
   if (opts.logoUrl !== undefined) {
     payload.logoUrl = opts.logoUrl ? opts.logoUrl : deleteField();
   }
   await setDoc(doc(getFirebaseDb(), "clinic_centers", opts.hospitalId), payload, { merge: true });
+  return true;
+}
+
+/** Hide a suspended medical centre and its doctors from the Suwasiri app until reactivated. */
+export async function unpublishHospitalFromSuwasiri(hospitalId: string): Promise<boolean> {
+  if (!isFirebaseConfigured() || !hospitalId) return false;
+  await setDoc(
+    doc(getFirebaseDb(), "clinic_centers", hospitalId),
+    { active: false, status: "SUSPENDED", updatedAt: new Date().toISOString() },
+    { merge: true }
+  );
+  try {
+    const snap = await getDocs(
+      query(collection(getFirebaseDb(), "clinic_doctors"), where("hospitalId", "==", hospitalId))
+    );
+    await Promise.allSettled(snap.docs.map((d) => markClinicDoctorInactive(d.id)));
+  } catch (err) {
+    console.warn("Could not hide clinic doctors after suspend:", err);
+  }
   return true;
 }
 

@@ -34,9 +34,10 @@ export default function RoleSwitcher({
   onSignOut,
 }: Props) {
   const userMemberships = memberships.filter((m) => m.userId === userId && m.active);
-  const hospitalOptions = isPlatformSA
+  const hospitalOptions = (isPlatformSA
     ? hospitals
-    : hospitals.filter((h) => userMemberships.some((m) => m.hospitalId === h.id));
+    : hospitals.filter((h) => userMemberships.some((m) => m.hospitalId === h.id))
+  ).filter((h) => h.status !== "SUSPENDED");
   const membership = userMemberships.find((m) => m.hospitalId === hospitalId);
   const role = roles.find((r) => r.id === roleId);
   const assignedBranches = isPlatformSA
@@ -62,7 +63,7 @@ export default function RoleSwitcher({
             >
               {hospitalOptions.map((h) => (
                 <option key={h.id} value={h.id}>
-                  {h.name} {h.status === "SUSPENDED" ? "(suspended)" : ""}
+                  {h.name}
                 </option>
               ))}
             </select>

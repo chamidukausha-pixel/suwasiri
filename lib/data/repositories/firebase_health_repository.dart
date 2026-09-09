@@ -508,6 +508,8 @@ class FirebaseHealthRepository implements HealthRepository {
   @override
   Future<List<Doctor>> getDoctors({String query = ''}) async {
     final merged = <Doctor>[..._doctors];
+    final inactiveHospitalIds = <String>{};
+    final inactiveHospitalNames = <String>{};
     try {
       final snap = await _db.collection('clinic_doctors').get();
       for (final doc in snap.docs) {
@@ -523,18 +525,30 @@ class FirebaseHealthRepository implements HealthRepository {
       final centers = await _db.collection('clinic_centers').get();
       for (final doc in centers.docs) {
         final data = doc.data();
-        if (data['active'] == false) continue;
-        final logo = (data['logoUrl'] as String?)?.trim() ?? '';
+        final name = (data['name'] as String? ?? '').trim();
         final hid = (data['hospitalId'] as String?)?.trim() ?? doc.id;
+        final inactive = data['active'] == false ||
+            (data['status'] as String?)?.toUpperCase() == 'SUSPENDED';
+        if (inactive) {
+          inactiveHospitalIds.add(doc.id);
+          if (hid.isNotEmpty) inactiveHospitalIds.add(hid);
+          if (name.isNotEmpty) inactiveHospitalNames.add(name.toLowerCase());
+          continue;
+        }
+        final logo = (data['logoUrl'] as String?)?.trim() ?? '';
         if (logo.isNotEmpty) logos[hid] = logo;
         if (logo.isNotEmpty) logos[doc.id] = logo;
-        final name = (data['name'] as String? ?? '').trim();
-        if (name.isNotEmpty) logos['name:${name.toLowerCase()}'] = logo;
+        if (name.isNotEmpty && logo.isNotEmpty) {
+          logos['name:${name.toLowerCase()}'] = logo;
+        }
       }
       final hospitals = merged.map((d) => d.hospital.toLowerCase()).toSet();
       for (final doc in centers.docs) {
         final data = doc.data();
-        if (data['active'] == false) continue;
+        if (data['active'] == false ||
+            (data['status'] as String?)?.toUpperCase() == 'SUSPENDED') {
+          continue;
+        }
         final name = (data['name'] as String? ?? '').trim();
         if (name.isEmpty) continue;
         if (hospitals.contains(name.toLowerCase())) continue;
@@ -559,6 +573,20 @@ class FirebaseHealthRepository implements HealthRepository {
         );
       }
     } catch (_) {}
+    merged.removeWhere((d) {
+      final hid = d.hospitalId.trim();
+      if (hid.isNotEmpty && inactiveHospitalIds.contains(hid)) return true;
+      final hospitalName = d.hospital.trim().toLowerCase();
+      if (hospitalName.isNotEmpty &&
+          inactiveHospitalNames.contains(hospitalName)) {
+        return true;
+      }
+      final displayName = d.name.trim().toLowerCase();
+      if (displayName.isNotEmpty && inactiveHospitalNames.contains(displayName)) {
+        return true;
+      }
+      return false;
+    });
     final deduped = _applyClinicLogos(_mergeDoctors(merged), logos);
     final q = query.trim().toLowerCase();
     if (q.isEmpty) return deduped;
