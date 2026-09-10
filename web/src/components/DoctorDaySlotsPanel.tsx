@@ -1,19 +1,16 @@
 import React, { useMemo } from "react";
-import type { Appointment, StaffProvider } from "../types";
+import type { StaffProvider, Appointment } from "../types";
 import {
   appointmentClock,
   appointmentPatientName,
   bookingOnSlot,
   bookingsForDoctorOnDate,
   formatAmPm,
-  formatTime24,
   parseClock,
 } from "../sync/suwasiriAppointments";
+import { CLINIC_SLOT_TIMES, hasRosterHours, parseDateKey, slotTimesForDoctor } from "../sync/clinicSlots";
 
-export const CLINIC_SLOT_TIMES = [
-  "09:00", "09:30", "10:00", "10:30", "11:15", "11:45",
-  "13:00", "13:30", "14:30", "15:00", "15:30", "16:15", "16:45", "17:45",
-];
+export { CLINIC_SLOT_TIMES };
 
 const CORAL = "#E85D4C";
 
@@ -21,11 +18,7 @@ export function longClinicDate(d: Date) {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 }
 
-export function parseDateKey(dateKey: string): Date | null {
-  const [y, m, d] = dateKey.split("-").map(Number);
-  if (!y || !m || !d) return null;
-  return new Date(y, m - 1, d);
-}
+export { parseDateKey };
 
 interface Props {
   doctor?: StaffProvider;
@@ -54,19 +47,11 @@ export default function DoctorDaySlotsPanel({
       })
     : [];
 
-  const slotTimes = useMemo(() => {
-    const extra = booked
-      .map((apt) => {
-        const clock = appointmentClock(apt) || parseClock(apt.time || "");
-        return formatTime24(clock.hours, clock.minutes);
-      })
-      .filter((t) => !CLINIC_SLOT_TIMES.includes(t));
-    return [...CLINIC_SLOT_TIMES, ...Array.from(new Set(extra))].sort((a, b) => {
-      const ca = parseClock(a);
-      const cb = parseClock(b);
-      return ca.hours * 60 + ca.minutes - (cb.hours * 60 + cb.minutes);
-    });
-  }, [booked]);
+  const slotTimes = useMemo(
+    () => slotTimesForDoctor(doctor, dateKey, appointments),
+    [doctor, dateKey, appointments]
+  );
+  const rostered = hasRosterHours(doctor);
 
   return (
     <div className="space-y-3">
@@ -75,6 +60,18 @@ export default function DoctorDaySlotsPanel({
           Available times — {doctor?.name || "select a doctor"}
           {dateLabel ? ` · ${dateLabel}` : ""}
         </p>
+        {rostered && (
+          <p className="text-[11px] text-slate-500 mb-2">
+            Times come from the saved weekly roster (Practice Manager). They stay until an admin changes them.
+          </p>
+        )}
+        {slotTimes.length === 0 ? (
+          <p className="text-xs text-slate-500 bg-white border border-dashed border-[#E4E2DE] rounded-2xl px-3 py-3">
+            {doctor
+              ? "This doctor is not rostered on this weekday. Booked visits still appear below."
+              : "Select a doctor to see available and booked times."}
+          </p>
+        ) : (
         <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
           {slotTimes.map((t) => {
             const row = doctor
@@ -113,6 +110,7 @@ export default function DoctorDaySlotsPanel({
             );
           })}
         </div>
+        )}
       </div>
 
       <div>

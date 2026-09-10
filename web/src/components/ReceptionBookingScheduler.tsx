@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Check, GripVertical, Phone, Video, X } from "lucide-react";
 import type { Appointment, Patient, StaffProvider } from "../types";
 import { bookingOnSlot } from "../sync/suwasiriAppointments";
-import DoctorDaySlotsPanel, { CLINIC_SLOT_TIMES } from "./DoctorDaySlotsPanel";
+import DoctorDaySlotsPanel from "./DoctorDaySlotsPanel";
+import { slotTimesForDoctor } from "../sync/clinicSlots";
 
 const REASONS = ["Follow up", "New symptom", "Test results", "Prescription"];
 
@@ -81,6 +82,8 @@ interface Props {
   lockPatient?: boolean;
   lockDoctor?: boolean;
   embedded?: boolean;
+  /** Show the same available/booked grid without creating a booking (reception file view). */
+  viewOnly?: boolean;
   onClose: () => void;
   onConfirm: (payload: ReceptionBookPayload) => Promise<void> | void;
 }
@@ -99,6 +102,7 @@ export default function ReceptionBookingScheduler({
   lockPatient = false,
   lockDoctor = false,
   embedded = false,
+  viewOnly = false,
   onClose,
   onConfirm,
 }: Props) {
@@ -109,8 +113,7 @@ export default function ReceptionBookingScheduler({
 
   useEffect(() => {
     if (doctors.length === 0) return;
-    const ids = doctors.map((d) => d.id).join(",");
-    setRoster((prev) => (prev.map((d) => d.id).join(",") === ids ? prev : doctors));
+    setRoster(doctors);
     setSelectedDoctorId((prev) => (doctors.some((d) => d.id === prev) ? prev : doctors[0].id));
   }, [doctors]);
   const dates = useMemo(() => upcomingDates(183, includeToday), [includeToday]);
@@ -131,10 +134,22 @@ export default function ReceptionBookingScheduler({
   const doctor = roster.find((d) => d.id === selectedDoctorId) || roster[0];
   const selectedDate = dates.find((d) => d.key === dateKey)?.date || dates[0]?.date;
   const patient = patients.find((p) => p.id === patientId);
+  const daySlotTimes = slotTimesForDoctor(doctor, dateKey, appointments);
+
+  useEffect(() => {
+    const times = slotTimesForDoctor(doctor, dateKey, appointments);
+    const firstFree = times.find((t) => !slotTaken(appointments, doctor, dateKey, t));
+    setTime24((prev) => {
+      if (times.includes(prev) && !slotTaken(appointments, doctor, dateKey, prev)) return prev;
+      return firstFree || prev;
+    });
+  }, [doctor?.id, dateKey, appointments]);
 
   const freeCount = (key: string) => {
     if (!doctor) return 0;
-    return CLINIC_SLOT_TIMES.filter((t) => !slotTaken(appointments, doctor, key, t)).length;
+    return slotTimesForDoctor(doctor, key, appointments).filter(
+      (t) => !slotTaken(appointments, doctor, key, t)
+    ).length;
   };
 
   const openSlots = doctor ? freeCount(dateKey) : 0;
@@ -188,6 +203,10 @@ export default function ReceptionBookingScheduler({
       setError("That slot is already booked. Choose another time.");
       return;
     }
+    if (!daySlotTimes.includes(time24)) {
+      setError("That time is outside this doctor’s saved weekly hours. Pick an available slot.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -213,17 +232,19 @@ export default function ReceptionBookingScheduler({
           {!lockDoctor && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-1 space-y-2">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A]">Doctors at this clinic — drag to reorder</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A]">
+                {viewOnly ? "Doctors at this clinic" : "Doctors at this clinic — drag to reorder"}
+              </p>
               <div className="space-y-1.5">
                 {roster.map((d, i) => (
                   <div
                     key={d.id}
-                    draggable
-                    onDragStart={() => onDragStart(i)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => onDropOn(i)}
+                    draggable={!viewOnly}
+                    onDragStart={() => { if (!viewOnly) onDragStart(i); }}
+                    onDragOver={(e) => { if (!viewOnly) e.preventDefault(); }}
+                    onDrop={() => { if (!viewOnly) onDropOn(i); }}
                     onClick={() => setSelectedDoctorId(d.id)}
-                    className={`flex items-center gap-2 px-2.5 py-2 rounded-xl border cursor-grab active:cursor-grabbing ${
+                    className={`flex items-center gap-2 px-2.5 py-2 rounded-xl border ${viewOnly ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} ${
                       selectedDoctorId === d.id
                         ? "border-[#6F8B6E] bg-[#8FA88E]/20"
                         : "border-[#E4E2DE] bg-white"
@@ -270,6 +291,12 @@ export default function ReceptionBookingScheduler({
           </div>
           )}
 
+          {viewOnly && (
+            <p className="text-xs text-slate-600 bg-white border border-[#E4E2DE] rounded-xl px-3 py-2">
+              Same available and booked times the doctor sees. Weekly hours are saved in Practice Manager.
+            </p>
+          )}
+
           {lockDoctor && doctor && (
             <div className="bg-white rounded-2xl border border-[#E4E2DE] p-4 flex gap-3">
               <div
@@ -287,7 +314,7 @@ export default function ReceptionBookingScheduler({
             </div>
           )}
 
-          <div>
+          {!viewOnly && <div>
             <label className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A] block mb-1">Patient</label>
             {lockPatient ? (
               <div className="w-full p-2.5 bg-white border border-[#E4E2DE] rounded-xl text-sm font-semibold text-slate-800">
@@ -311,8 +338,9 @@ export default function ReceptionBookingScheduler({
                 {patient.age}y · {patient.gender} · {patient.phone} · {patient.email}
               </p>
             )}
-          </div>
+          </div>}
 
+          {!viewOnly && (
           <div className="flex gap-2">
             <button
               type="button"
@@ -336,6 +364,7 @@ export default function ReceptionBookingScheduler({
               Video consultation
             </button>
           </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
           <div className="lg:col-span-3 space-y-3">
@@ -375,13 +404,15 @@ export default function ReceptionBookingScheduler({
             doctor={doctor}
             dateKey={dateKey}
             appointments={appointments}
-            selectedTime={time24}
-            onSelectTime={setTime24}
-            selectable
+            selectedTime={viewOnly ? undefined : time24}
+            onSelectTime={viewOnly ? undefined : setTime24}
+            selectable={!viewOnly}
           />
           </div>
           </div>
 
+          {!viewOnly && (
+          <>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A8A] mb-2">Reason for visit</p>
             <div className="flex flex-wrap gap-2">
@@ -449,6 +480,8 @@ export default function ReceptionBookingScheduler({
             <Check className="w-4 h-4" />
             {saving ? "Booking…" : "Confirm booking"}
           </button>
+          )}
+          </>
           )}
         </div>
   );

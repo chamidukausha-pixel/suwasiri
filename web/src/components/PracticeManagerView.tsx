@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { 
   Building2, Users, Calendar, DollarSign, Clock, FileCode, CheckCircle, 
   Plus, Edit, Trash2, MapPin, Stethoscope, Shield, ShieldCheck, Mail, Smartphone,
@@ -17,7 +17,7 @@ interface Props {
   branches?: Branch[];
   roles?: RoleDefinition[];
   staffList?: StaffProvider[];
-  onSaveStaff?: (staff: StaffProvider[]) => void;
+  onSaveStaff?: (staff: StaffProvider[]) => void | Promise<void>;
   onCreateStaff?: (payload: {
     hospitalId: string;
     name: string;
@@ -61,8 +61,14 @@ export default function PracticeManagerView({
   );
 
   const [staffList, setStaffList] = useState<StaffProvider[]>(staffProp || []);
+  const lastStaffSig = useRef("");
 
   useEffect(() => {
+    const sig = (staffProp || [])
+      .map((s) => `${s.id}|${JSON.stringify(s.roster)}|${JSON.stringify(s.rosterHours || {})}|${s.assignedRoom}|${s.role}|${s.photoUrl || ""}`)
+      .join(";");
+    if (sig === lastStaffSig.current) return;
+    lastStaffSig.current = sig;
     if (staffProp) setStaffList(staffProp);
   }, [staffProp]);
 
@@ -225,9 +231,17 @@ export default function PracticeManagerView({
     triggerSaveSuccess("Full 7-day coverage auto-selected for all staff members!");
   };
 
-  const handleSaveRoster = () => {
-    if (onSaveStaff) onSaveStaff(staffList);
-    triggerSaveSuccess("Weekly staff rosters and room allocations saved successfully to Clinic Database!");
+  const handleSaveRoster = async () => {
+    if (!onSaveStaff) return;
+    try {
+      await onSaveStaff(staffList);
+      lastStaffSig.current = (staffList || [])
+        .map((s) => `${s.id}|${JSON.stringify(s.roster)}|${JSON.stringify(s.rosterHours || {})}|${s.assignedRoom}|${s.role}|${s.photoUrl || ""}`)
+        .join(";");
+      triggerSaveSuccess("Weekly rosters saved. Reception and doctors keep these available times until you change them.");
+    } catch (err: any) {
+      alert(err?.message || "Could not save weekly rosters.");
+    }
   };
 
   const updateStaffRole = (staffId: string, roleId: string) => {
@@ -492,9 +506,13 @@ export default function PracticeManagerView({
                   <span>Add doctor</span>
                 </button>
                 <button 
-                  onClick={() => {
-                    if (onSaveStaff) onSaveStaff(staffList);
-                    triggerSaveSuccess("Staff roles and branch assignments saved.");
+                  onClick={async () => {
+                    try {
+                      if (onSaveStaff) await onSaveStaff(staffList);
+                      triggerSaveSuccess("Staff roles and branch assignments saved.");
+                    } catch (err: any) {
+                      alert(err?.message || "Could not save staff assignments.");
+                    }
                   }}
                   className="bg-[#00334f] hover:bg-[#0c4a6e] text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
                 >

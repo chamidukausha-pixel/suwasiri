@@ -27,6 +27,10 @@ export function mapClinicDoctorDoc(id: string, data: Record<string, unknown>): S
     data.rosterHours && typeof data.rosterHours === "object"
       ? (data.rosterHours as StaffProvider["rosterHours"])
       : undefined;
+  const roster =
+    data.roster && typeof data.roster === "object"
+      ? ({ ...EMPTY_ROSTER, ...(data.roster as StaffProvider["roster"]) } as StaffProvider["roster"])
+      : EMPTY_ROSTER;
   return {
     id,
     hospitalId: String(data.hospitalId || ""),
@@ -38,7 +42,7 @@ export function mapClinicDoctorDoc(id: string, data: Record<string, unknown>): S
     email: String(data.email || ""),
     phone: String(data.phone || ""),
     assignedRoom: String(data.address || data.hospital || "Clinic"),
-    roster: EMPTY_ROSTER,
+    roster,
     rosterHours: hours,
     photoUrl: String(data.photoUrl || ""),
     active: data.active !== false,
@@ -190,10 +194,16 @@ export async function publishClinicDoctorToSuwasiri(opts: {
     staffId: opts.staffId,
     hospitalId: opts.hospitalId || "",
     branchId: opts.branchId || "",
-    rosterHours: hours,
     active: true,
     updatedAt: new Date().toISOString(),
   };
+  // Never publish {} — merge would wipe hours the clinic already saved.
+  if (Object.keys(hours).length > 0) {
+    payload.rosterHours = hours;
+  }
+  if (opts.roster) {
+    payload.roster = opts.roster;
+  }
   if (opts.photoUrl !== undefined) {
     payload.photoUrl = opts.photoUrl ? opts.photoUrl : deleteField();
   }

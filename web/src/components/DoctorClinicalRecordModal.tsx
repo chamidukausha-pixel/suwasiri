@@ -62,6 +62,8 @@ interface Props {
   clinicName?: string;
   sessionDoctorName?: string;
   sessionDoctor?: StaffProvider;
+  /** All clinic doctors so reception can view the same available/booked grid. */
+  clinicDoctors?: StaffProvider[];
   linkedAppointmentId?: string;
   onBookAppointment?: (payload: {
     patientId: string;
@@ -102,6 +104,7 @@ export default function DoctorClinicalRecordModal({
   clinicName,
   sessionDoctorName,
   sessionDoctor,
+  clinicDoctors = [],
   linkedAppointmentId,
   onBookAppointment,
   onOrderPathology,
@@ -2621,10 +2624,8 @@ ${viewingCertificate.additionalRemarks || ""}`}
                   </h3>
                   <p className="text-slate-500 text-[11px]">
                     {bookingDoctor && onBookAppointment && !hideActiveConsultDetails && !locked
-                      ? `Book a follow-up with ${bookingDoctor.name} only. The right-hand times are this doctor’s available and booked slots — other clinic doctors are not shown. Confirm writes to ${patient.name}’s Suwasiri Home (blue in-person / purple video) and the reception / clinic calendars.`
-                      : hideActiveConsultDetails || locked
-                        ? "Appointment history for this file."
-                        : "Sign in as a clinic doctor to book a follow-up on your own available times."}
+                      ? `Book a follow-up with ${bookingDoctor.name} only. Available and booked times are this doctor’s saved weekly roster — reception sees the same grid. Confirm writes to ${patient.name}’s Suwasiri Home (blue in-person / purple video) and the clinic calendars.`
+                      : "Available and booked times for this clinic. Weekly hours stay saved in Practice Manager. Reception and the consulting doctor see the same slots."}
                   </p>
                 </div>
               </div>
@@ -2644,18 +2645,32 @@ ${viewingCertificate.additionalRemarks || ""}`}
                 );
               })()}
 
-              {onBookAppointment && bookingDoctor && !hideActiveConsultDetails && !locked && (
+              {(() => {
+                const canBook = Boolean(onBookAppointment && bookingDoctor && !hideActiveConsultDetails && !locked);
+                const slotDoctors = canBook && bookingDoctor
+                  ? [bookingDoctor]
+                  : (clinicDoctors.length > 0 ? clinicDoctors : (bookingDoctor ? [bookingDoctor] : []));
+                if (slotDoctors.length === 0) {
+                  return (
+                    <p className="text-xs text-slate-500 bg-slate-50 border border-dashed border-slate-200 rounded-xl px-3 py-3">
+                      No clinic doctors are listed yet. Add them in Practice Manager or Platform Console, then save weekly hours.
+                    </p>
+                  );
+                }
+                return (
                 <ReceptionBookingScheduler
                   embedded
-                  lockDoctor
+                  lockDoctor={canBook}
                   lockPatient
+                  viewOnly={!canBook}
                   patients={[patient]}
-                  doctors={[bookingDoctor]}
+                  doctors={slotDoctors}
                   appointments={appointments}
                   initialPatientId={patient.id}
                   includeToday
                   onClose={() => undefined}
                   onConfirm={async (payload) => {
+                    if (!canBook || !onBookAppointment) return;
                     await onBookAppointment({
                       patientId: payload.patientId,
                       date: payload.date,
@@ -2667,7 +2682,8 @@ ${viewingCertificate.additionalRemarks || ""}`}
                     });
                   }}
                 />
-              )}
+                );
+              })()}
 
               <div className="space-y-4">
                 {patientAppointments.length === 0 ? (

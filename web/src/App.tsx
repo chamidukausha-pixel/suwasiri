@@ -106,10 +106,12 @@ import {
   suwasiriDoctorCatalogId,
   updateSuwasiriAppointmentStatus,
   updateSuwasiriAppointmentPayment,
-  doctorIdentityIds,
-  doctorPersonKey,
   matchSessionDoctor,
   staffUserAsDoctor,
+  staffDoctorsMatch,
+  hasSavedRosterHours,
+  applyPublishedRosterHours,
+  mergeRegisteredClinicDoctors,
   suwasiriPatientIdForClinicFile,
   resolveSuwasiriNotifyId,
   appointmentDateKey,
@@ -506,6 +508,8 @@ export default function App() {
   const [clinicAppointments, setAppointments] = useState<Appointment[]>([]);
   const [suwasiriAppointments, setSuwasiriAppointments] = useState<Appointment[]>([]);
   const [publishedClinicDoctors, setPublishedClinicDoctors] = useState<StaffProvider[]>([]);
+  const [clinicDoctorsReady, setClinicDoctorsReady] = useState(() => !isFirebaseConfigured());
+  const rosterPublishRestored = useRef(false);
   const [suwasiriPatients, setSuwasiriPatients] = useState<Patient[]>([]);
   const [suwasiriVaccinePatients, setSuwasiriVaccinePatients] = useState<Patient[]>([]);
   const [suwasiriCharts, setSuwasiriCharts] = useState<Record<string, SuwasiriChartPatch>>({});
@@ -952,6 +956,7 @@ export default function App() {
       setSuwasiriPatients([]);
       setSuwasiriVaccinePatients([]);
       setPublishedClinicDoctors([]);
+      setClinicDoctorsReady(true);
       return;
     }
     const unsubAppt = subscribeSuwasiriAppointments((apts, pats) => {
@@ -963,6 +968,7 @@ export default function App() {
     });
     const unsubDocs = subscribeClinicDoctors((docs) => {
       setPublishedClinicDoctors(docs);
+      setClinicDoctorsReady(true);
     });
     const unsubRegs = subscribeClinicRegistrations((patientId, patch) => {
       setSuwasiriRegistrations((prev) => ({ ...prev, [patientId]: patch }));
@@ -992,6 +998,53 @@ export default function App() {
       unsubRegs?.();
     };
   }, [authUser?.uid]);
+
+  useEffect(() => {
+    if (!clinicDoctorsReady || staffDirectory.length === 0) return;
+    const next = staffDirectory.map((s) =>
+      /doctor|medical officer/i.test(s.role || "")
+        ? applyPublishedRosterHours(s, publishedClinicDoctors)
+        : s
+    );
+    const restored = next.filter((s, i) => s.rosterHours !== staffDirectory[i].rosterHours);
+    if (restored.length > 0) {
+      setStaffDirectory(next);
+      const hospitalIds = [...new Set(restored.map((s) => s.hospitalId).filter(Boolean))];
+      for (const hid of hospitalIds) {
+        const slice = next.filter((s) => s.hospitalId === hid);
+        void fetch("/api/tenancy/staff-directory", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ hospitalId: hid, staffDirectory: slice }),
+        });
+      }
+    }
+    if (rosterPublishRestored.current || !authUser || !isFirebaseConfigured()) return;
+    const needsPublish = hospitals.some((h) => {
+      if (h.status === "SUSPENDED") return false;
+      return staffDirectory.some(
+        (s) =>
+          s.hospitalId === h.id &&
+          /doctor|medical officer/i.test(s.role || "") &&
+          hasSavedRosterHours(s) &&
+          !publishedClinicDoctors.some((p) => staffDoctorsMatch(s, p) && hasSavedRosterHours(p))
+      );
+    });
+    if (!needsPublish) return;
+    rosterPublishRestored.current = true;
+    for (const h of hospitals) {
+      if (h.status === "SUSPENDED") continue;
+      const staff = next.filter((s) => s.hospitalId === h.id);
+      if (!staff.some((s) => hasSavedRosterHours(s))) continue;
+      void republishStaffDoctorsToSuwasiri({
+        staff,
+        hospitalName: h.name,
+        hospitalId: h.id,
+        branches: branches.filter((b) => b.hospitalId === h.id),
+        region: h.district || "Colombo",
+      });
+    }
+  }, [clinicDoctorsReady, publishedClinicDoctors, staffDirectory, hospitals, branches, authUser]);
 
   const suwasiriPatientIdsKey = useMemo(
     () =>
@@ -1079,28 +1132,11 @@ export default function App() {
     p.accessStatus !== "DELETED" &&
     p.accessStatus !== "BLOCKED"
   );
-  const registeredDoctors = (() => {
-    const list: StaffProvider[] = [];
-    const seen = new Set<string>();
-    const add = (d: StaffProvider) => {
-      if (!d?.name) return;
-      if (!doctorWorksAtClinic(d, sessionHospitalId)) return;
-      const ids = doctorIdentityIds({ doctorStaffId: d.id, doctorName: d.name });
-      const nameKey = doctorPersonKey(d.name);
-      if (ids.some((id) => seen.has(id)) || (nameKey && seen.has(`n:${nameKey}`))) return;
-      ids.forEach((id) => seen.add(id));
-      if (nameKey) seen.add(`n:${nameKey}`);
-      list.push(d);
-    };
-    publishedClinicDoctors.forEach(add);
-    workingDoctors.forEach(add);
-    if (list.length === 0) {
-      publishedClinicDoctors.forEach((d) => {
-        if (d?.name && d.active !== false) list.push(d);
-      });
-    }
-    return list;
-  })();
+  const registeredDoctors = mergeRegisteredClinicDoctors(
+    workingDoctors,
+    publishedClinicDoctors,
+    sessionHospitalId
+  );
   const tenantAppointments = appointments.filter((a) => {
     if (!a.hospitalId || a.hospitalId === sessionHospitalId) return true;
     return registeredDoctors.some((d) =>
@@ -1111,10 +1147,12 @@ export default function App() {
       })
     );
   });
-  const sessionDoctor = matchSessionDoctor(registeredDoctors, sessionUser);
+  const sessionDoctor =
+    matchSessionDoctor(registeredDoctors, sessionUser) ||
+    matchSessionDoctor(workingDoctors, sessionUser);
   const examBookingDoctor =
     sessionDoctor ||
-    (!isFrontDeskStaff ? staffUserAsDoctor(sessionUser, sessionHospitalId) : undefined);
+    (!isFrontDeskStaff ? staffUserAsDoctor(sessionUser, sessionHospitalId, sessionDoctor) : undefined);
   const clinicBookings = sessionDoctor && !isFrontDeskStaff
     ? tenantAppointments.filter((a) =>
         isSameDoctor({
@@ -1260,11 +1298,15 @@ export default function App() {
 
   const persistStaffDirectory = async (next: StaffProvider[]) => {
     const hospitalId = next[0]?.hospitalId || sessionHospitalId;
-    await fetch("/api/tenancy/staff-directory", {
+    const res = await fetch("/api/tenancy/staff-directory", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ hospitalId, staffDirectory: next }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: "Could not save staff directory" }));
+      throw new Error(err.error || "Could not save weekly rosters.");
+    }
     setStaffDirectory((prev) => [...prev.filter((s) => s.hospitalId !== hospitalId), ...next]);
     const hospital = hospitals.find((h) => h.id === hospitalId);
     if (hospital?.status === "SUSPENDED") {
@@ -5055,6 +5097,7 @@ export default function App() {
                       clinicName={activeHospital?.name || selectedConsultPatient.medicalCenter}
                       sessionDoctorName={sessionUser?.name || "GP"}
                       sessionDoctor={examBookingDoctor}
+                      clinicDoctors={registeredDoctors}
                       linkedAppointmentId={examFileOnlyView ? undefined : (examAppointmentId || undefined)}
                       hideActiveConsultDetails={examFileOnlyView}
                       heightMode="natural"
@@ -5527,6 +5570,7 @@ export default function App() {
                 focusAppointmentId={telehealthFocus?.appointmentId}
                 sessionDoctorName={sessionUser?.name || "Dr. Priyantha Silva"}
                 sessionDoctor={examBookingDoctor}
+                clinicDoctors={registeredDoctors}
                 drugsDatabase={drugs}
                 onSelectVideoPatient={(pat, appointmentId) => {
                   setTelehealthFocus({ patientId: pat.id, appointmentId });
@@ -7500,6 +7544,7 @@ export default function App() {
           clinicName={activeHospital?.name}
           sessionDoctorName={sessionUser?.name || "GP"}
           sessionDoctor={examBookingDoctor}
+          clinicDoctors={registeredDoctors}
           onClose={() => {
             setActiveDoctorRecordPatient(null);
             setExamFileOnlyView(false);

@@ -73,6 +73,7 @@ interface Props {
   focusAppointmentId?: string;
   sessionDoctorName?: string;
   sessionDoctor?: StaffProvider;
+  clinicDoctors?: StaffProvider[];
   onInvitePatient: (pName: string, phone: string, transport: "WhatsApp" | "SMS", token: string) => void;
   onSaveTelehealthNotes: (patientId: string, notes: string) => void;
   drugsDatabase?: string[];
@@ -108,6 +109,7 @@ export default function TelehealthRoom({
   focusAppointmentId,
   sessionDoctorName = "Dr. Priyantha Silva",
   sessionDoctor,
+  clinicDoctors = [],
   onSaveTelehealthNotes,
   drugsDatabase = [],
   formulary = [],
@@ -942,6 +944,7 @@ Suwasiri App Linked      : YES [Token: ${inviteToken}]
                 clinicName={clinicName || selectedPat.medicalCenter}
                 sessionDoctorName={sessionDoctorName}
                 sessionDoctor={sessionDoctor}
+                clinicDoctors={clinicDoctors}
                 linkedAppointmentId={focusAppointmentId || selectedVideoApt?.id}
                 onClose={() => undefined}
                 onUpdatePatient={(updated) => onUpdatePatient?.(updated)}

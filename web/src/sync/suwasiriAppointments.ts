@@ -488,11 +488,20 @@ const OPEN_ROSTER: StaffProvider["roster"] = {
 /** Use when the signed-in clinician is not in the published clinic-doctor list. */
 export function staffUserAsDoctor(
   session: { id?: string; name?: string; email?: string } | null | undefined,
-  hospitalId: string
+  hospitalId: string,
+  template?: StaffProvider
 ): StaffProvider | undefined {
   if (!session?.id && !session?.name) return undefined;
   const name = (session.name || "").trim();
   if (!name) return undefined;
+  if (template) {
+    return {
+      ...template,
+      userId: template.userId || session.id,
+      hospitalId: template.hospitalId || hospitalId,
+      email: template.email || session.email || "",
+    };
+  }
   return {
     id: session.id || `doc-${normalizeDoctorName(name).replace(/\s+/g, "-")}`,
     userId: session.id,
@@ -507,6 +516,96 @@ export function staffUserAsDoctor(
     roster: OPEN_ROSTER,
     active: true,
   };
+}
+
+export function staffDoctorsMatch(a: StaffProvider, b: StaffProvider): boolean {
+  if (a.id && b.id && a.id === b.id) return true;
+  if (a.userId && b.userId && a.userId === b.userId) return true;
+  const ae = (a.email || "").trim().toLowerCase();
+  const be = (b.email || "").trim().toLowerCase();
+  if (ae && be && ae === be) return true;
+  return isSameDoctor({
+    doctorName: a.name,
+    doctorStaffId: a.id,
+    appointment: { doctorName: b.name, doctorId: b.id } as Appointment,
+  });
+}
+
+export function hasSavedRosterHours(doctor?: StaffProvider | null): boolean {
+  if (!doctor?.rosterHours) return false;
+  return Object.values(doctor.rosterHours).some((h) => Boolean(h?.start && h?.end));
+}
+
+export function rosterFromHours(
+  hours: StaffProvider["rosterHours"] | undefined,
+  fallback: StaffProvider["roster"]
+): StaffProvider["roster"] {
+  if (!hours || !Object.values(hours).some((h) => h?.start && h?.end)) return fallback;
+  return {
+    monday: Boolean(hours.monday?.start),
+    tuesday: Boolean(hours.tuesday?.start),
+    wednesday: Boolean(hours.wednesday?.start),
+    thursday: Boolean(hours.thursday?.start),
+    friday: Boolean(hours.friday?.start),
+    saturday: Boolean(hours.saturday?.start),
+    sunday: Boolean(hours.sunday?.start),
+  };
+}
+
+/** Keep Practice Manager hours when Firestore also has a copy of the same doctor. */
+export function applyPublishedRosterHours(
+  staff: StaffProvider,
+  published: StaffProvider[]
+): StaffProvider {
+  if (hasSavedRosterHours(staff)) return staff;
+  const match = published.find((p) => staffDoctorsMatch(staff, p));
+  if (!hasSavedRosterHours(match)) return staff;
+  return {
+    ...staff,
+    rosterHours: match!.rosterHours,
+    roster: rosterFromHours(match!.rosterHours, staff.roster),
+  };
+}
+
+export function mergeRegisteredClinicDoctors(
+  staffDoctors: StaffProvider[],
+  published: StaffProvider[],
+  hospitalId: string
+): StaffProvider[] {
+  const list: StaffProvider[] = [];
+  const seen = new Set<string>();
+  const mark = (d: StaffProvider) => {
+    doctorIdentityIds({ doctorStaffId: d.id, doctorName: d.name }).forEach((id) => seen.add(id));
+    const nameKey = doctorPersonKey(d.name);
+    if (nameKey) seen.add(`n:${nameKey}`);
+    if (d.userId) seen.add(`u:${d.userId}`);
+    if (d.email) seen.add(`e:${d.email.toLowerCase()}`);
+  };
+  const already = (d: StaffProvider) => {
+    const ids = doctorIdentityIds({ doctorStaffId: d.id, doctorName: d.name });
+    if (ids.some((id) => seen.has(id))) return true;
+    const nameKey = doctorPersonKey(d.name);
+    if (nameKey && seen.has(`n:${nameKey}`)) return true;
+    if (d.userId && seen.has(`u:${d.userId}`)) return true;
+    if (d.email && seen.has(`e:${d.email.toLowerCase()}`)) return true;
+    return list.some((x) => staffDoctorsMatch(x, d));
+  };
+
+  for (const d of staffDoctors) {
+    if (!d?.name) continue;
+    const merged = applyPublishedRosterHours(d, published);
+    if (already(merged)) continue;
+    list.push(merged);
+    mark(merged);
+  }
+  for (const d of published) {
+    if (!d?.name || d.active === false) continue;
+    if (d.hospitalId && d.hospitalId !== hospitalId) continue;
+    if (already(d)) continue;
+    list.push(d);
+    mark(d);
+  }
+  return list;
 }
 
 export function looksLikeSuwasiriUid(id: string): boolean {
