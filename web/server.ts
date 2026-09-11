@@ -19,6 +19,7 @@ import {
   roleIdFor,
 } from "./src/tenancy";
 import { DEFAULT_FEE_SCHEDULE } from "./src/catalogs/feeSchedule";
+import { DEFAULT_PARTNER_LABS } from "./src/catalogs/partnerLabs";
 
 dotenv.config();
 
@@ -26,6 +27,13 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json());
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
 
 // Initialize store file path
 const DATA_FILE = path.join(process.cwd(), "patient_store.json");
@@ -687,10 +695,14 @@ const INITIAL_STATE = {
       deliveryPersonPhone: "",
       deliveryPersonId: "",
       labName: "",
+      labAddress: "",
+      sampleCount: 1,
+      clinicName: "",
       lankaLabSyncStatus: "NOT_SYNCED",
       lankaLabLedgerKey: ""
     }
   ],
+  partnerLabs: DEFAULT_PARTNER_LABS,
   hospitals: DEFAULT_HOSPITALS,
   branches: DEFAULT_BRANCHES,
   roles: DEFAULT_ROLES,
@@ -927,6 +939,10 @@ function getStore() {
       data.patients.push(SOUTHERN_DEMO_PATIENT);
       mutated = true;
     }
+    if (!data.partnerLabs || !Array.isArray(data.partnerLabs) || data.partnerLabs.length === 0) {
+      data.partnerLabs = DEFAULT_PARTNER_LABS.map((l) => ({ ...l }));
+      mutated = true;
+    }
     if (!data.sampleCollections) {
       data.sampleCollections = [
         {
@@ -1060,6 +1076,43 @@ function getStore() {
 
 function saveStore(data: typeof INITIAL_STATE) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+function applySamplePatch(store: any, sample: any, patch: Record<string, unknown>) {
+  Object.assign(sample, patch);
+  const pat = (store.patients || []).find((p: any) => p.id === sample.patientId);
+  if (!pat) return;
+  if (!Array.isArray(pat.sampleCollections)) pat.sampleCollections = [];
+  const row = pat.sampleCollections.find((ps: any) => ps.id === sample.id);
+  if (row) Object.assign(row, patch);
+  else pat.sampleCollections.unshift({ ...sample });
+}
+
+function hospitalNameForSample(store: any, sample: any) {
+  if (sample.clinicName) return sample.clinicName;
+  const pat = (store.patients || []).find((p: any) => p.id === sample.patientId);
+  const hid = pat?.hospitalId;
+  const hospital = (store.hospitals || []).find((h: any) => h.id === hid);
+  return hospital?.name || pat?.medicalCenter || "GP Care Clinic";
+}
+
+function toLankaLabCollectionCard(store: any, sample: any) {
+  return {
+    id: sample.id,
+    clinicName: hospitalNameForSample(store, sample),
+    driverName: sample.deliveryPersonName || "",
+    driverPhone: sample.deliveryPersonPhone || "",
+    vehicleNo: sample.deliveryPersonId || "",
+    sampleCount: Number(sample.sampleCount) || 1,
+    status: sample.status,
+    collectedAt: sample.collectedTime || "",
+    deliveredAt: sample.deliveredTime || "",
+    labName: sample.labName || "",
+    labAddress: sample.labAddress || "",
+    patientName: sample.patientName || "",
+    hospitalId: sample.hospitalId || "",
+    source: "gp_care",
+  };
 }
 
 // REST Endpoints
@@ -2224,7 +2277,10 @@ app.post("/api/lab-orders", (req, res) => {
     lankaLabLedgerKey: "",
     testName,
     orderedBy: orderedBy || "Doctor",
-    registeredBy: ""
+    registeredBy: "",
+    sampleCount: 1,
+    labAddress: "",
+    clinicName: ""
   };
   store.sampleCollections.unshift(newSample);
   if (pat) {
@@ -2614,6 +2670,39 @@ app.get("/api/sample-collections", (req, res) => {
   res.json(store.sampleCollections);
 });
 
+app.get("/api/partner-labs", (req, res) => {
+  const store = getStore();
+  if (!store.partnerLabs || !store.partnerLabs.length) store.partnerLabs = DEFAULT_PARTNER_LABS.map((l) => ({ ...l }));
+  res.json(store.partnerLabs);
+});
+
+app.post("/api/partner-labs", (req, res) => {
+  const store = getStore();
+  if (!store.partnerLabs) store.partnerLabs = DEFAULT_PARTNER_LABS.map((l) => ({ ...l }));
+  const name = String(req.body.name || "").trim();
+  const address = String(req.body.address || "").trim();
+  if (!name || !address) {
+    return res.status(400).json({ error: "Lab name and address are required." });
+  }
+  const existing = store.partnerLabs.find((l: any) => String(l.name).toLowerCase() === name.toLowerCase());
+  if (existing) {
+    existing.address = address;
+  } else {
+    store.partnerLabs.push({ name, address });
+  }
+  saveStore(store);
+  res.status(201).json({ labs: store.partnerLabs, state: store });
+});
+
+app.get("/api/lankalab-clinic-collections", (req, res) => {
+  const store = getStore();
+  if (!store.sampleCollections) store.sampleCollections = [];
+  const cards = store.sampleCollections
+    .filter((s: any) => s.status === "COLLECTED" || s.status === "DELIVERED")
+    .map((s: any) => toLankaLabCollectionCard(store, s));
+  res.json(cards);
+});
+
 // LOG NEW SAMPLE COLLECTION
 app.post("/api/sample-collections", (req, res) => {
   const store = getStore();
@@ -2645,7 +2734,10 @@ app.post("/api/sample-collections", (req, res) => {
     lankaLabLedgerKey: "",
     testName: testName || "",
     orderedBy: orderedBy || "",
-    registeredBy: ""
+    registeredBy: "",
+    sampleCount: 1,
+    labAddress: "",
+    clinicName: ""
   };
 
   store.sampleCollections.unshift(newSample);
@@ -2832,8 +2924,25 @@ app.post("/api/sample-collections/:id/collect", (req, res) => {
 
   const sample = store.sampleCollections[index];
   const localTimeStr = new Date().toISOString().replace("T", " ").substring(0, 16);
-  sample.status = "COLLECTED";
-  sample.collectedTime = localTimeStr;
+  const driverName = String(req.body.deliveryPersonName || req.body.driverName || "").trim();
+  const driverPhone = String(req.body.deliveryPersonPhone || req.body.driverPhone || "").trim();
+  const vehicleNo = String(req.body.deliveryPersonId || req.body.vehicleNo || "").trim();
+  const sampleCount = Math.max(1, Number(req.body.sampleCount) || 1);
+  const clinicName = String(req.body.clinicName || "").trim();
+  if (!driverName || !driverPhone || !vehicleNo) {
+    return res.status(400).json({ error: "Driver name, phone number, and vehicle number are required." });
+  }
+
+  applySamplePatch(store, sample, {
+    status: "COLLECTED",
+    collectedTime: localTimeStr,
+    deliveryPersonName: driverName,
+    deliveryPersonPhone: driverPhone,
+    deliveryPersonId: vehicleNo,
+    sampleCount,
+    clinicName: clinicName || sample.clinicName || "",
+    lankaLabSyncStatus: "SYNCED",
+  });
 
   if (!store.notifications) store.notifications = [];
   store.notifications.forEach((n) => {
@@ -2850,20 +2959,6 @@ app.post("/api/sample-collections/:id/collect", (req, res) => {
     }
   });
 
-  // Sync patient's personal registry
-  const patIndex = store.patients.findIndex(p => p.id === sample.patientId);
-  if (patIndex !== -1) {
-    const pat = store.patients[patIndex];
-    if (!pat.sampleCollections) pat.sampleCollections = [];
-    const patSampleIdx = pat.sampleCollections.findIndex(ps => ps.id === id);
-    if (patSampleIdx !== -1) {
-      pat.sampleCollections[patSampleIdx].status = "COLLECTED";
-      pat.sampleCollections[patSampleIdx].collectedTime = localTimeStr;
-    } else {
-      pat.sampleCollections.unshift(sample);
-    }
-  }
-
   // Clinic announcement
   store.clinicMessages.push({
     id: `msg-sc-c-${Date.now()}`,
@@ -2875,19 +2970,23 @@ app.post("/api/sample-collections/:id/collect", (req, res) => {
   });
 
   saveStore(store);
-  res.json({ success: true, sample, state: store });
+  res.json({ success: true, sample, lankaLabCard: toLankaLabCollectionCard(store, sample), state: store });
 });
-
-// MARK SAMPLE AS DELIVERED & SYNC LANKALAB PORTAL
 app.post("/api/sample-collections/:id/deliver", (req, res) => {
   const store = getStore();
   if (!store.sampleCollections) store.sampleCollections = [];
 
   const { id } = req.params;
-  const { deliveryPersonName, deliveryPersonPhone, deliveryPersonId, labName } = req.body;
+  const deliveryPersonName = String(req.body.deliveryPersonName || req.body.driverName || "").trim();
+  const deliveryPersonPhone = String(req.body.deliveryPersonPhone || req.body.driverPhone || "").trim();
+  const deliveryPersonId = String(req.body.deliveryPersonId || req.body.vehicleNo || "").trim();
+  const labName = String(req.body.labName || "").trim();
+  const labAddress = String(req.body.labAddress || "").trim();
+  const sampleCount = Math.max(1, Number(req.body.sampleCount) || 1);
+  const clinicName = String(req.body.clinicName || "").trim();
 
-  if (!deliveryPersonName || !labName) {
-    return res.status(400).json({ error: "Missing delivery person details or partner lab name" });
+  if (!deliveryPersonName || !labName || !labAddress) {
+    return res.status(400).json({ error: "Driver name, lab name, and lab address are required." });
   }
 
   const index = store.sampleCollections.findIndex(s => s.id === id);
@@ -2899,47 +2998,32 @@ app.post("/api/sample-collections/:id/deliver", (req, res) => {
   const localTimeStr = new Date().toISOString().replace("T", " ").substring(0, 16);
   const ledgerKey = `LKLAB-SMP-TX-${Math.random().toString(36).substring(3, 11).toUpperCase()}`;
 
-  sample.status = "DELIVERED";
-  sample.deliveredTime = localTimeStr;
-  sample.deliveryPersonName = deliveryPersonName;
-  sample.deliveryPersonPhone = deliveryPersonPhone || "+94 77 000 0000";
-  sample.deliveryPersonId = deliveryPersonId || "N/A";
-  sample.labName = labName;
-  sample.lankaLabSyncStatus = "SYNCED";
-  sample.lankaLabLedgerKey = ledgerKey;
-
-  // Sync patient's personal registry
-  const patIndex = store.patients.findIndex(p => p.id === sample.patientId);
-  if (patIndex !== -1) {
-    const pat = store.patients[patIndex];
-    if (!pat.sampleCollections) pat.sampleCollections = [];
-    const patSampleIdx = pat.sampleCollections.findIndex(ps => ps.id === id);
-    if (patSampleIdx !== -1) {
-      pat.sampleCollections[patSampleIdx].status = "DELIVERED";
-      pat.sampleCollections[patSampleIdx].deliveredTime = localTimeStr;
-      pat.sampleCollections[patSampleIdx].deliveryPersonName = deliveryPersonName;
-      pat.sampleCollections[patSampleIdx].deliveryPersonPhone = deliveryPersonPhone || "+94 77 000 0000";
-      pat.sampleCollections[patSampleIdx].deliveryPersonId = deliveryPersonId || "N/A";
-      pat.sampleCollections[patSampleIdx].labName = labName;
-      pat.sampleCollections[patSampleIdx].lankaLabSyncStatus = "SYNCED";
-      pat.sampleCollections[patSampleIdx].lankaLabLedgerKey = ledgerKey;
-    } else {
-      pat.sampleCollections.unshift(sample);
-    }
-  }
+  applySamplePatch(store, sample, {
+    status: "DELIVERED",
+    deliveredTime: localTimeStr,
+    deliveryPersonName,
+    deliveryPersonPhone: deliveryPersonPhone || sample.deliveryPersonPhone || "+94 77 000 0000",
+    deliveryPersonId: deliveryPersonId || sample.deliveryPersonId || "N/A",
+    sampleCount: sampleCount || sample.sampleCount || 1,
+    labName,
+    labAddress,
+    clinicName: clinicName || sample.clinicName || "",
+    lankaLabSyncStatus: "SYNCED",
+    lankaLabLedgerKey: ledgerKey,
+  });
 
   // Clinic team announcement
   store.clinicMessages.push({
     id: `msg-sc-d-${Date.now()}`,
     sender: "LankaLab System Gateway",
     senderRole: "System",
-    text: `🚀 LankaLab Sync: Completed delivery of ${sample.sampleCategory} sample for patient ${sample.patientName} to partner dispatch facility: "${labName}". Dispatcher: ${deliveryPersonName} (Mob: ${deliveryPersonPhone || "N/A"}). Synced under Ledger Key: ${ledgerKey}.`,
+    text: `🚀 LankaLab Sync: Completed delivery of ${sample.sampleCategory} sample for patient ${sample.patientName} to partner dispatch facility: "${labName}" (${labAddress}). Dispatcher: ${deliveryPersonName} (Mob: ${deliveryPersonPhone || "N/A"}). Synced under Ledger Key: ${ledgerKey}.`,
     timestamp: localTimeStr,
     channel: "#general-clinical"
   });
 
   saveStore(store);
-  res.json({ success: true, sample, state: store });
+  res.json({ success: true, sample, lankaLabCard: toLankaLabCollectionCard(store, sample), state: store });
 });
 
 // DISPATCH MEDICAL CERTIFICATE TO EMAIL (WITH OPTIONAL GEMINI DRAFTING)

@@ -372,7 +372,11 @@ export interface SampleCollection {
   deliveryPersonName?: string;
   deliveryPersonPhone?: string;
   deliveryPersonId?: string;
+  /** Number of vials in this courier bag. */
+  sampleCount?: number;
   labName?: string;
+  labAddress?: string;
+  clinicName?: string;
   lankaLabSyncStatus?: "NOT_SYNCED" | "SYNCED";
   lankaLabLedgerKey?: string;
   testName?: string;

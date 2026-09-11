@@ -14,6 +14,7 @@ import SuwasiriGateway from './components/SuwasiriGateway';
 import SettingsSection from './components/SettingsSection';
 import ResultDeliveryManager from './components/ResultDeliveryManager';
 import ClinicalTrialsPortal from './components/ClinicalTrialsPortal';
+import { subscribeGpCareClinicCollections, type ClinicCollectionLog } from './sync/gpCareCollections';
 import { 
   Activity, 
   Search, 
@@ -54,8 +55,7 @@ export default function App() {
   const [routes, setRoutes] = useState<CourierRoute[]>(initialRoutes);
   const [notifications, setNotifications] = useState<UrgentNotification[]>(initialNotifications);
 
-  // Sri Lankan Clinic Sample Collections
-  const [collections, setCollections] = useState([
+  const SEED_COLLECTIONS: ClinicCollectionLog[] = [
     {
       id: 'COL-1',
       clinicName: 'Colombo National Medical Clinic',
@@ -63,7 +63,7 @@ export default function App() {
       driverPhone: '+94 77 444 8812',
       vehicleNo: 'WP LH-7210',
       sampleCount: 14,
-      status: 'PENDING' as 'PENDING' | 'COLLECTED' | 'DELIVERED',
+      status: 'PENDING',
       collectedAt: '',
       deliveredAt: ''
     },
@@ -74,7 +74,7 @@ export default function App() {
       driverPhone: '+94 71 222 3341',
       vehicleNo: 'CP CE-1192',
       sampleCount: 8,
-      status: 'COLLECTED' as 'PENDING' | 'COLLECTED' | 'DELIVERED',
+      status: 'COLLECTED',
       collectedAt: 'Today, 09:15 AM',
       deliveredAt: ''
     },
@@ -85,11 +85,23 @@ export default function App() {
       driverPhone: '+94 72 999 1111',
       vehicleNo: 'WP QA-6508',
       sampleCount: 6,
-      status: 'DELIVERED' as 'PENDING' | 'COLLECTED' | 'DELIVERED',
+      status: 'DELIVERED',
       collectedAt: 'Today, 07:30 AM',
       deliveredAt: 'Today, 08:45 AM'
     }
-  ]);
+  ];
+
+  // Sri Lankan Clinic Sample Collections (seed + live GP Care Sample Dispatch)
+  const [seedCollections, setSeedCollections] = useState<ClinicCollectionLog[]>(SEED_COLLECTIONS);
+  const [gpCareCollections, setGpCareCollections] = useState<ClinicCollectionLog[]>([]);
+  const collections = [...gpCareCollections, ...seedCollections.filter((s) => !gpCareCollections.some((g) => g.id === s.id))];
+
+  useEffect(() => subscribeGpCareClinicCollections(setGpCareCollections), []);
+
+  const patchCollection = (id: string, patch: Partial<ClinicCollectionLog>) => {
+    setGpCareCollections((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+    setSeedCollections((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  };
   
   // Selection and Interaction states
   const [selectedOrder, setSelectedOrder] = useState<LabOrder | null>(initialOrders[1]); // Preselect Kamala Gunawardena for instant side-panel showcase
@@ -1814,11 +1826,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                           disabled={col.status !== 'PENDING'}
                           onClick={() => {
                             // Mark Collected & automatically sync with GP Care portal
-                            setCollections(prev => prev.map(c => 
-                              c.id === col.id 
-                                ? { ...c, status: 'COLLECTED', collectedAt: new Date().toLocaleTimeString() }
-                                : c
-                            ));
+                            patchCollection(col.id, { status: 'COLLECTED', collectedAt: new Date().toLocaleTimeString() });
                             
                             // Send sync live notification
                             const newNotif: UrgentNotification = {
@@ -1841,11 +1849,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                           disabled={col.status !== 'COLLECTED'}
                           onClick={() => {
                             // Mark Delivered & automatically log to central lab list
-                            setCollections(prev => prev.map(c => 
-                              c.id === col.id 
-                                ? { ...c, status: 'DELIVERED', deliveredAt: new Date().toLocaleTimeString() }
-                                : c
-                            ));
+                            patchCollection(col.id, { status: 'DELIVERED', deliveredAt: new Date().toLocaleTimeString() });
                             
                             // Send sync live notification
                             const newNotif: UrgentNotification = {

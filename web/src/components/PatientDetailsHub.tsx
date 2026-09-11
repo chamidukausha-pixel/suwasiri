@@ -5,7 +5,9 @@ import {
 } from "lucide-react";
 import { Patient, VaccineRecord, LabResult, PrescriptionRecord, LabOrder, SampleCollection, MedicalCertificateRecord, ClinicalDocument } from "../types";
 import { issueMedicalCertificateToSuwasiri } from "../sync/suwasiriCertificates";
+import { publishSampleDispatchToLankaLab } from "../sync/suwasiriSampleDispatch";
 import { SAMPLE_COLLECTION_CATEGORIES } from "../catalogs/pathologyInvestigations";
+import { DEFAULT_PARTNER_LABS, type PartnerLab } from "../catalogs/partnerLabs";
 import PatientSexAgeBadge from "./PatientSexAgeBadge";
 import PatientCriticalAlertBadge from "./PatientCriticalAlertBadge";
 
@@ -103,7 +105,12 @@ export default function PatientDetailsHub({
   const [dispatchName, setDispatchName] = useState("");
   const [dispatchPhone, setDispatchPhone] = useState("");
   const [dispatchId, setDispatchId] = useState("");
-  const [dispatchLab, setDispatchLab] = useState("LankaLab - Colombo General");
+  const [dispatchLab, setDispatchLab] = useState(DEFAULT_PARTNER_LABS[0].name);
+  const [dispatchLabAddress, setDispatchLabAddress] = useState(DEFAULT_PARTNER_LABS[0].address);
+  const [dispatchVials, setDispatchVials] = useState("1");
+  const [partnerLabs, setPartnerLabs] = useState<PartnerLab[]>(DEFAULT_PARTNER_LABS);
+  const [addingPartnerLab, setAddingPartnerLab] = useState(false);
+  const [collectingSampleId, setCollectingSampleId] = useState<string | null>(null);
   const [deliveringSampleId, setDeliveringSampleId] = useState<string | null>(null);
   const [doingActionId, setDoingActionId] = useState<string | null>(null);
   const [showAddDocChooser, setShowAddDocChooser] = useState(false);
@@ -151,9 +158,24 @@ export default function PatientDetailsHub({
     const row = (patient.sampleCollections || []).find((s) => s.id === focusSampleId);
     if (row?.status === "COLLECTED") {
       setDeliveringSampleId(focusSampleId);
-      setDispatchLab("LankaLab - Colombo General");
+      const match = partnerLabs.find((l) => l.name === row.labName) || partnerLabs[0] || DEFAULT_PARTNER_LABS[0];
+      setDispatchLab(row.labName || match.name);
+      setDispatchLabAddress(row.labAddress || match.address);
+      setDispatchName(row.deliveryPersonName || "");
+      setDispatchPhone(row.deliveryPersonPhone || "");
+      setDispatchId(row.deliveryPersonId || "");
+      setDispatchVials(String(row.sampleCount || 1));
     }
   }, [focusSampleId, patient.id, patient.sampleCollections]);
+
+  useEffect(() => {
+    fetch("/api/partner-labs")
+      .then((r) => r.ok ? r.json() : DEFAULT_PARTNER_LABS)
+      .then((labs) => {
+        if (Array.isArray(labs) && labs.length) setPartnerLabs(labs);
+      })
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (mcStartDate && mcEndDate) {
@@ -352,16 +374,30 @@ export default function PatientDetailsHub({
   };
 
   const handleCollectSample = async (id: string) => {
+    if (!dispatchName.trim() || !dispatchPhone.trim() || !dispatchId.trim()) {
+      alert("Please enter the collected driver name, phone number, and vehicle number.");
+      return;
+    }
     setDoingActionId(id);
     try {
       const res = await fetch(`/api/sample-collections/${id}/collect`, {
-        method: "POST"
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deliveryPersonName: dispatchName.trim(),
+          deliveryPersonPhone: dispatchPhone.trim(),
+          deliveryPersonId: dispatchId.trim(),
+          sampleCount: Math.max(1, Number(dispatchVials) || 1),
+          clinicName: patient.medicalCenter || "",
+        }),
       });
       if (!res.ok) throw new Error("Could not transition sample collection status");
       const data = await res.json();
+      if (data.lankaLabCard) await publishSampleDispatchToLankaLab(data.lankaLabCard);
       if (onStateUpdate) {
         onStateUpdate(data.state);
       }
+      setCollectingSampleId(null);
     } catch (err: any) {
       alert("Error: " + err.message);
     } finally {
@@ -374,8 +410,24 @@ export default function PatientDetailsHub({
       alert("Please provide the courier / delivery person's full name to issue dispatcher certificates.");
       return;
     }
+    if (!dispatchLab.trim() || !dispatchLabAddress.trim()) {
+      alert("Please enter the lab name and address.");
+      return;
+    }
     setDoingActionId(id);
     try {
+      if (addingPartnerLab) {
+        await fetch("/api/partner-labs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: dispatchLab.trim(), address: dispatchLabAddress.trim() }),
+        }).then(async (labRes) => {
+          if (labRes.ok) {
+            const labData = await labRes.json();
+            if (labData.labs) setPartnerLabs(labData.labs);
+          }
+        });
+      }
       const res = await fetch(`/api/sample-collections/${id}/deliver`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -383,11 +435,15 @@ export default function PatientDetailsHub({
           deliveryPersonName: dispatchName,
           deliveryPersonPhone: dispatchPhone,
           deliveryPersonId: dispatchId,
-          labName: dispatchLab
+          sampleCount: Math.max(1, Number(dispatchVials) || 1),
+          labName: dispatchLab.trim(),
+          labAddress: dispatchLabAddress.trim(),
+          clinicName: patient.medicalCenter || "",
         })
       });
       if (!res.ok) throw new Error("Could not process LankaLab portal handshake");
       const data = await res.json();
+      if (data.lankaLabCard) await publishSampleDispatchToLankaLab(data.lankaLabCard);
       if (onStateUpdate) {
         onStateUpdate(data.state);
       }
@@ -1821,6 +1877,7 @@ export default function PatientDetailsHub({
                             <div className="space-y-1">
                               <p className="text-slate-400 font-bold uppercase text-[9px] tracking-wider">Destination & LankaLab Ledger Key</p>
                               <p className="text-slate-700">🏥 Partner Lab: <strong className="text-rose-900">{sample.labName}</strong></p>
+                              {sample.labAddress && <p className="text-slate-700">📍 {sample.labAddress}</p>}
                               <p className="text-slate-700">🕒 Delivered At: <span className="font-semibold text-slate-800">{sample.deliveredTime}</span></p>
                               <p className="text-slate-700 flex items-center gap-1.5">
                                 🔑 Ledger Key: <span className="font-mono font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 border border-amber-200 rounded">{sample.lankaLabLedgerKey}</span>
@@ -1836,19 +1893,54 @@ export default function PatientDetailsHub({
 
                         {/* WORKFLOW BUTTONS */}
                         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-dashed">
-                          {sample.status === "PENDING" && (
+                          {sample.status === "PENDING" && collectingSampleId !== sample.id && (
                             <button
                               type="button"
                               disabled={doingActionId !== null}
-                              onClick={() => handleCollectSample(sample.id)}
+                              onClick={() => {
+                                setCollectingSampleId(sample.id);
+                                setDeliveringSampleId(null);
+                                setDispatchName(sample.deliveryPersonName || "");
+                                setDispatchPhone(sample.deliveryPersonPhone || "");
+                                setDispatchId(sample.deliveryPersonId || "");
+                                setDispatchVials(String(sample.sampleCount || 1));
+                              }}
                               className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 px-4 rounded transition flex items-center gap-1.5"
                             >
-                              {doingActionId === sample.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                "✓ Mark Collected"
-                              )}
+                              ✓ Mark Collected
                             </button>
+                          )}
+
+                          {sample.status === "PENDING" && collectingSampleId === sample.id && (
+                            <div className="w-full bg-emerald-50 p-4 border rounded-lg space-y-3">
+                              <div className="flex justify-between items-center border-b pb-2">
+                                <h5 className="text-[11px] font-bold uppercase text-slate-700">Enter collection details</h5>
+                                <button type="button" onClick={() => setCollectingSampleId(null)} className="text-slate-400 hover:text-slate-600 text-xs font-bold">Cancel</button>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-slate-500">Collected driver name *</label>
+                                  <input type="text" value={dispatchName} onChange={(e) => setDispatchName(e.target.value)} className="p-1 px-2 border rounded bg-white w-full text-xs" placeholder="e.g. Suresh Bandara" />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-slate-500">Phone number *</label>
+                                  <input type="text" value={dispatchPhone} onChange={(e) => setDispatchPhone(e.target.value)} className="p-1 px-2 border rounded bg-white w-full text-xs" placeholder="+94 77 444 8812" />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-slate-500">How many vials *</label>
+                                  <input type="number" min={1} value={dispatchVials} onChange={(e) => setDispatchVials(e.target.value)} className="p-1 px-2 border rounded bg-white w-full text-xs" />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-slate-500">Vehicle number *</label>
+                                  <input type="text" value={dispatchId} onChange={(e) => setDispatchId(e.target.value)} className="p-1 px-2 border rounded bg-white w-full text-xs" placeholder="WP LH-7210" />
+                                </div>
+                              </div>
+                              <div className="flex justify-end">
+                                <button type="button" disabled={doingActionId !== null} onClick={() => handleCollectSample(sample.id)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-1.5 px-4 rounded">
+                                  {doingActionId === sample.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save collected & sync LankaLab"}
+                                </button>
+                              </div>
+                            </div>
                           )}
 
                           {sample.status === "COLLECTED" && deliveringSampleId !== sample.id && (
@@ -1856,7 +1948,15 @@ export default function PatientDetailsHub({
                               type="button"
                               onClick={() => {
                                 setDeliveringSampleId(sample.id);
-                                setDispatchLab("LankaLab - Colombo General");
+                                setCollectingSampleId(null);
+                                const match = partnerLabs.find((l) => l.name === sample.labName) || partnerLabs[0] || DEFAULT_PARTNER_LABS[0];
+                                setDispatchLab(sample.labName || match.name);
+                                setDispatchLabAddress(sample.labAddress || match.address);
+                                setDispatchName(sample.deliveryPersonName || dispatchName);
+                                setDispatchPhone(sample.deliveryPersonPhone || dispatchPhone);
+                                setDispatchId(sample.deliveryPersonId || dispatchId);
+                                setDispatchVials(String(sample.sampleCount || dispatchVials || 1));
+                                setAddingPartnerLab(false);
                               }}
                               className="bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold py-1.5 px-4 rounded transition"
                             >
@@ -1879,7 +1979,7 @@ export default function PatientDetailsHub({
                               </div>
                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
                                 <div className="space-y-1">
-                                  <label className="text-[10px] font-bold text-slate-500">Delivery Person Name *</label>
+                                  <label className="text-[10px] font-bold text-slate-500">Collected driver name *</label>
                                   <input
                                     type="text"
                                     required
@@ -1890,7 +1990,7 @@ export default function PatientDetailsHub({
                                   />
                                 </div>
                                 <div className="space-y-1">
-                                  <label className="text-[10px] font-bold text-slate-500">Mobile Phone</label>
+                                  <label className="text-[10px] font-bold text-slate-500">Phone number *</label>
                                   <input
                                     type="text"
                                     placeholder="+94 77 123 4567"
@@ -1900,28 +2000,68 @@ export default function PatientDetailsHub({
                                   />
                                 </div>
                                 <div className="space-y-1">
-                                  <label className="text-[10px] font-bold text-slate-500">License ID / Vehicle No</label>
+                                  <label className="text-[10px] font-bold text-slate-500">How many vials *</label>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={dispatchVials}
+                                    onChange={(e) => setDispatchVials(e.target.value)}
+                                    className="p-1 px-2 border rounded bg-white w-full text-xs"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-slate-500">Vehicle number *</label>
                                   <input
                                     type="text"
-                                    placeholder="EP WP-8910 / B733"
+                                    placeholder="WP LH-7210"
                                     value={dispatchId}
                                     onChange={(e) => setDispatchId(e.target.value)}
                                     className="p-1 px-2 border rounded bg-white w-full text-xs"
                                   />
                                 </div>
                                 <div className="space-y-1">
-                                  <label className="text-[10px] font-bold text-slate-500">Partner LankaLab Branch *</label>
-                                  <select
-                                    value={dispatchLab}
-                                    onChange={(e: any) => setDispatchLab(e.target.value)}
+                                  <label className="text-[10px] font-bold text-slate-500">Lab name *</label>
+                                  {!addingPartnerLab ? (
+                                    <select
+                                      value={dispatchLab}
+                                      onChange={(e) => {
+                                        const next = e.target.value;
+                                        if (next === "__add__") {
+                                          setAddingPartnerLab(true);
+                                          setDispatchLab("");
+                                          setDispatchLabAddress("");
+                                          return;
+                                        }
+                                        setDispatchLab(next);
+                                        const found = partnerLabs.find((l) => l.name === next);
+                                        if (found) setDispatchLabAddress(found.address);
+                                      }}
+                                      className="p-1 px-2 border rounded bg-white w-full text-xs"
+                                    >
+                                      {partnerLabs.map((lab) => (
+                                        <option key={lab.name} value={lab.name}>{lab.name}</option>
+                                      ))}
+                                      <option value="__add__">+ Add lab name and address</option>
+                                    </select>
+                                  ) : (
+                                    <input
+                                      type="text"
+                                      value={dispatchLab}
+                                      onChange={(e) => setDispatchLab(e.target.value)}
+                                      className="p-1 px-2 border rounded bg-white w-full text-xs"
+                                      placeholder="New lab name"
+                                    />
+                                  )}
+                                </div>
+                                <div className="space-y-1 md:col-span-2">
+                                  <label className="text-[10px] font-bold text-slate-500">Lab address / location *</label>
+                                  <input
+                                    type="text"
+                                    value={dispatchLabAddress}
+                                    onChange={(e) => setDispatchLabAddress(e.target.value)}
                                     className="p-1 px-2 border rounded bg-white w-full text-xs"
-                                  >
-                                    <option value="LankaLab - Colombo General">LankaLab - Colombo General</option>
-                                    <option value="LankaLab - Kandy Diagnostics">LankaLab - Kandy Diagnostics</option>
-                                    <option value="LankaLab - Galle Pathology Center">LankaLab - Galle Pathology Center</option>
-                                    <option value="LankaLab - Jaffna Public Diagnostics">LankaLab - Jaffna Public Diagnostics</option>
-                                    <option value="LankaLab - Negombo Quick Labs">LankaLab - Negombo Quick Labs</option>
-                                  </select>
+                                    placeholder="Street, city"
+                                  />
                                 </div>
                               </div>
                               <div className="flex justify-end pt-2">
