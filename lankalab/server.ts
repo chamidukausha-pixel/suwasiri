@@ -8,7 +8,9 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+// 3001 so GP Care can keep http://localhost:3000 at the same time.
+const PORT = Number(process.env.PORT) || 3001;
+const HMR_PORT = Number(process.env.HMR_PORT) || 24679;
 
 app.use(express.json());
 
@@ -193,7 +195,10 @@ app.post('/api/gemini/parse-report', async (req, res) => {
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR === 'true' ? false : { port: HMR_PORT },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -206,7 +211,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`LankaLab Server running on port ${PORT}`);
+    console.log(`LankaLab Server running on http://localhost:${PORT}`);
   });
 }
 

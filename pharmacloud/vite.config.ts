@@ -14,8 +14,8 @@ export default defineConfig(() => {
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
-      // Port 24679 so GP Care can keep Vite HMR on 24678.
-      hmr: process.env.DISABLE_HMR === 'true' ? false : { port: 24679 },
+      // Port 24680 so GP Care (24678) and LankaLab (24679) keep their own HMR ports.
+      hmr: process.env.DISABLE_HMR === 'true' ? false : { port: 24680 },
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },

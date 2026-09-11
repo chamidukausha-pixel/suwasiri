@@ -53,3 +53,21 @@ web/.env
 web/.env.*
 !web/.env.example
 web/patient_store.json
+
+# Web (LankaLab Portal) — also covered by lankalab/.gitignore
+lankalab/node_modules/
+lankalab/dist/
+lankalab/build/
+lankalab/coverage/
+lankalab/.env
+lankalab/.env.*
+!lankalab/.env.example
+
+# Web (Sri Lanka PharmaCloud) — also covered by pharmacloud/.gitignore
+pharmacloud/node_modules/
+pharmacloud/dist/
+pharmacloud/build/
+pharmacloud/coverage/
+pharmacloud/.env
+pharmacloud/.env.*
+!pharmacloud/.env.example

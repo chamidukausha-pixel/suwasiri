@@ -60,6 +60,9 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Profile: family member selector dropdown + dummy wife/child (switches Home/Vault/Vaccines identity)
 - [x] Web GP Care copied into `web/` (exact React/Vite/Express stack; Downloads source left untouched)
 - [x] Web LankaLab copied into `lankalab/` (exact React/Vite/Express stack; `Downloads/lankalab-portal` left untouched)
+- [x] LankaLab local port **3001** (Vite HMR **24679**) so it can run beside GP Care on **3000**
+- [x] Web PharmaCloud copied into `pharmacloud/` (exact React/Vite/Express stack; `Downloads/sri-lanka-pharmacloud` left untouched)
+- [x] PharmaCloud local port **3002** (Vite HMR **24680**) so it can run beside GP Care (**3000**) and LankaLab (**3001**)
 - [x] Web tenancy: Platform + Hospital Super Admin, multi-hospital isolation, multi-branch staff, RBAC add/remove roles (persisted in `patient_store.json`)
 - [x] Web Firebase Auth login (email / Google / phone OTP stub) on `suwasiri-91824`; staff via email membership match
 - [x] Platform Super Admin can open Doctor / Reception / Operations modules; committed RBAC hides nav items immediately
@@ -72,7 +75,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Pathology shows unread reports; Mark read lowers the unread patient count; Unreviewed tests lists tests under names
 - [x] Pathology order notifies receptionist Sample Dispatch Hub (sidebar + top-bar)
 - [x] Sample Dispatch Hub lists doctor-ordered specimens only (Quick-Log / Select Patient Profile, status Filters, in-page search, and Test / Investigation Profile chips removed); reception header has no Search Patients / Lab Orders / eRx box
-- [x] Sample Dispatch **Notifications** badge equals remaining hub jobs (not leftover unread alerts); finishing a job reduces the count (e.g. 3 → 2)
+- [x] Sample Dispatch **Collected** / **Delivered** capture driver name, phone, vials, vehicle, lab name and address (reception can add a lab); bags sync to LankaLab Clinic Sample Collection Log
 - [x] After courier dispatch details are saved, that specimen leaves Sample Dispatch Hub (record remains on the patient file)
 - [x] Sample-collection **Documents** has **Add document** (Scan / Drag and drop / Browse); files write onto that patient’s GP Exam Room Documents; reception does not get **Open clinical profile**
 - [x] Video consults: Telehealth **Call start** (beside Record) opens in-browser camera/mic to the Suwasiri App Call tab — no WhatsApp
@@ -173,7 +176,8 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [ ] Deploy updated `firestore.rules` (vault **read** for Unique Health ID lab sync + GP Care immunisations + allergy merge + `clinic_centers`) if not already: `firebase deploy --only firestore:rules`
 - [ ] Telehealth/Call: live WebRTC to GP Care is wired (STUN); a TURN server may be needed on some mobile networks
 - [ ] Web + mobile sync: appointments (including **payment status / bank slips** and **patientAge / patientGender**), Unique Health ID lookup, telehealth notes/chat, e-Rx, medical certificates, clinical calculator snapshots, GP Care–published `clinic_doctors`, **exam-room consult notes / immunisations / allergies / pathology / imaging / certificates**, and GP Care–issued e-Rx (Vault vs Call by session) are on Firestore; Vault → GP Care sync is **vaccine history only**. Remaining GP EMR charts still use the web JSON store. Tenancy/RBAC is in the web JSON store; tenancy collections are documented, not deployed.
-- [ ] LankaLab (`lankalab/`): copied as-is (mock orders + Gemini). Not on Firebase yet. Sync plan in [LANKALAB.md](LANKALAB.md).
+- [ ] LankaLab (`lankalab/`): mock orders + Gemini. **Clinic Sample Collection Log** also shows live GP Care Sample Dispatch bags (driver / phone / vials / vehicle). Remaining lab EMR is not on Firebase.
+- [ ] PharmaCloud (`pharmacloud/`): copied as-is (mock inventory / e-Rx / Gemini). Not on Firebase yet. Sync plan in [PHARMACLOUD.md](PHARMACLOUD.md).
 
 ## Known caveats
 
@@ -193,4 +197,5 @@ Living tracker for implementation. **Update this file when you finish or start a
 | [NEXT.md](NEXT.md) | Ordered next implementation (Auth Console, tenancy Firestore, clinical sync) |
 | [WEB.md](WEB.md) | GP Care web app (`web/`), run commands, mobile/web sync |
 | [LANKALAB.md](LANKALAB.md) | LankaLab portal (`lankalab/`), run commands, lab/mobile/GP sync plan |
+| [PHARMACLOUD.md](PHARMACLOUD.md) | PharmaCloud (`pharmacloud/`), run commands, pharmacy/e-Rx sync plan |
 | [../README.md](../README.md) | How to run the apps |

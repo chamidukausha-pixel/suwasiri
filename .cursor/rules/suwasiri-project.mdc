@@ -5,14 +5,16 @@ alwaysApply: true
 
 # Suwasiri
 
-Sri Lankan digital health: **Flutter mobile** (repo root) + **GP Care web** (`web/`). Production backend is Firebase (`suwasiri-91824`).
+Sri Lankan digital health: **Flutter mobile** (repo root) + **GP Care web** (`web/`) + **LankaLab Portal** (`lankalab/`) + **PharmaCloud** (`pharmacloud/`). Production backend is Firebase (`suwasiri-91824`).
 
-## Two apps — keep them parallel
+## Four apps — keep them parallel
 
 - **Mobile:** do not change Flutter/Dart/`lib/`/`android/`/`ios/` unless the user explicitly asks.
-- **Web:** live in `web/`. Keep the **exact** stack (React 19, Vite, Express `server.ts`, Tailwind). Do not rewrite as Flutter web or another framework.
-- Do **not** edit the original copy at `C:\Users\HP\Downloads\sri-lankan-gp-care`.
-- Sync via shared Firebase data, not by merging UI codebases. See `docs/WEB.md`.
+- **GP Care:** live in `web/`. Keep the **exact** stack (React 19, Vite, Express `server.ts`, Tailwind). Local **http://localhost:3000**.
+- **LankaLab:** live in `lankalab/`. Keep the **exact** stack (React 19, Vite, Express `server.ts`, Tailwind). Local **http://localhost:3001**.
+- **PharmaCloud:** live in `pharmacloud/`. Keep the **exact** stack (React 19, Vite, Express `server.ts`, Tailwind). Local **http://localhost:3002**.
+- Do **not** edit the originals at `C:\Users\HP\Downloads\sri-lankan-gp-care`, `C:\Users\HP\Downloads\lankalab-portal`, or `C:\Users\HP\Downloads\sri-lanka-pharmacloud`.
+- Sync via shared Firebase data, not by merging UI codebases. See `docs/WEB.md`, `docs/LANKALAB.md`, and `docs/PHARMACLOUD.md`.
 
 ## Before changing code
 
@@ -22,6 +24,8 @@ Read and keep updated:
 - `docs/FIREBASE.md` — project IDs, collections, CLI
 - `docs/ARCHITECTURE.md` — where code lives
 - `docs/WEB.md` — GP Care web app and mobile/web sync
+- `docs/LANKALAB.md` — LankaLab portal (`lankalab/`)
+- `docs/PHARMACLOUD.md` — PharmaCloud pharmacy gateway (`pharmacloud/`)
 - `docs/ROADMAP.md` — prioritized work
 
 ## Backend rules

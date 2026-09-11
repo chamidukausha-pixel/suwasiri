@@ -18,6 +18,8 @@
 | Android | `1:900720308322:android:b8f00a226b5317ed7f613b` | `android/app/google-services.json` |
 | iOS | `1:900720308322:ios:c0ad7813f5c27b387f613b` | `ios/Runner/GoogleService-Info.plist` |
 | Web (GP Care) | `1:900720308322:web:6874ced939987e6d7f613b` | `web/src/firebase.ts` + `VITE_FIREBASE_*` |
+| Web (LankaLab) | not registered yet | — |
+| Web (PharmaCloud) | not registered yet | — |
 
 Dart options: `lib/firebase_options.dart`
 
@@ -47,7 +49,7 @@ Aligned with `firestore.rules` and `FirebaseHealthRepository` / `FirebaseAuthRep
 | `appointments` | `patientId`, doctor fields, `timeSlot`, `date`, `time`, `token`, `consultMode` (`clinic` / `video`), `hospital`, `hospitalId`, `branchId`, `patientName`, `patientAge`, `patientGender`, `source` (`suwasiri_app` / `gp_care`), `bookedAt`, `queuePlace`, `paymentStatus` (`PENDING` / `PAID` / `SETTLED`), `paymentMethod`, `paidBySuwasiri`, `suwasiriReceiptUrl` (bank-slip download URL) | create: household or GP Care; **read: any signed-in**; update: household or staff |
 | `appointment_slots` | Deterministic id `{doctorId}_{yyyy-MM-dd}_{HH-mm}` — locks one doctor+datetime so app and GP Care cannot double-book | read: signed-in; create if missing |
 | `clinical_calculations` | One doc per `patientId`: latest vitals + `clinicalCalculations[]` + `observationsHistory[]` from GP Care Clinical Decision Calculators Suite | read/write: any signed-in (doctor save + reopen history) |
-| `prescriptions` | `patientId`, `medicine`, `schedule`, `doseBadge`, `sessionId`, `sentToPharmacare` (MediLanka portal flag), `clinicName`, `doctor`, `code`, `source` (`gp_care` when issued from GP Care) | read/create: signed-in (staff issue + patient read); update: household or staff |
+| `prescriptions` | `patientId`, `medicine`, `schedule`, `doseBadge`, `sessionId`, `sentToPharmacare` (MediLanka / PharmaCloud portal flag), `clinicName`, `doctor`, `code`, `source` (`gp_care` when issued from GP Care) | read/create: signed-in (staff issue + patient read); update: household or staff. **PharmaCloud** will list these as incoming e-Rx when wired (today mock in `pharmacloud/`) |
 | `medical_certificates` | `patientId`, `patientName`, `title`, `doctor`, `body`, `certificateNo`, `source` (`gp_care`) | read/create: signed-in; update: household or staff. App Vault filters by the active patient’s `patientId` |
 | `sos_sessions` | `patientId`, lat/lng, `accuracyMeters`, `address`, `shareLiveGps`, `active` | owner write; readable when `shareLiveGps` |
 | `notifications` | `title`, `body`, `timestamp`, `type`, `read` | any signed-in (tighten later) |
@@ -57,7 +59,7 @@ Aligned with `firestore.rules` and `FirebaseHealthRepository` / `FirebaseAuthRep
 | `clinic_doctors` | `name`, `specialty`, `hospital`, `address`, `region`, `rosterHours`, `hospitalId`, `branchId`, `photoUrl`, `active`, `staffId`, `source` (`gp_care`) | signed-in read/write. Platform Console / Practice Manager publish doctors (photo optional) so Suwasiri Doctors can search by name, clinic, and district |
 | `clinic_centers` | `name`, `region`, `address`, `hospitalId`, `logoUrl`, `active`, `status` (`ACTIVE` / `SUSPENDED`), `source` (`gp_care`) | signed-in read/write. New medical centres (logo optional) appear in Suwasiri until doctors are added. **Suspend** in Platform Console sets `active: false` so the centre (and its `clinic_doctors`) disappear from Suwasiri search until **Reactivate** |
 | `clinic_fee_schedules` | One doc per hospital (`hospitalId`) plus optional `global`. `items[]`: `description`, `privateFee`, `suwasiriService` (`medical_certificate` / `repeat_prescription` / `review_results`) | signed-in read/write. Each clinic’s MBS private fee is shown only at Suwasiri **booking** for Home certificate / repeat Rx / review-results (fallback LKR 1000 / 1500 / 1200) |
-| `clinic_patient_registrations` | `patientId`, `patientName`, `hospitalId`, `hospitalName`, `branchId`, `registration` (full intake form), `source` (`suwasiri_app`) | household write; signed-in read. GP Care **Patient Clinical Records** creates a clinic file from this intake |
+| `clinic_sample_dispatches` | One doc per Sample Dispatch bag (`id` = `SC-…`). `clinicName`, `driverName`, `driverPhone`, `vehicleNo`, `sampleCount`, `status` (`COLLECTED` / `DELIVERED`), `collectedAt`, `deliveredAt`, `labName`, `labAddress`, `source` (`gp_care`) | **read: public** (LankaLab portal has no login yet); **write: signed-in** GP Care staff. Shown on LankaLab Transit Logistics → Clinic Sample Collection Log |
 
 ## Firebase Storage
 
@@ -80,6 +82,18 @@ Add these when the GP Care web app is wired to Firebase. Do **not** change the s
 | `memberships/{id}` | `userId`, `hospitalId`, `roleId`, `branchIds[]`, `active` | `hospitalId` must match an active membership of `auth.uid` |
 
 Clinical collections (`appointments`, `prescriptions`, `vault`, `vaccinations`) should gain `hospitalId`. Staff queries: membership contains hospital. Patient mobile app uses **household** patient ids: main applicant `auth.uid`, family members `{uid}_wife` / `{uid}_child` / … (see `isHouseholdPatient` in `firestore.rules`). SOS stays on the main applicant uid only.
+
+## Planned pharmacy collections (PharmaCloud — not deployed yet)
+
+Add these when [`pharmacloud/`](../pharmacloud/) is wired to Firebase. Reuse `prescriptions` and `users` first; do **not** change patient `users/{uid}` shape.
+
+| Collection / field | Use |
+|--------------------|-----|
+| `prescriptions.sentToPharmacare` / `dispenseStatus` | Pharmacist dispense in PharmaCloud; Suwasiri then moves the line to Issued Medical History |
+| `pharmacy_staff` / memberships | Pharmacy login (email match), same Auth project as GP Care |
+| `notifications` (refill) | Trilingual refill SMS also lands in the patient Suwasiri inbox |
+
+See [PHARMACLOUD.md](PHARMACLOUD.md).
 
 ## Family profiles (mobile)
 

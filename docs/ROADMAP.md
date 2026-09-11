@@ -22,7 +22,7 @@ Prioritized next work. Move items to **Done** in [STATUS.md](STATUS.md) when shi
 2. Vault PDF/image upload via Firebase Storage
 3. Telehealth/Call: GP Care doctor start sets `status: ringing`; Suwasiri shows Answer + local/remote video; 5‑min video reminder via ScheduleCubit
 4. Vault: Previous Medical History folders (gallery/camera + notes) per family patient id
-4. Live PharmaCare API (replace notification-only portal handoff)
+4. Live PharmaCloud / MediLanka handoff (in-repo portal at `pharmacloud/` — still mock; later Firestore `prescriptions`)
 5. Payment tokens → real gateway if required
 
 ## P3 — product polish
@@ -47,7 +47,16 @@ Keep `web/` as the exact React/Vite/Express clinic portal. Do not change Flutter
 Keep `lankalab/` as the exact React/Vite/Express lab portal. Do not change Flutter or GP Care (`web/`) unless asked. Do not edit `Downloads/lankalab-portal`.
 
 1. Copy is in-repo; Gemini AI analyze / consult / parse-report still use `server.ts` + mock orders
-2. Later (when asked): Unique Health ID barcode lookup, `vault` lab-report push, Sample Dispatch job sharing — [LANKALAB.md](LANKALAB.md)
+2. Local URL is **http://localhost:3001** (GP Care stays on **3000**; PharmaCloud on **3002**)
+3. Sample Dispatch bags from GP Care **Collected** / **Delivered** (driver, phone, vials, vehicle, clinic) show on Transit Logistics Clinic Sample Collection Log. Remaining: Unique Health ID barcode lookup, `vault` lab-report push — [LANKALAB.md](LANKALAB.md)
+
+## Parallel web (PharmaCloud)
+
+Keep `pharmacloud/` as the exact React/Vite/Express pharmacy gateway. Do not change Flutter, GP Care (`web/`), or LankaLab (`lankalab/`) unless asked. Do not edit `Downloads/sri-lanka-pharmacloud`.
+
+1. Copy is in-repo; Gemini medication-analysis / refill SMS still use `server.ts` + mock inventory and e-Rx
+2. Local URL is **http://localhost:3002** (GP Care **3000**, LankaLab **3001**)
+3. Later (when asked): live Firestore `prescriptions` inbox, Unique Health ID / allergy check, dispense → Suwasiri Issued Medical History — [PHARMACLOUD.md](PHARMACLOUD.md)
 
 ## Do not regress
 

@@ -1,0 +1,6 @@
+{
+  "name": "Sri Lanka PharmaCloud",
+  "description": "Cloud-based pharmacy management system synchronized with Sri Lanka GP Care and Suwasiri eHealth, featuring AI-driven medication interaction alerts, automated trilingual refill notifications, real-time inventory, and NMRA/PDPA compliance.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

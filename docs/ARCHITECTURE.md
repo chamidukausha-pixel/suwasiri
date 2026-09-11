@@ -1,15 +1,17 @@
 # Architecture
 
-This repo holds **two apps** developed in parallel:
+This repo holds **four apps** developed in parallel:
 
 | App | Path | Stack |
 |-----|------|--------|
 | **Mobile (Suwasiri)** | repo root (`lib/`, `android/`, `ios/`) | Flutter + Cubit/BLoC |
-| **Web (Sri Lankan GP Care)** | [`web/`](../web/) | React 19 + Vite + Express + Tailwind — **do not change this stack** |
+| **Web (Sri Lankan GP Care)** | [`web/`](../web/) | React 19 + Vite + Express + Tailwind — **do not change this stack** — local **http://localhost:3000** |
+| **Web (LankaLab Portal)** | [`lankalab/`](../lankalab/) | React 19 + Vite + Express + Tailwind — **do not change this stack** — local **http://localhost:3001** |
+| **Web (Sri Lanka PharmaCloud)** | [`pharmacloud/`](../pharmacloud/) | React 19 + Vite + Express + Tailwind — **do not change this stack** — local **http://localhost:3002** |
 
 Appointments, e-prescriptions, vaccinations, telehealth signaling, **clinic doctors / centres**, consult notes, vault labs/imaging, medical certificates, and booking receipts now use the same Firebase project (`suwasiri-91824`).
 
-Do not change Flutter/mobile code unless explicitly asked.
+Do not change Flutter/mobile code unless explicitly asked. Do not merge the four UIs; they share Firebase data later.
 
 ## Mobile layout
 
@@ -104,5 +106,34 @@ web/
     sync/                   # Firestore: appointments, e-Rx, patient chart, telehealth WebRTC
     utils/
   server.ts                 # Express + Vite + Gemini; patient_store.json + /api/tenancy/*
+  package.json
+```
+
+## LankaLab layout
+
+Exact copy of the diagnostics portal. Do not rename packages, swap Vite/React/Express, or rewrite the UI. Local **http://localhost:3001**.
+
+```
+lankalab/
+  src/
+    App.tsx
+    data/mockData.ts
+    components/
+  server.ts                 # Express + Vite + Gemini; port 3001
+  package.json
+```
+
+## PharmaCloud layout
+
+Exact copy of the pharmacy / e-health gateway. Do not rename packages, swap Vite/React/Express, or rewrite the UI. Local **http://localhost:3002**.
+
+```
+pharmacloud/
+  src/
+    App.tsx                 # pharmacy dashboard + module tabs
+    types.ts                # inventory, GP Care Rx, Suwasiri profiles, bills
+    data/mockData.ts        # in-memory seed (not Firebase yet)
+    components/             # stock, scanner, e-Rx, AI alerts, refill, POS, store
+  server.ts                 # Express + Vite + Gemini; port 3002, HMR 24680
   package.json
 ```

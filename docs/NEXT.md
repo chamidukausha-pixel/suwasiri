@@ -68,4 +68,4 @@ Move GP EMR charts off the Express JSON store:
 ## 6. Do not do
 
 - Do not rewrite web as Flutter web or Next.js
-- Do not merge the two UIs
+- Do not merge the GP Care, LankaLab, and PharmaCloud UIs
