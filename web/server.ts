@@ -13,6 +13,8 @@ import {
   DEFAULT_STAFF_DIRECTORY,
   DEFAULT_STAFF_USERS,
   HOSPITAL_PRIMECARE,
+  HOSPITAL_SOUTHERN,
+  BRANCH_GALLE,
   SOUTHERN_DEMO_PATIENT,
   USER_PLATFORM_CHAMIDU,
   cloneHospitalRoles,
@@ -895,6 +897,10 @@ function getStore() {
       data.recalls = INITIAL_STATE.recalls;
       mutated = true;
     }
+    if (!Array.isArray(data.lankalabCriticalAlerts)) {
+      data.lankalabCriticalAlerts = [];
+      mutated = true;
+    }
     if (!Array.isArray(data.auditLogs)) {
       data.auditLogs = [];
       mutated = true;
@@ -1109,6 +1115,9 @@ function toLankaLabCollectionCard(store: any, sample: any) {
     deliveredAt: sample.deliveredTime || "",
     labName: sample.labName || "",
     labAddress: sample.labAddress || "",
+    issuedPersonName: sample.issuedPersonName || "",
+    issuedDate: sample.issuedDate || "",
+    dispatchNumber: sample.dispatchNumber || "",
     patientName: sample.patientName || "",
     hospitalId: sample.hospitalId || "",
     source: "gp_care",
@@ -2694,6 +2703,157 @@ app.post("/api/partner-labs", (req, res) => {
   res.status(201).json({ labs: store.partnerLabs, state: store });
 });
 
+app.post("/api/sample-collections/batch-collect", (req, res) => {
+  const store = getStore();
+  if (!store.sampleCollections) store.sampleCollections = [];
+  const driverName = String(req.body.deliveryPersonName || req.body.driverName || "").trim();
+  const driverPhone = String(req.body.deliveryPersonPhone || req.body.driverPhone || "").trim();
+  const vehicleNo = String(req.body.deliveryPersonId || req.body.vehicleNo || "").trim();
+  const issuedPersonName = String(req.body.issuedPersonName || "").trim();
+  const labName = String(req.body.labName || "").trim();
+  const labAddress = String(req.body.labAddress || "").trim();
+  const clinicName = String(req.body.clinicName || "").trim();
+  const collectedDate = String(req.body.collectedDate || "").trim().slice(0, 10);
+  const sampleCount = Math.max(1, Number(req.body.sampleCount) || 1);
+  const sampleIds = Array.isArray(req.body.sampleIds) ? req.body.sampleIds.map((x: unknown) => String(x)) : [];
+  const fileIds = Array.isArray(req.body.fileIds)
+    ? req.body.fileIds.map((x: unknown) => String(x).trim()).filter(Boolean)
+    : String(req.body.fileIds || "")
+        .split(/[,;\s]+/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+
+  if (!driverName || !vehicleNo || !issuedPersonName || !labName || !collectedDate) {
+    return res.status(400).json({ error: "Driver name, vehicle, issued person, lab name, and date are required." });
+  }
+
+  const pending = store.sampleCollections.filter((s: any) => s.status === "PENDING");
+  const selected = pending.filter((s: any) =>
+    sampleIds.includes(s.id) || fileIds.includes(s.patientId) || fileIds.includes(s.id)
+  );
+  if (!selected.length) {
+    return res.status(400).json({ error: "Select at least one File ID to issue." });
+  }
+
+  const localTimeStr = `${collectedDate} ${new Date().toISOString().substring(11, 16)}`;
+  const issuedFileIds = selected.map((s: any) => s.patientId);
+  const cards: any[] = [];
+  for (const sample of selected) {
+    applySamplePatch(store, sample, {
+      status: "COLLECTED",
+      collectedTime: localTimeStr,
+      collectedDate,
+      deliveryPersonName: driverName,
+      deliveryPersonPhone: driverPhone,
+      deliveryPersonId: vehicleNo,
+      sampleCount,
+      clinicName: clinicName || sample.clinicName || "",
+      labName,
+      labAddress,
+      issuedPersonName,
+      issuedDate: collectedDate,
+      issuedFileIds,
+      lankaLabSyncStatus: "SYNCED",
+    });
+    cards.push(toLankaLabCollectionCard(store, sample));
+  }
+
+  if (!store.notifications) store.notifications = [];
+  store.notifications.forEach((n: any) => {
+    if (selected.some((s: any) => n.sampleId === s.id || (n.templateType === "PATHOLOGY_ORDER" && n.patientName === s.patientName && !n.read))) {
+      n.read = true;
+      n.status = "READ";
+    }
+  });
+
+  store.clinicMessages.push({
+    id: `msg-sc-batch-${Date.now()}`,
+    sender: "Diagnostics Hub System",
+    senderRole: "System",
+    text: `🧪 Batch issued ${selected.length} specimen(s) to driver ${driverName} (${vehicleNo}) on ${collectedDate}. File IDs: ${issuedFileIds.join(", ")}. Lab: ${labName}. Vials: ${sampleCount}. Issued by ${issuedPersonName}.`,
+    timestamp: localTimeStr,
+    channel: "#general-clinical",
+  });
+
+  saveStore(store);
+  res.json({ success: true, samples: selected, lankaLabCards: cards, state: store });
+});
+
+app.post("/api/sample-collections/batch-deliver", (req, res) => {
+  const store = getStore();
+  if (!store.sampleCollections) store.sampleCollections = [];
+  const driverName = String(req.body.deliveryPersonName || req.body.driverName || "").trim();
+  const driverPhone = String(req.body.deliveryPersonPhone || req.body.driverPhone || "").trim();
+  const vehicleNo = String(req.body.deliveryPersonId || req.body.vehicleNo || "").trim();
+  const issuedPersonName = String(req.body.issuedPersonName || "").trim();
+  const issuedDate = String(req.body.issuedDate || "").trim().slice(0, 10);
+  const labName = String(req.body.labName || "").trim();
+  const labAddress = String(req.body.labAddress || "").trim();
+  const clinicName = String(req.body.clinicName || "").trim();
+  const sampleCount = Math.max(1, Number(req.body.sampleCount) || 1);
+  const sampleIds = Array.isArray(req.body.sampleIds) ? req.body.sampleIds.map((x: unknown) => String(x)) : [];
+
+  if (!driverName || !driverPhone || !vehicleNo || !issuedPersonName || !issuedDate || !labName) {
+    return res.status(400).json({ error: "Driver name, phone, vehicle, issued person, issued date, and lab name are required." });
+  }
+
+  const pending = store.sampleCollections.filter((s: any) => s.status === "PENDING");
+  const selected = pending.filter((s: any) => sampleIds.includes(s.id));
+  if (!selected.length) {
+    return res.status(400).json({ error: "Click Delivered on at least one specimen." });
+  }
+
+  store.sampleDispatchSeq = Number(store.sampleDispatchSeq) || 1000;
+  store.sampleDispatchSeq += 1;
+  const dispatchNumber = `SD-${store.sampleDispatchSeq}`;
+  const localTimeStr = `${issuedDate} ${new Date().toISOString().substring(11, 16)}`;
+  const issuedFileIds = selected.map((s: any) => s.patientId);
+  const ledgerKey = `LKLAB-SMP-TX-${Math.random().toString(36).substring(3, 11).toUpperCase()}`;
+  const cards: any[] = [];
+  for (const sample of selected) {
+    applySamplePatch(store, sample, {
+      status: "DELIVERED",
+      collectedTime: localTimeStr,
+      collectedDate: issuedDate,
+      deliveredTime: localTimeStr,
+      deliveryPersonName: driverName,
+      deliveryPersonPhone: driverPhone,
+      deliveryPersonId: vehicleNo,
+      sampleCount,
+      clinicName: clinicName || sample.clinicName || "",
+      labName,
+      labAddress,
+      issuedPersonName,
+      issuedDate,
+      issuedFileIds,
+      dispatchNumber,
+      lankaLabSyncStatus: "SYNCED",
+      lankaLabLedgerKey: ledgerKey,
+    });
+    cards.push(toLankaLabCollectionCard(store, sample));
+  }
+
+  if (!store.notifications) store.notifications = [];
+  store.notifications.forEach((n: any) => {
+    if (selected.some((s: any) => n.sampleId === s.id || (n.templateType === "PATHOLOGY_ORDER" && n.patientName === s.patientName && !n.read))) {
+      n.read = true;
+      n.status = "READ";
+    }
+  });
+
+  store.clinicMessages.push({
+    id: `msg-sc-del-${Date.now()}`,
+    sender: "Diagnostics Hub System",
+    senderRole: "System",
+    text: `🚚 Dispatch file ${dispatchNumber}: ${selected.length} specimen(s) delivered with driver ${driverName} (${vehicleNo}). Vials: ${sampleCount}. Lab: ${labName}. Issued by ${issuedPersonName}.`,
+    timestamp: localTimeStr,
+    channel: "#general-clinical",
+  });
+
+  saveStore(store);
+  res.json({ success: true, dispatchNumber, samples: selected, lankaLabCards: cards, state: store });
+});
+
 app.get("/api/lankalab-clinic-collections", (req, res) => {
   const store = getStore();
   if (!store.sampleCollections) store.sampleCollections = [];
@@ -2701,6 +2861,287 @@ app.get("/api/lankalab-clinic-collections", (req, res) => {
     .filter((s: any) => s.status === "COLLECTED" || s.status === "DELIVERED")
     .map((s: any) => toLankaLabCollectionCard(store, s));
   res.json(cards);
+});
+
+function normalizePersonName(value: unknown): string {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function matchLankaLabPatient(store: any, body: {
+  patientId?: string;
+  patientName?: string;
+  suwasiriBarcode?: string;
+}) {
+  const patients = Array.isArray(store.patients) ? store.patients : [];
+  const live = patients.filter((p: any) => p && !isFakeSuwasiriBarcodeFile(p));
+  const requestedId = String(body.patientId || "").trim();
+  if (requestedId) {
+    const byId = live.find((p: any) => String(p.id) === requestedId);
+    if (byId) return byId;
+  }
+  const barcode = String(body.suwasiriBarcode || "").trim().toUpperCase();
+  if (barcode) {
+    const byCode = live.find((p: any) =>
+      String(p.suwasiriBarcode || "").trim().toUpperCase() === barcode ||
+      String(p.id).trim().toUpperCase() === barcode
+    );
+    if (byCode) return byCode;
+  }
+  const name = normalizePersonName(body.patientName);
+  if (name) {
+    const exact = live.find((p: any) => normalizePersonName(p.name) === name);
+    if (exact) return exact;
+  }
+  return null;
+}
+
+function formatLankaLabResultSummary(results: unknown, fallback: string): string {
+  if (Array.isArray(results) && results.length) {
+    return results
+      .map((row: any) => {
+        const parameter = row?.parameter || row?.testName || "Result";
+        const value = [row?.value, row?.unit].filter(Boolean).join(" ");
+        return value ? `${parameter}: ${value}` : String(parameter);
+      })
+      .join(" · ");
+  }
+  if (typeof results === "string" && results.trim()) return results.trim();
+  return fallback;
+}
+
+function clinicTenantFromName(clinicName: string) {
+  const n = String(clinicName || "").toLowerCase();
+  if (n.includes("southern") || n.includes("galle")) {
+    return { hospitalId: HOSPITAL_SOUTHERN, branchId: BRANCH_GALLE };
+  }
+  return { hospitalId: HOSPITAL_PRIMECARE, branchId: BRANCH_COLOMBO };
+}
+
+function looksLikeSuwasiriUid(id: string): boolean {
+  return id.length >= 16 && !/^\d{3,5}-LK$/i.test(id) && !id.startsWith("apt-") && !id.startsWith("p-");
+}
+
+function applyLankaLabResult(store: any, body: any, critical: boolean) {
+  if (!Array.isArray(store.patients)) store.patients = [];
+  if (!Array.isArray(store.recalls)) store.recalls = [];
+  if (!Array.isArray(store.notifications)) store.notifications = [];
+  if (!Array.isArray(store.lankalabCriticalAlerts)) store.lankalabCriticalAlerts = [];
+
+  const {
+    patientId,
+    patientName,
+    suwasiriBarcode,
+    age,
+    gender,
+    email,
+    testType,
+    specimenId,
+    orderId,
+    results,
+    notes,
+    connectedClinic,
+    phone,
+  } = body || {};
+
+  const displayName = String(patientName || "").trim();
+  const clinicName = String(connectedClinic || "").trim() || "PrimeCare Medical Centre - Colombo Central";
+  const tenant = clinicTenantFromName(clinicName);
+
+  if (!displayName && !patientId && !suwasiriBarcode) {
+    return { error: "patientName is required.", status: 400 };
+  }
+
+  let pat = matchLankaLabPatient(store, { patientId, patientName: displayName, suwasiriBarcode });
+  let created = false;
+  if (!pat) {
+    const pId = `${Math.floor(1000 + Math.random() * 9000)}-LK`;
+    const parsedAge = age !== undefined && age !== null && age !== "" ? parseInt(String(age), 10) : 0;
+    pat = {
+      id: pId,
+      name: displayName || "LankaLab patient",
+      age: Number.isFinite(parsedAge) ? parsedAge : 0,
+      gender: gender || "Not recorded",
+      bloodType: "Not recorded",
+      allergies: "None declared",
+      phone: phone || "",
+      email: email || "",
+      image: "",
+      notes: notes
+        ? `LankaLab ${critical ? "critical" : "result"}: ${notes}`
+        : `LankaLab ${critical ? "critical flag" : "completed report"} from Operations Overview.`,
+      history: [],
+      activeMedications: [],
+      medicalHistory: [],
+      vaccineRecords: [],
+      labResults: [],
+      prescriptionsList: [],
+      medicalCertificatesList: [],
+      medicalCenter: clinicName,
+      hospitalId: tenant.hospitalId,
+      branchId: tenant.branchId,
+      suwasiriBarcode: suwasiriBarcode || undefined,
+      syncedHospitalIds: [tenant.hospitalId],
+      accessStatus: "ACTIVE",
+    };
+    store.patients.unshift(pat);
+    created = true;
+  } else {
+    if (clinicName) pat.medicalCenter = clinicName;
+    pat.hospitalId = pat.hospitalId || tenant.hospitalId;
+    if (phone && !pat.phone) pat.phone = phone;
+    if (email && !pat.email) pat.email = email;
+    if (suwasiriBarcode && !pat.suwasiriBarcode) pat.suwasiriBarcode = suwasiriBarcode;
+  }
+
+  const assayName = String(testType || "LankaLab assay");
+  const resultSummary = formatLankaLabResultSummary(
+    results,
+    critical ? "Critical alert from LankaLab" : "Completed report from LankaLab"
+  );
+  const labId = `lab-${critical ? "crit" : "sync"}-${specimenId || orderId || Date.now()}`;
+  if (!Array.isArray(pat.labResults)) pat.labResults = [];
+  const existingLab = pat.labResults.find((lr: any) =>
+    lr && (lr.id === labId || String(lr.testName) === assayName)
+  );
+  if (existingLab) {
+    existingLab.status = critical ? "CRITICAL" : existingLab.status || "COMPLETED";
+    existingLab.abnormalFlag = critical || existingLab.abnormalFlag;
+    existingLab.criticalAlert = critical ? true : existingLab.criticalAlert;
+    existingLab.doctorReviewed = false;
+    existingLab.result = resultSummary || existingLab.result;
+    existingLab.remarks = notes || existingLab.remarks;
+    existingLab.labName = existingLab.labName || "LankaLab";
+  } else {
+    pat.labResults.unshift({
+      id: labId,
+      testName: assayName,
+      date: new Date().toISOString().split("T")[0],
+      status: critical ? "CRITICAL" : "COMPLETED",
+      result: resultSummary,
+      remarks: notes || (critical
+        ? "Flagged critical by LankaLab technician. Call the patient and rebook in person or video."
+        : "Completed assay synced from LankaLab Operations Overview."),
+      abnormalFlag: critical,
+      criticalAlert: critical,
+      doctorReviewed: false,
+      labName: "LankaLab",
+      category: critical ? "Critical" : "Pathology",
+    });
+  }
+
+  const today = new Date().toISOString().split("T")[0];
+  if (critical) {
+    const recallNotes = `CRITICAL pathology alert from LankaLab: ${assayName} — ${resultSummary}. Call the patient and rebook in person or video.`;
+    store.recalls = [
+      {
+        id: `rec-ll-${labId}`,
+        patientId: pat.id,
+        patientName: pat.name,
+        patientPhone: pat.phone || "",
+        patientEmail: pat.email || "",
+        category: "Pathology Follow-up",
+        urgency: "HIGH",
+        dueDate: today,
+        status: "DUE",
+        notes: recallNotes,
+        assignedDoctor: "Dr. Priyantha Silva",
+      },
+      ...store.recalls.filter((r: any) =>
+        !(r.patientId === pat.id && String(r.notes || "").includes(assayName) && r.status !== "COMPLETED" && r.status !== "CANCELLED")
+      ),
+    ];
+  }
+
+  const stamp = new Date().toISOString().replace("T", " ").substring(0, 16);
+  store.notifications.unshift({
+    id: `notif-ll-${critical ? "crit" : "sync"}-${Date.now()}`,
+    patientName: pat.name,
+    recipient: pat.phone || pat.email || clinicName,
+    transport: "SMS",
+    templateType: critical ? "CRITICAL_LAB_ALERT" : "LAB_RESULT_SYNC",
+    content: critical
+      ? `LankaLab CRITICAL: ${pat.name} — ${assayName}. Open the patient profile (red alert).`
+      : `LankaLab report synced to ${clinicName}: ${pat.name} — ${assayName}.`,
+    date: stamp,
+    status: "DELIVERED",
+    read: false,
+    sampleId: specimenId || "",
+    testName: assayName,
+    registeredBy: "LankaLab",
+  });
+
+  const alert = {
+    id: `ll-${critical ? "crit" : "sync"}-${Date.now()}`,
+    kind: critical ? "critical" : "result",
+    patientId: pat.id,
+    patientName: pat.name,
+    testType: assayName,
+    specimenId: specimenId || "",
+    suwasiriBarcode: suwasiriBarcode || pat.suwasiriBarcode || "",
+    clinicName,
+    createdAt: new Date().toISOString(),
+    consumed: false,
+  };
+  store.lankalabCriticalAlerts.unshift(alert);
+  store.lankalabCriticalAlerts = store.lankalabCriticalAlerts.slice(0, 40);
+
+  const barcode = String(pat.suwasiriBarcode || suwasiriBarcode || "").trim();
+  const suwasiriPatientId = looksLikeSuwasiriUid(String(pat.id)) ? pat.id : (barcode || pat.id);
+
+  return {
+    created,
+    pat,
+    clinicName,
+    suwasiriPatientId,
+    alert,
+    profileUrl: `http://localhost:3000/?openPatient=${encodeURIComponent(pat.id)}${critical ? "&critical=1" : ""}`,
+  };
+}
+
+/** LankaLab technician Critical → GP Care patient file (red critical badge). */
+app.post("/api/lankalab-critical", (req, res) => {
+  const store = getStore();
+  const applied = applyLankaLabResult(store, req.body || {}, true);
+  if (applied.error) return res.status(applied.status || 400).json({ error: applied.error });
+  saveStore(store);
+  res.json({
+    success: true,
+    created: applied.created,
+    patientId: applied.pat.id,
+    patientName: applied.pat.name,
+    clinicName: applied.clinicName,
+    suwasiriPatientId: applied.suwasiriPatientId,
+    profileUrl: applied.profileUrl,
+    alert: applied.alert,
+    patient: applied.pat,
+  });
+});
+
+/** LankaLab completed report → requesting clinic chart (PrimeCare etc.). Critical opens red. */
+app.post("/api/lankalab-result-sync", (req, res) => {
+  const store = getStore();
+  const critical = Boolean(req.body?.critical);
+  const applied = applyLankaLabResult(store, req.body || {}, critical);
+  if (applied.error) return res.status(applied.status || 400).json({ error: applied.error });
+  saveStore(store);
+  res.json({
+    success: true,
+    created: applied.created,
+    patientId: applied.pat.id,
+    patientName: applied.pat.name,
+    clinicName: applied.clinicName,
+    suwasiriPatientId: applied.suwasiriPatientId,
+    profileUrl: applied.profileUrl,
+    phone: applied.pat.phone || req.body?.phone || "",
+    email: applied.pat.email || req.body?.email || "",
+    alert: applied.alert,
+    patient: applied.pat,
+  });
+});
+
+app.get("/api/lankalab-critical-alerts", (req, res) => {
+  const store = getStore();
+  res.json(store.lankalabCriticalAlerts || []);
 });
 
 // LOG NEW SAMPLE COLLECTION
@@ -2933,9 +3374,11 @@ app.post("/api/sample-collections/:id/collect", (req, res) => {
     return res.status(400).json({ error: "Driver name, phone number, and vehicle number are required." });
   }
 
+  const collectedDate = localTimeStr.slice(0, 10);
   applySamplePatch(store, sample, {
     status: "COLLECTED",
     collectedTime: localTimeStr,
+    collectedDate,
     deliveryPersonName: driverName,
     deliveryPersonPhone: driverPhone,
     deliveryPersonId: vehicleNo,
@@ -2980,14 +3423,10 @@ app.post("/api/sample-collections/:id/deliver", (req, res) => {
   const deliveryPersonName = String(req.body.deliveryPersonName || req.body.driverName || "").trim();
   const deliveryPersonPhone = String(req.body.deliveryPersonPhone || req.body.driverPhone || "").trim();
   const deliveryPersonId = String(req.body.deliveryPersonId || req.body.vehicleNo || "").trim();
-  const labName = String(req.body.labName || "").trim();
-  const labAddress = String(req.body.labAddress || "").trim();
   const sampleCount = Math.max(1, Number(req.body.sampleCount) || 1);
   const clinicName = String(req.body.clinicName || "").trim();
-
-  if (!deliveryPersonName || !labName || !labAddress) {
-    return res.status(400).json({ error: "Driver name, lab name, and lab address are required." });
-  }
+  const issuedPersonName = String(req.body.issuedPersonName || "").trim();
+  const issuedDate = String(req.body.issuedDate || "").trim();
 
   const index = store.sampleCollections.findIndex(s => s.id === id);
   if (index === -1) {
@@ -2995,18 +3434,33 @@ app.post("/api/sample-collections/:id/deliver", (req, res) => {
   }
 
   const sample = store.sampleCollections[index];
-  const localTimeStr = new Date().toISOString().replace("T", " ").substring(0, 16);
+  const labName = String(req.body.labName || sample.labName || "").trim();
+  const labAddress = String(req.body.labAddress || sample.labAddress || "").trim();
+  const resolvedLabName = labName || sample.labName || "LankaLab - Colombo General";
+  const resolvedLabAddress = labAddress || sample.labAddress || "Colombo Central Patholab, Baseline Road, Colombo 08";
+  if (!issuedPersonName || !issuedDate) {
+    return res.status(400).json({ error: "Issued person name and date are required." });
+  }
+  if (!deliveryPersonName || !deliveryPersonId) {
+    return res.status(400).json({ error: "Driver name and vehicle number are required." });
+  }
+
+  const localTimeStr = issuedDate.length >= 10
+    ? `${issuedDate} ${new Date().toISOString().substring(11, 16)}`
+    : new Date().toISOString().replace("T", " ").substring(0, 16);
   const ledgerKey = `LKLAB-SMP-TX-${Math.random().toString(36).substring(3, 11).toUpperCase()}`;
 
   applySamplePatch(store, sample, {
     status: "DELIVERED",
     deliveredTime: localTimeStr,
-    deliveryPersonName,
+    issuedPersonName,
+    issuedDate,
+    deliveryPersonName: deliveryPersonName || sample.deliveryPersonName,
     deliveryPersonPhone: deliveryPersonPhone || sample.deliveryPersonPhone || "+94 77 000 0000",
     deliveryPersonId: deliveryPersonId || sample.deliveryPersonId || "N/A",
     sampleCount: sampleCount || sample.sampleCount || 1,
-    labName,
-    labAddress,
+    labName: resolvedLabName,
+    labAddress: resolvedLabAddress,
     clinicName: clinicName || sample.clinicName || "",
     lankaLabSyncStatus: "SYNCED",
     lankaLabLedgerKey: ledgerKey,

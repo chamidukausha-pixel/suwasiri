@@ -56,13 +56,15 @@ import {
 } from "./types";
 
 import ClinicMonthCalendar, { LiveColomboClock } from "./components/ClinicMonthCalendar";
+import SampleDispatchHistoryView from "./components/SampleDispatchHistoryView";
+import SampleDispatchDeliveryPanel from "./components/SampleDispatchDeliveryPanel";
 import RoleSwitcher from "./components/RoleSwitcher";
 import { formatDateKey, formatLongDate } from "./utils/clinicCalendar";
 import LoginView from "./components/LoginView";
 import PlatformConsoleView from "./components/PlatformConsoleView";
 import PrintablePrescription from "./components/PrintablePrescription";
 import PatientSexAgeBadge from "./components/PatientSexAgeBadge";
-import PatientCriticalAlertBadge from "./components/PatientCriticalAlertBadge";
+import PatientCriticalAlertBadge, { hasCriticalPathologyAlert } from "./components/PatientCriticalAlertBadge";
 import SecureClinicChat from "./components/SecureClinicChat";
 import TelehealthRoom from "./components/TelehealthRoom";
 import PatientDetailsHub from "./components/PatientDetailsHub";
@@ -120,6 +122,7 @@ import {
 import { clinicExamSessionId, issuePrescriptionsToSuwasiri } from "./sync/suwasiriPrescriptions";
 import { issueLabReportToSuwasiri } from "./sync/suwasiriLabs";
 import { publishSampleDispatchToLankaLab } from "./sync/suwasiriSampleDispatch";
+import { subscribeClinicCriticalAlerts } from "./sync/suwasiriCriticalAlerts";
 import { DEFAULT_PARTNER_LABS, type PartnerLab } from "./catalogs/partnerLabs";
 import {
   isFakeSuwasiriClinicFile,
@@ -512,6 +515,8 @@ export default function App() {
   const [publishedClinicDoctors, setPublishedClinicDoctors] = useState<StaffProvider[]>([]);
   const [clinicDoctorsReady, setClinicDoctorsReady] = useState(() => !isFirebaseConfigured());
   const rosterPublishRestored = useRef(false);
+  const lankaLabDeepLinkOpened = useRef(false);
+  const lastLankaLabCriticalId = useRef("");
   const [suwasiriPatients, setSuwasiriPatients] = useState<Patient[]>([]);
   const [suwasiriVaccinePatients, setSuwasiriVaccinePatients] = useState<Patient[]>([]);
   const [suwasiriCharts, setSuwasiriCharts] = useState<Record<string, SuwasiriChartPatch>>({});
@@ -557,15 +562,14 @@ export default function App() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [sampleCollections, setSampleCollections] = useState<any[]>([]);
   const [partnerLabs, setPartnerLabs] = useState<PartnerLab[]>(DEFAULT_PARTNER_LABS);
-  const [hubDispatchForm, setHubDispatchForm] = useState<null | { mode: "collect" | "deliver"; sampleId: string }>(null);
-  const [hubDriverName, setHubDriverName] = useState("");
-  const [hubDriverPhone, setHubDriverPhone] = useState("");
-  const [hubVehicleNo, setHubVehicleNo] = useState("");
-  const [hubVialCount, setHubVialCount] = useState("1");
-  const [hubLabName, setHubLabName] = useState(DEFAULT_PARTNER_LABS[0].name);
-  const [hubLabAddress, setHubLabAddress] = useState(DEFAULT_PARTNER_LABS[0].address);
-  const [hubAddingLab, setHubAddingLab] = useState(false);
   const [hubDispatchBusy, setHubDispatchBusy] = useState(false);
+  const [hubDeliverSampleIds, setHubDeliverSampleIds] = useState<string[]>([]);
+  const [focusDispatchNumber, setFocusDispatchNumber] = useState<string | null>(null);
+  const [selectedDispatchHistoryDate, setSelectedDispatchHistoryDate] = useState(() => formatDateKey(new Date()));
+  const [dispatchHistoryCalendarMonth, setDispatchHistoryCalendarMonth] = useState(() => {
+    const n = new Date();
+    return { year: n.getFullYear(), month: n.getMonth() };
+  });
   const [patientAccessRequests, setPatientAccessRequests] = useState<PatientAccessRequest[]>([]);
   const [accessActionPatient, setAccessActionPatient] = useState<Patient | null>(null);
   const [accessActionType, setAccessActionType] = useState<"DELETE" | "BLOCK">("DELETE");
@@ -646,11 +650,12 @@ export default function App() {
   };
 
   const requestTab = (tab: string) => {
-    if (!tabAllowed(tab, activeRole, isPlatformSA)) {
+    const nextTab = tab === "sampleDispatchHistory" ? "sampleCollection" : tab;
+    if (!tabAllowed(nextTab, activeRole, isPlatformSA)) {
       alert(`Your ${currentRole} role does not have permission to open this module.`);
       return;
     }
-    setActiveTab(tab);
+    setActiveTab(nextTab);
     setSelectedConsultPatient(null);
     setExamAppointmentId(null);
   };
@@ -918,6 +923,15 @@ export default function App() {
 
   useEffect(() => {
     fetchState();
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const openPatient = params.get("openPatient");
+    const openName = params.get("openPatientName");
+    if (openPatient) sessionStorage.setItem("gpCareOpenPatient", openPatient);
+    if (openName) sessionStorage.setItem("gpCareOpenPatientName", openName);
+    if (params.get("critical") === "1") sessionStorage.setItem("gpCareOpenCritical", "1");
   }, []);
 
   useEffect(() => {
@@ -1205,6 +1219,11 @@ export default function App() {
     setCalendarMonth({ year: n.getFullYear(), month: n.getMonth() });
     setSelectedClinicDate(formatDateKey(n));
     setNewAptDate(formatDateKey(n));
+  };
+  const jumpToDispatchHistoryToday = () => {
+    const n = new Date();
+    setDispatchHistoryCalendarMonth({ year: n.getFullYear(), month: n.getMonth() });
+    setSelectedDispatchHistoryDate(formatDateKey(n));
   };
   const selectClinicDate = (dateKey: string) => {
     setSelectedClinicDate(dateKey);
@@ -3021,117 +3040,70 @@ export default function App() {
     setActiveHubPatient(pObj);
   };
 
-  const openHubCollectForm = (sample: any) => {
-    setHubDispatchForm({ mode: "collect", sampleId: sample.id });
-    setHubDriverName(sample.deliveryPersonName || "");
-    setHubDriverPhone(sample.deliveryPersonPhone || "");
-    setHubVehicleNo(sample.deliveryPersonId || "");
-    setHubVialCount(String(sample.sampleCount || 1));
-    setHubAddingLab(false);
-  };
-
-  const openHubDeliverForm = (sample: any) => {
-    setHubDispatchForm({ mode: "deliver", sampleId: sample.id });
-    setHubDriverName(sample.deliveryPersonName || "");
-    setHubDriverPhone(sample.deliveryPersonPhone || "");
-    setHubVehicleNo(sample.deliveryPersonId || "");
-    setHubVialCount(String(sample.sampleCount || 1));
-    const match = partnerLabs.find((l) => l.name === sample.labName) || partnerLabs[0] || DEFAULT_PARTNER_LABS[0];
-    setHubLabName(sample.labName || match.name);
-    setHubLabAddress(sample.labAddress || match.address);
-    setHubAddingLab(false);
-  };
-
-  const submitHubDispatchForm = async () => {
-    if (!hubDispatchForm) return;
-    const sample = sampleCollections.find((s) => s.id === hubDispatchForm.sampleId);
-    if (!sample) return;
-    const driverName = hubDriverName.trim();
-    const driverPhone = hubDriverPhone.trim();
-    const vehicleNo = hubVehicleNo.trim();
-    const sampleCount = Math.max(1, Number(hubVialCount) || 1);
-    const clinicName = activeHospital?.name || sample.clinicName || "GP Care Clinic";
-    if (!driverName || !driverPhone || !vehicleNo) {
-      alert("Please enter the collected driver name, phone number, and vehicle number.");
-      return;
-    }
-    if (hubDispatchForm.mode === "deliver") {
-      if (!hubLabName.trim() || !hubLabAddress.trim()) {
-        alert("Please enter the lab name and address.");
-        return;
-      }
+  const submitHubBatchDeliver = async (payload: {
+    sampleIds: string[];
+    driverName: string;
+    driverPhone: string;
+    vehicleNo: string;
+    sampleCount: number;
+    issuedPersonName: string;
+    issuedDate: string;
+    labName: string;
+    labAddress: string;
+  }) => {
+    if (payload.labName && payload.labAddress && !partnerLabs.some((l) => l.name === payload.labName)) {
+      await fetch("/api/partner-labs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: payload.labName, address: payload.labAddress }),
+      }).then(async (labRes) => {
+        if (labRes.ok) {
+          const labData = await labRes.json();
+          if (labData.labs) setPartnerLabs(labData.labs);
+        }
+      });
     }
     setHubDispatchBusy(true);
     try {
-      if (hubDispatchForm.mode === "collect") {
-        const r = await fetch(`/api/sample-collections/${sample.id}/collect`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            deliveryPersonName: driverName,
-            deliveryPersonPhone: driverPhone,
-            deliveryPersonId: vehicleNo,
-            sampleCount,
-            clinicName,
-          }),
-        });
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({}));
-          throw new Error(err.error || "Could not mark collected.");
-        }
-        const data = await r.json();
-        if (data.state?.sampleCollections) setSampleCollections(data.state.sampleCollections);
-        setNotifications((prev) => {
-          const next = data.state?.notifications || prev;
-          return next.map((n: any) =>
-            n.sampleId === sample.id ||
-            (n.templateType === "PATHOLOGY_ORDER" &&
-              n.patientName === sample.patientName &&
-              n.status !== "READ" &&
-              !n.read &&
-              (!n.sampleId || n.sampleId === sample.id))
-              ? { ...n, read: true, status: "READ" }
-              : n
-          );
-        });
-        if (data.lankaLabCard) await publishSampleDispatchToLankaLab(data.lankaLabCard);
-      } else {
-        if (hubAddingLab) {
-          await fetch("/api/partner-labs", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: hubLabName.trim(), address: hubLabAddress.trim() }),
-          }).then(async (labRes) => {
-            if (labRes.ok) {
-              const labData = await labRes.json();
-              if (labData.labs) setPartnerLabs(labData.labs);
-            }
-          });
-        }
-        const r = await fetch(`/api/sample-collections/${sample.id}/deliver`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            deliveryPersonName: driverName,
-            deliveryPersonPhone: driverPhone,
-            deliveryPersonId: vehicleNo,
-            sampleCount,
-            labName: hubLabName.trim(),
-            labAddress: hubLabAddress.trim(),
-            clinicName,
-          }),
-        });
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({}));
-          throw new Error(err.error || "Could not mark delivered.");
-        }
-        const data = await r.json();
-        if (data.state?.sampleCollections) setSampleCollections(data.state.sampleCollections);
-        if (data.lankaLabCard) await publishSampleDispatchToLankaLab(data.lankaLabCard);
+      const r = await fetch("/api/sample-collections/batch-deliver", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sampleIds: payload.sampleIds,
+          deliveryPersonName: payload.driverName,
+          deliveryPersonPhone: payload.driverPhone,
+          deliveryPersonId: payload.vehicleNo,
+          sampleCount: payload.sampleCount,
+          issuedPersonName: payload.issuedPersonName,
+          issuedDate: payload.issuedDate,
+          labName: payload.labName,
+          labAddress: payload.labAddress,
+          clinicName: activeHospital?.name || "GP Care Clinic",
+        }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.error || "Could not save delivery.");
       }
-      setHubDispatchForm(null);
+      const data = await r.json();
+      if (data.state?.sampleCollections) setSampleCollections(data.state.sampleCollections);
+      if (data.state?.notifications) setNotifications(data.state.notifications);
+      const cards = data.lankaLabCards || [];
+      for (const card of cards) {
+        await publishSampleDispatchToLankaLab(card);
+      }
+      const issuedDay = payload.issuedDate || formatDateKey(new Date());
+      const [cy, cm] = issuedDay.split("-").map(Number);
+      setSelectedDispatchHistoryDate(issuedDay);
+      if (cy && cm) setDispatchHistoryCalendarMonth({ year: cy, month: cm - 1 });
+      setFocusDispatchNumber(data.dispatchNumber || null);
+      setHubDeliverSampleIds([]);
+      window.setTimeout(() => {
+        document.getElementById("sample-dispatch-history")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 120);
     } catch (e: any) {
-      alert(e.message || "Error saving record.");
+      alert(e.message || "Error saving delivery.");
+      throw e;
     } finally {
       setHubDispatchBusy(false);
     }
@@ -3147,6 +3119,59 @@ export default function App() {
     }
     handleStartConsultation(patient);
   };
+
+  useEffect(() => {
+    if (loading || !authUser) return;
+    const openId = sessionStorage.getItem("gpCareOpenPatient");
+    const openName = (sessionStorage.getItem("gpCareOpenPatientName") || "").trim().toLowerCase();
+    if ((!openId && !openName) || lankaLabDeepLinkOpened.current) return;
+    const pat =
+      (openId && patients.find((p) => p.id === openId)) ||
+      (openName && patients.find((p) => p.name.trim().toLowerCase() === openName)) ||
+      null;
+    if (!pat) return;
+    lankaLabDeepLinkOpened.current = true;
+    sessionStorage.removeItem("gpCareOpenPatient");
+    sessionStorage.removeItem("gpCareOpenPatientName");
+    sessionStorage.removeItem("gpCareOpenCritical");
+    window.history.replaceState({}, "", window.location.pathname);
+    openPatientProfileFromSearch(pat);
+  }, [loading, authUser, patients]);
+
+  useEffect(() => {
+    if (!authUser) return;
+    let stopped = false;
+    const pullAlerts = async () => {
+      try {
+        const res = await fetch("/api/lankalab-critical-alerts");
+        if (!res.ok) return;
+        const rows = await res.json();
+        if (stopped || !Array.isArray(rows) || !rows.length) return;
+        const newest = rows[0];
+        if (!newest?.id || newest.id === lastLankaLabCriticalId.current) return;
+        lastLankaLabCriticalId.current = newest.id;
+        const stateRes = await fetch("/api/clinical-state");
+        const data = await stateRes.json();
+        if (Array.isArray(data.patients)) {
+          setPatients(data.patients.filter((p: Patient) => !isFakeSuwasiriClinicFile(p)));
+        }
+        if (Array.isArray(data.recalls) && data.recalls.length) setRecalls(data.recalls);
+        if (Array.isArray(data.notifications)) setNotifications(data.notifications);
+      } catch {
+        /* GP Care store poll is best-effort */
+      }
+    };
+    void pullAlerts();
+    const timer = window.setInterval(pullAlerts, 4000);
+    const unsubFs = subscribeClinicCriticalAlerts(() => {
+      void pullAlerts();
+    });
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      unsubFs();
+    };
+  }, [authUser]);
 
   const submitPatientAccessRequest = async () => {
     if (!accessActionPatient || !accessActionComment.trim()) {
@@ -3770,7 +3795,7 @@ export default function App() {
                 onClick={() => openPatientProfileFromSearch(p)}
                 className="w-full text-left p-4 space-y-2 hover:bg-sky-50/70 transition"
               >
-                <p className="font-serif font-bold text-sm text-[#00334f]">
+                <p className={`font-serif font-bold text-sm ${hasCriticalPathologyAlert(p) ? "text-red-700" : "text-[#00334f]"}`}>
                   {p.name}{" "}
                   <span className="font-mono text-[10px] text-slate-500 font-sans">[{p.id}]</span>
                 </p>
@@ -4012,7 +4037,7 @@ export default function App() {
           <button
             onClick={() => requestTab("sampleCollection")}
             className={`flex items-center w-full px-4 py-2.5 rounded-lg transition-all text-left ${
-              activeTab === "sampleCollection"
+              activeTab === "sampleCollection" || activeTab === "sampleDispatchHistory"
                 ? "text-[#00334f] bg-[#e7eeff] font-bold shadow-xs"
                 : "text-[#72787f] hover:text-[#00334f] hover:bg-[#f0f3ff]"
             }`}
@@ -5111,7 +5136,7 @@ export default function App() {
                           {pat.name.split(" ").map(n => n[0]).join("")}
                         </div>
                         <div>
-                          <h3 className="font-bold text-xs text-[#00334f]">{pat.name}</h3>
+                          <h3 className={`font-bold text-xs ${hasCriticalPathologyAlert(pat) ? "text-red-700" : "text-[#00334f]"}`}>{pat.name}</h3>
                           <PatientSexAgeBadge gender={pat.gender} age={pat.age} />
                           <PatientCriticalAlertBadge patient={pat} />
                           <p className="text-[10px] text-slate-400">ID: {pat.id}</p>
@@ -5266,7 +5291,7 @@ export default function App() {
                     <div className="bg-white p-6 border rounded space-y-4">
                       <div className="border-b pb-3">
                         <span className="bg-red-100 text-red-800 text-[9px] font-extrabold px-2 py-0.5 rounded tracking-wide uppercase">Active Clinical Consultation Room</span>
-                        <h2 className="font-serif font-bold text-lg text-[#00334f] mt-1">{selectedConsultPatient.name}</h2>
+                        <h2 className={`font-serif font-bold text-lg mt-1 ${hasCriticalPathologyAlert(selectedConsultPatient) ? "text-red-700" : "text-[#00334f]"}`}>{selectedConsultPatient.name}</h2>
                         <PatientSexAgeBadge gender={selectedConsultPatient.gender} age={selectedConsultPatient.age} />
                         <PatientCriticalAlertBadge patient={selectedConsultPatient} />
                         <p className="text-xs text-slate-500">Issue medicines for {selectedConsultPatient.name} and sync to Suwasiri.</p>
@@ -5797,7 +5822,7 @@ export default function App() {
             )}
 
             {/* TAB: LANKALAB SAMPLE DISPATCH GLOBAL BOARD */}
-            {activeTab === "sampleCollection" && (
+            {(activeTab === "sampleCollection" || activeTab === "sampleDispatchHistory") && (
               <div className="space-y-6">
                 <div className="p-6 bg-white border rounded shadow-sm space-y-4">
                   <div className="border-b pb-3 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -5831,13 +5856,13 @@ export default function App() {
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {sampleCollections
-                          .filter((s) => s.status !== "DELIVERED")
+                          .filter((s) => s.status === "PENDING")
                           .map((sample) => (
                             <tr
                               key={sample.id}
                               className={`hover:bg-slate-50 transition-colors ${
                                 highlightSampleId === sample.id ? "bg-amber-50 ring-2 ring-amber-300" : ""
-                              }`}
+                              } ${hubDeliverSampleIds.includes(sample.id) ? "bg-sky-50" : ""}`}
                             >
                               <td className="p-3 font-mono font-bold text-slate-400">{sample.id}</td>
                               <td className="p-3">
@@ -5871,7 +5896,7 @@ export default function App() {
                                 </span>
                               </td>
                               <td className="p-3">
-                                {sample.status === "PENDING" && <span className="text-amber-600 font-medium italic">Awaiting Nurse drawing...</span>}
+                                {sample.status === "PENDING" && <span className="text-amber-600 font-medium italic">Waiting to issue…</span>}
                                 {sample.status === "COLLECTED" && (
                                   <div className="space-y-0.5">
                                     <span className="text-emerald-700 font-bold">Collected ✓</span>
@@ -5912,24 +5937,24 @@ export default function App() {
                               </td>
                               <td className="p-3">
                                 <div className="flex gap-2 flex-wrap">
-                                  {sample.status === "PENDING" && (
-                                    <button
-                                      type="button"
-                                      onClick={() => openHubCollectForm(sample)}
-                                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-1 px-3 rounded text-[10px]"
-                                    >
-                                      Collected
-                                    </button>
-                                  )}
-                                  {sample.status === "COLLECTED" && (
-                                    <button
-                                      type="button"
-                                      onClick={() => openHubDeliverForm(sample)}
-                                      className="bg-sky-600 hover:bg-sky-700 text-white font-bold p-1 px-3 rounded text-[10px]"
-                                    >
-                                      Delivered
-                                    </button>
-                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setHubDeliverSampleIds((prev) =>
+                                        prev.includes(sample.id) ? prev.filter((id) => id !== sample.id) : [...prev, sample.id]
+                                      );
+                                      window.setTimeout(() => {
+                                        document.getElementById("sample-dispatch-delivery")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                      }, 50);
+                                    }}
+                                    className={`font-bold p-1 px-3 rounded text-[10px] ${
+                                      hubDeliverSampleIds.includes(sample.id)
+                                        ? "bg-sky-800 text-white"
+                                        : "bg-sky-600 hover:bg-sky-700 text-white"
+                                    }`}
+                                  >
+                                    Delivered
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={async () => {
@@ -5940,6 +5965,7 @@ export default function App() {
                                         const data = await r.json();
                                         if (data.state?.sampleCollections) setSampleCollections(data.state.sampleCollections);
                                         else fetchState();
+                                        setHubDeliverSampleIds((prev) => prev.filter((id) => id !== sample.id));
                                       } catch {
                                         alert("Could not delete this item.");
                                       }
@@ -5948,128 +5974,45 @@ export default function App() {
                                   >
                                     Delete
                                   </button>
-                                  {sample.status === "DELIVERED" && (
-                                    <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
-                                      ✓ Complete
-                                    </span>
-                                  )}
                                 </div>
                               </td>
                             </tr>
                           ))}
 
-                        {sampleCollections.filter((s) => s.status !== "DELIVERED").length === 0 && (
+                        {sampleCollections.filter((s) => s.status === "PENDING").length === 0 && (
                           <tr>
                             <td colSpan={7} className="text-center py-12 italic text-slate-400">
-                              No specimens waiting for dispatch. Delivered samples leave this list and stay on the patient file.
+                              No specimens waiting to issue. Click Delivered on a row to build the dispatch file below.
                             </td>
                           </tr>
                         )}
                       </tbody>
                     </table>
                   </div>
-
-                  {hubDispatchForm && (() => {
-                    const formSample = sampleCollections.find((s) => s.id === hubDispatchForm.sampleId);
-                    if (!formSample) return null;
-                    return (
-                      <div className="border border-sky-200 bg-sky-50/60 rounded-lg p-4 space-y-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <h4 className="text-xs font-bold uppercase text-[#00334f]">
-                              {hubDispatchForm.mode === "collect" ? "Enter collection details" : "Enter courier delivery details"}
-                            </h4>
-                            <p className="text-[11px] text-slate-500">
-                              {formSample.patientName} · {formSample.testName || formSample.sampleCategory} · {formSample.id}
-                            </p>
-                          </div>
-                          <button type="button" onClick={() => setHubDispatchForm(null)} className="text-xs font-bold text-slate-500 hover:text-slate-800">
-                            Cancel
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-                          <label className="space-y-1">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase">Collected driver name *</span>
-                            <input value={hubDriverName} onChange={(e) => setHubDriverName(e.target.value)} className="w-full border rounded px-2 py-1.5 bg-white" placeholder="e.g. Suresh Bandara" />
-                          </label>
-                          <label className="space-y-1">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase">Phone number *</span>
-                            <input value={hubDriverPhone} onChange={(e) => setHubDriverPhone(e.target.value)} className="w-full border rounded px-2 py-1.5 bg-white" placeholder="+94 77 444 8812" />
-                          </label>
-                          <label className="space-y-1">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase">How many vials *</span>
-                            <input type="number" min={1} value={hubVialCount} onChange={(e) => setHubVialCount(e.target.value)} className="w-full border rounded px-2 py-1.5 bg-white" />
-                          </label>
-                          <label className="space-y-1">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase">Vehicle number *</span>
-                            <input value={hubVehicleNo} onChange={(e) => setHubVehicleNo(e.target.value)} className="w-full border rounded px-2 py-1.5 bg-white" placeholder="WP LH-7210" />
-                          </label>
-                        </div>
-                        {hubDispatchForm.mode === "deliver" && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                            <label className="space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase">Lab name *</span>
-                              {!hubAddingLab ? (
-                                <select
-                                  value={hubLabName}
-                                  onChange={(e) => {
-                                    const next = e.target.value;
-                                    if (next === "__add__") {
-                                      setHubAddingLab(true);
-                                      setHubLabName("");
-                                      setHubLabAddress("");
-                                      return;
-                                    }
-                                    setHubLabName(next);
-                                    const found = partnerLabs.find((l) => l.name === next);
-                                    if (found) setHubLabAddress(found.address);
-                                  }}
-                                  className="w-full border rounded px-2 py-1.5 bg-white"
-                                >
-                                  {partnerLabs.map((lab) => (
-                                    <option key={lab.name} value={lab.name}>{lab.name}</option>
-                                  ))}
-                                  <option value="__add__">+ Add lab name and address</option>
-                                </select>
-                              ) : (
-                                <input value={hubLabName} onChange={(e) => setHubLabName(e.target.value)} className="w-full border rounded px-2 py-1.5 bg-white" placeholder="New lab name" />
-                              )}
-                            </label>
-                            <label className="space-y-1">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase">Lab address / location *</span>
-                              <input value={hubLabAddress} onChange={(e) => setHubLabAddress(e.target.value)} className="w-full border rounded px-2 py-1.5 bg-white" placeholder="Street, city" />
-                            </label>
-                            {hubAddingLab && (
-                              <button type="button" onClick={() => {
-                                setHubAddingLab(false);
-                                const first = partnerLabs[0] || DEFAULT_PARTNER_LABS[0];
-                                setHubLabName(first.name);
-                                setHubLabAddress(first.address);
-                              }} className="text-[10px] font-bold text-sky-800 underline self-end">
-                                Use existing lab list
-                              </button>
-                            )}
-                          </div>
-                        )}
-                        <div className="flex justify-end">
-                          <button
-                            type="button"
-                            disabled={hubDispatchBusy}
-                            onClick={() => void submitHubDispatchForm()}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-1.5 rounded"
-                          >
-                            {hubDispatchBusy
-                              ? "Saving…"
-                              : hubDispatchForm.mode === "collect"
-                                ? "Save collected & sync LankaLab"
-                                : "Handover & sync LankaLab"}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
                 </div>
+
+                <SampleDispatchDeliveryPanel
+                  selectedSamples={sampleCollections.filter((s) => s.status === "PENDING" && hubDeliverSampleIds.includes(s.id))}
+                  partnerLabs={partnerLabs}
+                  clinicName={activeHospital?.name || "GP Care Clinic"}
+                  defaultIssuedPerson={sessionUser?.name || currentRole || ""}
+                  busy={hubDispatchBusy}
+                  onRemove={(id) => setHubDeliverSampleIds((prev) => prev.filter((x) => x !== id))}
+                  onSave={submitHubBatchDeliver}
+                />
+
+                <SampleDispatchHistoryView
+                  samples={sampleCollections}
+                  selectedDate={selectedDispatchHistoryDate}
+                  todayKey={todayKey}
+                  calendarYear={dispatchHistoryCalendarMonth.year}
+                  calendarMonth={dispatchHistoryCalendarMonth.month}
+                  onSelectDate={setSelectedDispatchHistoryDate}
+                  onChangeMonth={(year, month) => setDispatchHistoryCalendarMonth({ year, month })}
+                  onJumpToToday={jumpToDispatchHistoryToday}
+                  clinicName={activeHospital?.name || "GP Care Clinic"}
+                  focusDispatchNumber={focusDispatchNumber}
+                />
               </div>
             )}
 

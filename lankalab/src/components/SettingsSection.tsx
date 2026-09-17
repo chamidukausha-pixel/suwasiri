@@ -15,11 +15,21 @@ import {
   FileText,
   Sliders,
   Check,
-  AlertTriangle
+  AlertTriangle,
+  Beaker,
+  Laptop
 } from 'lucide-react';
+import TestCatalog from './TestCatalog';
+import type { LabOrder } from '../types';
 
-export default function SettingsSection() {
-  const [activeTab, setActiveTab] = useState<'facility' | 'suwasiri' | 'printer' | 'billing' | 'alerts' | 'diagnostics'>('suwasiri');
+export default function SettingsSection({
+  orders,
+  initialTab,
+}: {
+  orders?: LabOrder[];
+  initialTab?: 'catalog' | 'facility' | 'suwasiri' | 'printer' | 'billing' | 'alerts' | 'diagnostics' | 'pms';
+}) {
+  const [activeTab, setActiveTab] = useState<'catalog' | 'facility' | 'suwasiri' | 'printer' | 'billing' | 'alerts' | 'diagnostics' | 'pms'>(initialTab || 'catalog');
   const [savedToast, setSavedToast] = useState(false);
 
   // Form States
@@ -81,7 +91,7 @@ export default function SettingsSection() {
             </h1>
           </div>
           <p className="text-xs text-[#41474e] mt-1">
-            Configure Colombo Central Patholab parameters, Suwasiri Digital Health Gateway, thermal barcode printers, and finance rules.
+            Test Parameter Catalog, connected practice software, Colombo Central Patholab, Suwasiri Digital Health Gateway, printers, and finance rules.
           </p>
         </div>
 
@@ -97,6 +107,18 @@ export default function SettingsSection() {
       {/* Navigation Tabs */}
       <div className="flex border-b border-[#c1c7cf] bg-white rounded-t-xl px-4 pt-2 gap-2 overflow-x-auto text-xs font-bold">
         <button
+          onClick={() => setActiveTab('catalog')}
+          className={`pb-3 px-3 border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap ${
+            activeTab === 'catalog'
+              ? 'border-teal-600 text-teal-800'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Beaker className="w-4 h-4 text-teal-600" />
+          <span>Test Parameter Catalog</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('suwasiri')}
           className={`pb-3 px-3 border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap ${
             activeTab === 'suwasiri'
@@ -106,6 +128,18 @@ export default function SettingsSection() {
         >
           <QrCode className="w-4 h-4 text-emerald-600" />
           <span>Suwasiri Gateway &amp; Barcode</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('pms')}
+          className={`pb-3 px-3 border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap ${
+            activeTab === 'pms'
+              ? 'border-purple-600 text-purple-800'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Laptop className="w-4 h-4 text-purple-600" />
+          <span>Connected Practice Software</span>
         </button>
 
         <button
@@ -169,7 +203,14 @@ export default function SettingsSection() {
         </button>
       </div>
 
+      {activeTab === 'catalog' && (
+        <div className="bg-white border border-[#c1c7cf] border-t-0 rounded-b-xl p-4 shadow-sm">
+          <TestCatalog orders={orders} catalogOnly />
+        </div>
+      )}
+
       {/* Main Settings Body */}
+      {activeTab !== 'catalog' && (
       <div className="bg-white border border-[#c1c7cf] border-t-0 rounded-b-xl p-6 shadow-sm">
         
         {/* TAB 1: Suwasiri Gateway */}
@@ -271,6 +312,40 @@ export default function SettingsSection() {
                   className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
                 />
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'pms' && (
+          <div className="space-y-6 max-w-4xl">
+            <div className="flex items-start justify-between border-b border-slate-200 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <span className="p-1 bg-purple-100 text-purple-800 rounded">
+                    <Laptop className="w-4 h-4" />
+                  </span>
+                  Connected Practice Software
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  MQLink EDI destinations for HL7 and PIT result posts into clinic desktop systems.
+                </p>
+              </div>
+              <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                MQLink v4.2 Active
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-600 leading-relaxed">
+              Diagnostic data automatically translates into HL7 and PIT formats for synchronized clinic electronic charts:
+            </p>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-[11px]">
+              {['Best Practice (BP)', 'MedicalDirector', 'EMIS Health', 'SystmOne', 'Genie Solutions', 'Medtech 32'].map((pms) => (
+                <div key={pms} className="bg-slate-50 border border-slate-200 p-2.5 rounded-lg flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="font-semibold text-slate-700 truncate">{pms}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -590,6 +665,7 @@ export default function SettingsSection() {
         )}
 
       </div>
+      )}
     </div>
   );
 }

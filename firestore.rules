@@ -40,7 +40,10 @@ service cloud.firestore {
     match /vault/{reportId} {
       // Any signed-in user (patient household + GP Care staff Unique Health ID sync).
       allow read: if isSignedIn();
-      allow create: if isSignedIn();
+      // LankaLab portal has no staff login yet — completed non-critical reports
+      // write source == 'lankalab' onto Suwasiri Vault → Lab reports.
+      allow create: if isSignedIn()
+        || request.resource.data.source == 'lankalab';
       allow update, delete: if isSignedIn()
         && (isHouseholdPatient(resource.data.patientId)
             || request.resource.data.patientId == resource.data.patientId);
@@ -145,6 +148,14 @@ service cloud.firestore {
     match /clinic_sample_dispatches/{dispatchId} {
       allow read: if true;
       allow create, update, delete: if isSignedIn();
+    }
+
+    // LankaLab Operations Overview Critical → GP Care patient profile (red alert).
+    // Create is open because the lab portal has no staff login yet; HTTP API is the source of truth.
+    match /clinic_critical_alerts/{alertId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if isSignedIn();
     }
 
     match /consultation_notes/{noteId} {

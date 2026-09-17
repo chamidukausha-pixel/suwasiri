@@ -1,0 +1,11 @@
+{
+  "name": "suwasiri",
+  "private": true,
+  "description": "Root scripts only. Flutter lives here; the web apps are in web/, lankalab/, and pharmacloud/.",
+  "scripts": {
+    "dev": "npm run dev --prefix web",
+    "dev:web": "npm run dev --prefix web",
+    "dev:lankalab": "npm run dev --prefix lankalab",
+    "dev:pharmacloud": "npm run dev --prefix pharmacloud"
+  }
+}

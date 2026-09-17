@@ -129,7 +129,7 @@ export const initialOrders: LabOrder[] = [
     phone: '+94 72 999 1111',
     email: 'dilani.rodrigo@health.lk',
     suwasiriBarcode: 'SUWA-65408',
-    connectedClinic: 'Ceylon Endocrine & Family Care',
+    connectedClinic: 'PrimeCare Medical Centre - Colombo Central',
     results: [
       { parameter: 'HbA1c', value: '6.4', unit: '%', referenceRange: '4.0 - 5.6', isAbnormal: true },
       { parameter: 'Fasting Plasma Glucose', value: '108', unit: 'mg/dL', referenceRange: '70 - 99', isAbnormal: true }

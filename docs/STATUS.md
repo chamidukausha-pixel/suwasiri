@@ -75,7 +75,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Pathology shows unread reports; Mark read lowers the unread patient count; Unreviewed tests lists tests under names
 - [x] Pathology order notifies receptionist Sample Dispatch Hub (sidebar + top-bar)
 - [x] Sample Dispatch Hub lists doctor-ordered specimens only (Quick-Log / Select Patient Profile, status Filters, in-page search, and Test / Investigation Profile chips removed); reception header has no Search Patients / Lab Orders / eRx box
-- [x] Sample Dispatch **Collected** / **Delivered** capture driver name, phone, vials, vehicle, lab name and address (reception can add a lab); bags sync to LankaLab Clinic Sample Collection Log
+- [x] Sample Dispatch Hub **Delivered** (before Delete) builds a dispatch file under the pending table: auto vial count, patient/investigation descriptions, print/PDF. Save delivery creates numbered `SD-…` history file and syncs LankaLab
 - [x] After courier dispatch details are saved, that specimen leaves Sample Dispatch Hub (record remains on the patient file)
 - [x] Sample-collection **Documents** has **Add document** (Scan / Drag and drop / Browse); files write onto that patient’s GP Exam Room Documents; reception does not get **Open clinical profile**
 - [x] Video consults: Telehealth **Call start** (beside Record) opens in-browser camera/mic to the Suwasiri App Call tab — no WhatsApp
@@ -162,6 +162,22 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Team Secure Chat is person-to-person (pick registered staff); Practice Manager weekly roster has one **Save Weekly Rosters** control (bottom Save & commit block removed)
 - [x] Reception Lobby / Patient Clinical Records: click the patient name for a **read-only** GP Exam Room file (left Clinical sections). Reception cannot edit or add. Check In / Call to Exam Room stay status-only.
 - [x] Platform Console **Suspend** deactivates a medical centre: hidden from Suwasiri Doctors search and from the GP Care top-bar clinic picker until **Reactivate**
+- [x] LankaLab Operations Overview: removed Critical Results KPI, Sample Dispatch Monitor, and Active Alerts Feed
+- [x] LankaLab Operations Overview **Critical** opens that patient in GP Care (red name + Red alert badge); PENDING TESTS (amber) and SAMPLES IN TRANSIT (teal) cards plus colour-coded pending/processing rows
+- [x] LankaLab Operations Overview is more colourful; **Active Lab Orders** shows completed tests only; pending / processing / critical stay on **Pending Results**
+- [x] LankaLab Active Lab Orders actions: download / print report; sync to the requesting GP Care clinic (e.g. PrimeCare); non-critical **App** sync to Suwasiri Vault → Lab reports; **Critical** opens that GP Care patient in red; email and SMS/phone share (critical uses email + text)
+- [x] LankaLab sidebar **Lab / Business / Manage** stay collapsed until the main item is clicked
+- [x] LankaLab Operations Overview **Completed** syncs the report to the requesting medical centre and opens SMS to the patient’s phone; Connected Practice Software moved to Settings; Supplementary Add-On Tests removed from Electronic Result Delivery
+- [x] LankaLab pathology portal sign-in (`chamidukausha@gmail.com` / `Admin@123`) before the existing lab workspace
+- [x] LankaLab **New bills** worklist (replaces Cases / Today’s reports) and **New bill** form (no left sidebar; Create adds the bill)
+- [x] LankaLab New bill screen matches the registration layout: patient mobile lookup, sex, referrer, department chips, investigations typeahead, payment footer
+- [x] LankaLab New bill **Create** opens the printable case bill (investigations, paid in words, Print / WhatsApp)
+- [x] LankaLab **Lab** sidebar (replaces Pending Results): Today's reports worklist plus packages, panels, categories, database, interpretations, test count
+- [x] LankaLab Daily Business: date / previous-day filter, amount column total, **View bill** printable overlay
+- [x] LankaLab **Manage** sidebar: employee logins (add / configure permissions), doctor access, employee directory, Diagnofy, browser security
+- [x] LankaLab Today's reports **Enter results**: CBC / KFT value entry, interpretations, Sign off / Final / Save only; Sign off marks **Completed** and opens Operations Overview → Active Lab Orders
+- [x] LankaLab Enter results: Differential Leukocyte Count (absolute) auto-calculates from TLC × % / 100 / 1000
+- [x] LankaLab Enter results **Final** opens the printable report extract; Interpretations are editable by the lab person
 
 ## In progress / next
 
@@ -176,7 +192,7 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [ ] Deploy updated `firestore.rules` (vault **read** for Unique Health ID lab sync + GP Care immunisations + allergy merge + `clinic_centers`) if not already: `firebase deploy --only firestore:rules`
 - [ ] Telehealth/Call: live WebRTC to GP Care is wired (STUN); a TURN server may be needed on some mobile networks
 - [ ] Web + mobile sync: appointments (including **payment status / bank slips** and **patientAge / patientGender**), Unique Health ID lookup, telehealth notes/chat, e-Rx, medical certificates, clinical calculator snapshots, GP Care–published `clinic_doctors`, **exam-room consult notes / immunisations / allergies / pathology / imaging / certificates**, and GP Care–issued e-Rx (Vault vs Call by session) are on Firestore; Vault → GP Care sync is **vaccine history only**. Remaining GP EMR charts still use the web JSON store. Tenancy/RBAC is in the web JSON store; tenancy collections are documented, not deployed.
-- [ ] LankaLab (`lankalab/`): mock orders + Gemini. **Clinic Sample Collection Log** also shows live GP Care Sample Dispatch bags (driver / phone / vials / vehicle). Remaining lab EMR is not on Firebase.
+- [ ] LankaLab (`lankalab/`): mock orders + Gemini. **Clinic Sample Collection Log** also shows live GP Care Sample Dispatch bags (driver / phone / vials / vehicle). **Critical** on Operations Overview flags the GP Care patient profile red. Remaining lab EMR is not on Firebase.
 - [ ] PharmaCloud (`pharmacloud/`): copied as-is (mock inventory / e-Rx / Gemini). Not on Firebase yet. Sync plan in [PHARMACLOUD.md](PHARMACLOUD.md).
 
 ## Known caveats

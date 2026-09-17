@@ -4,9 +4,17 @@ Sri Lankan digital health companion — **Flutter** (iOS & Android) plus three w
 
 ## Run
 
+The repo root is the **Flutter** app. There is no Node app here. `npm run dev` from this folder starts **GP Care** (`web/`).
+
 ```bash
 flutter pub get
 flutter run
+```
+
+```powershell
+npm run dev
+# or: npm run dev:lankalab    → http://localhost:3001
+#     npm run dev:pharmacloud → http://localhost:3002
 ```
 
 Backend is Firebase (`AppConstants.useDemoBackend = false`). Project: **suwasiri-91824**.

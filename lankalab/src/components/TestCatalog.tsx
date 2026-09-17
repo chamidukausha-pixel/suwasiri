@@ -41,9 +41,10 @@ import {
 interface TestCatalogProps {
   orders?: LabOrder[];
   initialSubTab?: 'catalog' | 'medway' | 'mqlink' | 'trials' | 'procurement' | 'digitalPath';
+  catalogOnly?: boolean;
 }
 
-export default function TestCatalog({ orders, initialSubTab = 'catalog' }: TestCatalogProps) {
+export default function TestCatalog({ orders, initialSubTab = 'catalog', catalogOnly = false }: TestCatalogProps) {
   const [catalogSubTab, setCatalogSubTab] = useState<'catalog' | 'medway' | 'mqlink' | 'trials' | 'procurement' | 'digitalPath'>(initialSubTab);
   
   // Test Catalog State
@@ -192,7 +193,8 @@ export default function TestCatalog({ orders, initialSubTab = 'catalog' }: TestC
   return (
     <div className="space-y-6">
       
-      {/* Header Banner */}
+      {/* Header Banner — hidden when embedded in Settings */}
+      {!catalogOnly && (
       <div className="bg-white border border-[#c1c7cf] rounded-xl p-6 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -229,8 +231,10 @@ export default function TestCatalog({ orders, initialSubTab = 'catalog' }: TestC
           </div>
         </div>
       </div>
+      )}
 
       {/* Main Section Navigation Sub-Tabs */}
+      {!catalogOnly && (
       <div className="flex flex-wrap gap-2 border-b border-[#c1c7cf] pb-2">
         <button
           onClick={() => setCatalogSubTab('catalog')}
@@ -304,6 +308,7 @@ export default function TestCatalog({ orders, initialSubTab = 'catalog' }: TestC
           <span>Digital Pathology &amp; Regional LIS Upgrades</span>
         </button>
       </div>
+      )}
 
       {/* ===================== TAB 1: TESTING PARAMETERS & SUB-DEPARTMENTS ===================== */}
       {catalogSubTab === 'catalog' && (

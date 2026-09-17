@@ -20,7 +20,7 @@ import {
 import { PATHOLOGY_INVESTIGATIONS } from "../catalogs/pathologyInvestigations";
 import ClinicalCalculatorsModal from "./ClinicalCalculatorsModal";
 import PatientSexAgeBadge from "./PatientSexAgeBadge";
-import PatientCriticalAlertBadge from "./PatientCriticalAlertBadge";
+import PatientCriticalAlertBadge, { hasCriticalPathologyAlert } from "./PatientCriticalAlertBadge";
 import { clinicExamSessionId, issuePrescriptionsToSuwasiri } from "../sync/suwasiriPrescriptions";
 import { saveConsultationNote } from "../sync/suwasiriConsultSync";
 import { issueLabReportToSuwasiri, issueImagingReportToSuwasiri } from "../sync/suwasiriLabs";
@@ -857,13 +857,13 @@ export default function DoctorClinicalRecordModal({
         )}
 
         {/* Modal Header */}
-        <div className="bg-[#00334f] text-white px-6 py-3.5 flex justify-between items-center shrink-0">
+        <div className={`${hasCriticalPathologyAlert(patient) ? "bg-red-800" : "bg-[#00334f]"} text-white px-6 py-3.5 flex justify-between items-center shrink-0`}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-white font-black text-sm">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-sm ${hasCriticalPathologyAlert(patient) ? "bg-red-600 ring-2 ring-white" : "bg-white/10"}`}>
               {patient.name.charAt(0)}
             </div>
             <div>
-              <h2 className="font-extrabold text-base">{patient.name}</h2>
+              <h2 className={`font-extrabold text-base ${hasCriticalPathologyAlert(patient) ? "text-red-200" : ""}`}>{patient.name}</h2>
               <PatientSexAgeBadge gender={patient.gender} age={patient.age} />
               <PatientCriticalAlertBadge patient={patient} />
               <div className="flex items-center gap-2 mt-1">

@@ -525,6 +525,7 @@ export function tabAllowed(tab: string, role: RoleDefinition | undefined, isPlat
     case "billing":
       return role.canViewBilling;
     case "sampleCollection":
+    case "sampleDispatchHistory":
       return role.canDispatchSampleCourier;
     case "chat":
       return role.canAccessDoctorDashboard || role.canManageUsers || role.canEditClinicalNotes;

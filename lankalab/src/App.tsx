@@ -3,25 +3,33 @@ import {
   initialOrders, 
   initialRoutes, 
   initialNotifications, 
-  testCatalogItems 
 } from './data/mockData';
 import { LabOrder, CourierRoute, UrgentNotification, TestStatus } from './types';
 import OrderForm from './components/OrderForm';
-import TestCatalog from './components/TestCatalog';
 import IntegrationHub from './components/IntegrationHub';
 import BillingDashboard from './components/BillingDashboard';
+import LabModule from './components/LabModule';
 import SuwasiriGateway from './components/SuwasiriGateway';
 import SettingsSection from './components/SettingsSection';
 import ResultDeliveryManager from './components/ResultDeliveryManager';
 import ClinicalTrialsPortal from './components/ClinicalTrialsPortal';
 import { subscribeGpCareClinicCollections, type ClinicCollectionLog } from './sync/gpCareCollections';
+import { flagCriticalToGpCare } from './sync/gpCareCritical';
+import { flagCompletedCritical } from './sync/gpCareResultSync';
+import { syncClinicAndTextPatient } from './sync/completeNotify';
+import LabOrderActions from './components/LabOrderActions';
+import { downloadLabReport, printLabReport } from './utils/labReportShare';
+import LoginView, { clearLankaLabSession, readLankaLabSession } from './components/LoginView';
+import PathologyDesk, { type DeskTab } from './components/pathology/PathologyDesk';
+import NewBillPage from './components/pathology/NewBillPage';
+import BusinessHub from './components/BusinessHub';
+import ManageHub from './components/ManageHub';
 import { 
   Activity, 
   Search, 
   Bell, 
   Settings, 
   Plus, 
-  BookOpen, 
   Truck, 
   Clock, 
   AlertTriangle, 
@@ -33,22 +41,24 @@ import {
   CheckCircle, 
   X, 
   ChevronRight, 
+  ChevronDown, 
   Sparkles, 
   MessageSquare, 
   Copy, 
   Check, 
-  MapPin, 
   Send, 
   HelpCircle, 
   RotateCcw,
   User,
   Info,
-  Smartphone
+  Smartphone,
+  ExternalLink
 } from 'lucide-react';
 
 export default function App() {
+  const [sessionEmail, setSessionEmail] = useState<string | null>(() => readLankaLabSession()?.email || null);
   // Sidebar Tabs state
-  const [activeTab, setActiveTab] = useState<'overview' | 'catalog' | 'results' | 'trials' | 'pending' | 'logistics' | 'notifications' | 'integration' | 'billing' | 'suwasiri' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<DeskTab>('overview');
 
   // Application Data States
   const [orders, setOrders] = useState<LabOrder[]>(initialOrders);
@@ -104,13 +114,17 @@ export default function App() {
   };
   
   // Selection and Interaction states
-  const [selectedOrder, setSelectedOrder] = useState<LabOrder | null>(initialOrders[1]); // Preselect Kamala Gunawardena for instant side-panel showcase
+  const [selectedOrder, setSelectedOrder] = useState<LabOrder | null>(
+    initialOrders.find((o) => o.status === 'COMPLETED') || null
+  );
   const [selectedRoute, setSelectedRoute] = useState<CourierRoute>(initialRoutes[0]);
   const [globalSearch, setGlobalSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | TestStatus>('ALL');
 
   // New Order Modal
   const [isNewOrderOpen, setIsNewOrderOpen] = useState(false);
+  const [businessOpen, setBusinessOpen] = useState(false);
+  const [labMenuOpen, setLabMenuOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
 
   // Gemini AI Consultation & Analysis State
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -159,10 +173,11 @@ export default function App() {
 
   // Recalculate metrics dynamically based on current state
   const metrics = useMemo(() => {
-    const pending = orders.filter(o => o.status === 'PENDING' || o.status === 'PROCESSING').length;
-    const critical = orders.filter(o => o.status === 'CRITICAL').length;
+    const queued = orders.filter(o => o.status !== 'COMPLETED');
+    const critical = queued.filter(o => o.status === 'CRITICAL').length;
+    const completed = orders.filter(o => o.status === 'COMPLETED').length;
     const transit = routes.reduce((sum, r) => sum + r.totalSamples, 0);
-    return { pending, critical, transit };
+    return { critical, queued: queued.length, completed, transit };
   }, [orders, routes]);
 
   // Handle adding new order
@@ -228,22 +243,124 @@ export default function App() {
       };
       setNotifications([newNotif, ...notifications]);
     }
+    if (newStatus === 'COMPLETED') {
+      const completed = orders.find(o => o.id === orderId);
+      if (completed) setSelectedOrder({ ...completed, status: 'COMPLETED' });
+    }
     setActiveMenuId(null);
   };
 
-  // Filter orders based on table search, global search and status filtering
+  const notifyCompletedOrder = async (order: LabOrder) => {
+    const { clinic } = await syncClinicAndTextPatient(order);
+    if (clinic.ok) {
+      patchOrder(order.id, { gpCareSyncedAt: new Date().toISOString() });
+    } else {
+      alert(
+        clinic.error ||
+          `Could not sync to ${order.connectedClinic || 'the requesting medical centre'}. Start GP Care on http://localhost:3000.`
+      );
+    }
+  };
+
+  const completeAssayAndNotify = async (orderId: string) => {
+    const current = orders.find((o) => o.id === orderId);
+    if (!current) return null;
+    const updated: LabOrder = {
+      ...current,
+      status: 'COMPLETED',
+      results:
+        current.results && current.results.length > 0
+          ? current.results
+          : [{ parameter: 'General Assay Benchmark', value: '94.2', unit: 'U/L', referenceRange: '60 - 110', isAbnormal: false }],
+    };
+    updateOrderStatus(orderId, 'COMPLETED');
+    await notifyCompletedOrder(updated);
+    return updated;
+  };
+
+  const patchOrder = (orderId: string, patch: Partial<LabOrder>) => {
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, ...patch } : o)));
+    setSelectedOrder((prev) => (prev && prev.id === orderId ? { ...prev, ...patch } : prev));
+  };
+
+  const persistEnteredResults = (
+    order: LabOrder,
+    results: NonNullable<LabOrder['results']>,
+    extra: { notes: string; remarks: string; advice: string; interpretation?: string },
+    mode: 'save' | 'final' | 'sign'
+  ) => {
+    const extraNote = [extra.notes, extra.remarks, extra.advice, extra.interpretation]
+      .map((s) => (s || "").trim())
+      .filter(Boolean)
+      .join('\n');
+    const notes = extraNote ? [order.notes, extraNote].filter(Boolean).join('\n') : order.notes;
+    const nextResults = results.length > 0 ? results : order.results;
+    if (mode === 'save') {
+      patchOrder(order.id, { results: nextResults, notes, status: 'PROCESSING' });
+      return;
+    }
+    const updated: LabOrder = {
+      ...order,
+      results: nextResults,
+      notes,
+      status: 'COMPLETED',
+      ...(mode === 'sign' ? { gpCareSyncedAt: new Date().toISOString() } : {}),
+    };
+    setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, ...updated } : o)));
+    setNotifications((prev) => [
+      {
+        id: String(Date.now()),
+        type: 'INFO',
+        title: mode === 'sign' ? 'REPORT SIGNED OFF' : 'TEST COMPLETED',
+        message: `Order for ${order.patientName} (${order.testType}) is now completed.`,
+        timeAgo: 'Just now',
+        timestamp: new Date(),
+      },
+      ...prev,
+    ]);
+    if (mode === 'sign') {
+      setSelectedOrder(updated);
+      setCurrentPage(1);
+      setActiveTab('overview');
+    }
+  };
+
+  const handleMarkCritical = async (order: LabOrder) => {
+    if (order.status === 'COMPLETED') {
+      patchOrder(order.id, { flaggedCritical: true, priority: 'Critical' });
+      const result = await flagCompletedCritical({ ...order, flaggedCritical: true, priority: 'Critical' });
+      if (!result.ok) {
+        alert(result.error || 'Could not reach Sri Lankan GP Care. Start it on http://localhost:3000.');
+      }
+      return;
+    }
+    updateOrderStatus(order.id, 'CRITICAL');
+    const result = await flagCriticalToGpCare(order);
+    if (!result.ok) {
+      alert(result.error || 'Could not reach Sri Lankan GP Care. Start it on http://localhost:3000.');
+    }
+  };
+
+  const matchesOrderQuery = (o: LabOrder, query: string) => {
+    if (!query) return true;
+    return o.patientName.toLowerCase().includes(query) ||
+      o.testType.toLowerCase().includes(query) ||
+      o.specimenId.toLowerCase().includes(query) ||
+      (o.wardOrDept || '').toLowerCase().includes(query) ||
+      (o.suwasiriBarcode || '').toLowerCase().includes(query);
+  };
+
+  // Overview Active Lab Orders: completed assays only
   const filteredOrders = useMemo(() => {
-    return orders.filter(o => {
-      const query = (globalSearch || orderTableSearch).toLowerCase();
-      const matchesSearch = o.patientName.toLowerCase().includes(query) ||
-                            o.testType.toLowerCase().includes(query) ||
-                            o.specimenId.toLowerCase().includes(query) ||
-                            (o.wardOrDept || '').toLowerCase().includes(query) ||
-                            (o.suwasiriBarcode || '').toLowerCase().includes(query);
-      const matchesStatus = statusFilter === 'ALL' || o.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
-  }, [orders, globalSearch, orderTableSearch, statusFilter]);
+    const query = (globalSearch || orderTableSearch).toLowerCase();
+    return orders.filter(o => o.status === 'COMPLETED' && matchesOrderQuery(o, query));
+  }, [orders, globalSearch, orderTableSearch]);
+
+  // Pending Results worklist: everything still in queue
+  const pendingQueue = useMemo(() => {
+    const query = globalSearch.toLowerCase();
+    return orders.filter(o => o.status !== 'COMPLETED' && matchesOrderQuery(o, query));
+  }, [orders, globalSearch]);
 
   // Paginated Orders
   const paginatedOrders = useMemo(() => {
@@ -376,27 +493,15 @@ The lab results indicate a significantly elevated level indicating pathology. Th
           </h3>
         );
       }
-      // Bullet points
       if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
         const content = line.trim().substring(2);
-        // bold check inside bullet point
-        const boldMatches = content.match(/\*\*(.*?)\*\*/g);
-        let renderedSpan = <span className="text-slate-700">{content}</span>;
-        if (boldMatches) {
-          const parts = content.split(/\*\*(.*?)\*\*/);
-          renderedSpan = (
-            <span className="text-slate-700">
-              {parts.map((p, pIdx) => pIdx % 2 === 1 ? <strong key={pIdx} className="text-slate-900 font-bold">{p}</strong> : p)}
-            </span>
-          );
-        }
+        const parts = content.split(/\*\*(.*?)\*\*/);
         return (
           <li key={idx} className="ml-4 list-disc text-xs text-slate-700 mb-1 leading-relaxed">
-            {renderedSpan}
+            {parts.map((p, pIdx) => pIdx % 2 === 1 ? <strong key={pIdx} className="text-slate-900 font-bold">{p}</strong> : p)}
           </li>
         );
       }
-      // Numbered lists
       if (/^\d+\.\s/.test(line.trim())) {
         const content = line.trim().replace(/^\d+\.\s/, '');
         return (
@@ -408,12 +513,9 @@ The lab results indicate a significantly elevated level indicating pathology. Th
           </div>
         );
       }
-      // Paragraph lines
       if (line.trim() === '') {
         return <div key={idx} className="h-2"></div>;
       }
-      
-      // Inline bold check
       if (line.includes('**')) {
         const parts = line.split(/\*\*(.*?)\*\*/);
         return (
@@ -422,7 +524,6 @@ The lab results indicate a significantly elevated level indicating pathology. Th
           </p>
         );
       }
-
       return (
         <p key={idx} className="text-xs text-slate-700 leading-relaxed mb-1">
           {line}
@@ -430,6 +531,46 @@ The lab results indicate a significantly elevated level indicating pathology. Th
       );
     });
   };
+
+  if (!sessionEmail) {
+    return <LoginView onSignedIn={(email) => setSessionEmail(email)} />;
+  }
+
+  if (activeTab === 'newbill') {
+    return (
+      <NewBillPage
+        orders={orders}
+        onCreate={(order) => {
+          handleAddOrder(order);
+        }}
+        onClose={() => setActiveTab('overview')}
+        onSettings={() => setActiveTab('settings')}
+        onEnterResults={() => setActiveTab('lab-today')}
+      />
+    );
+  }
+
+  if (activeTab === 'cases') {
+    return (
+      <PathologyDesk
+        orders={orders}
+        search={globalSearch}
+        onSearch={setGlobalSearch}
+        tab={activeTab}
+        onTab={setActiveTab}
+        onAddOrder={(order) => {
+          handleAddOrder(order);
+          setActiveTab('cases');
+        }}
+        onSignOut={() => {
+          clearLankaLabSession();
+          setSessionEmail(null);
+        }}
+        sessionEmail={sessionEmail}
+        pages={{}}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f9f9ff] text-[#111c2d] font-sans antialiased flex flex-col">
@@ -483,15 +624,25 @@ The lab results indicate a significantly elevated level indicating pathology. Th
           </button>
           
           <button 
-            onClick={() => setActiveTab('catalog')}
-            className={`p-2 rounded-full hover:bg-slate-200 transition-colors relative ${activeTab === 'catalog' ? 'bg-[#dee8ff]' : ''}`}
-            title="Integrated Test Catalog"
+            onClick={() => setActiveTab('settings')}
+            className={`p-2 rounded-full hover:bg-slate-200 transition-colors relative ${activeTab === 'settings' ? 'bg-[#dee8ff]' : ''}`}
+            title="Settings"
           >
-            <BookOpen className="w-5 h-5 text-[#41474e]" />
+            <Settings className="w-5 h-5 text-[#41474e]" />
           </button>
 
           <div className="flex items-center gap-2 ml-2 cursor-pointer border-l border-slate-300 pl-3">
-            <span className="hidden xl:inline text-xs font-bold text-slate-800">Colombo Clinic</span>
+            <span className="hidden xl:inline text-xs font-bold text-slate-800" title={sessionEmail}>Colombo Patholab</span>
+            <button
+              type="button"
+              onClick={() => {
+                clearLankaLabSession();
+                setSessionEmail(null);
+              }}
+              className="hidden md:inline text-[11px] font-semibold text-slate-500 hover:text-slate-800"
+            >
+              Sign out
+            </button>
             <img 
               src="https://lh3.googleusercontent.com/aida-public/AB6AXuAagFZasBjBNaLXItGQGgsZmbbcO1iqF-mFNfEWpid65IIwJTBQud9ZUg13neKs-y1CS7O6urGUzKNUxs-Q6ox2FjgbwG23u7wh-2Ir-77-cDoHZH9tuz_qNdD5fi1KZq3zukShz86-wOAKNuPdA1uP_-aUpystOKOsR1UrZ93lXtWacI2AR8SbXwicTVDKQUhYLuASsTAph2tM3FfD68wJlmoj3hzcRTzkqeWY2CqCY61f1zE-oCh_IRkgmuVCtfQGVSzWzOwhTrw" 
               alt="Clinician headshot" 
@@ -500,10 +651,10 @@ The lab results indicate a significantly elevated level indicating pathology. Th
           </div>
 
           <button 
-            onClick={() => setIsNewOrderOpen(true)}
-            className="hidden md:flex bg-primary text-on-primary px-4 py-2 rounded-lg font-bold hover:bg-[#0c4a6e] transition-colors items-center gap-1 text-xs"
+            onClick={() => setActiveTab('newbill')}
+            className="hidden md:flex bg-[#0a2547] text-white px-4 py-2 rounded-lg font-black tracking-wide hover:bg-[#123a6b] transition-colors items-center gap-1 text-xs shadow-md shadow-blue-950/30 ring-2 ring-[#1e4a7a]/60"
           >
-            <Plus className="w-4 h-4" /> New Order
+            <Plus className="w-4 h-4" /> NEW BILL
           </button>
         </div>
       </header>
@@ -525,6 +676,14 @@ The lab results indicate a significantly elevated level indicating pathology. Th
 
           <nav className="flex-1 space-y-1 overflow-y-auto pr-0.5">
             <button 
+              onClick={() => setActiveTab('newbill')}
+              className="w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-black text-xs tracking-wide text-white bg-[#0a2547] shadow-md shadow-blue-950/30 ring-2 ring-[#1e4a7a]/70 mb-2 hover:bg-[#123a6b]"
+            >
+              <span className="material-symbols-outlined text-base text-[#0a2547] bg-blue-100 p-1 rounded-md shrink-0">receipt_long</span>
+              <span>NEW BILLS</span>
+            </button>
+
+            <button 
               onClick={() => setActiveTab('overview')}
               className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
                 activeTab === 'overview' 
@@ -539,18 +698,6 @@ The lab results indicate a significantly elevated level indicating pathology. Th
               <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono font-bold">
                 {orders.length}
               </span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('catalog')}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
-                activeTab === 'catalog' 
-                  ? 'bg-teal-50/80 text-teal-950 shadow-sm border-l-4 border-teal-600' 
-                  : 'text-[#41474e] hover:bg-slate-100'
-              }`}
-            >
-              <span className="material-symbols-outlined text-base text-teal-600 bg-teal-100 p-1 rounded-md shrink-0">science</span>
-              <span>Test Parameter Catalog</span>
             </button>
 
             <button 
@@ -587,22 +734,51 @@ The lab results indicate a significantly elevated level indicating pathology. Th
               </span>
             </button>
 
-            <button 
-              onClick={() => setActiveTab('pending')}
+            <button
+              type="button"
+              onClick={() => {
+                setLabMenuOpen((v) => !v);
+                setBusinessOpen(false);
+                setManageOpen(false);
+              }}
               className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
-                activeTab === 'pending' 
-                  ? 'bg-amber-50/80 text-amber-950 shadow-sm border-l-4 border-amber-600' 
+                String(activeTab).startsWith('lab-') || activeTab === 'pending'
+                  ? 'bg-amber-50/80 text-amber-950 shadow-sm border-l-4 border-amber-600'
                   : 'text-[#41474e] hover:bg-slate-100'
               }`}
             >
               <div className="flex items-center gap-2.5">
                 <span className="material-symbols-outlined text-base text-amber-600 bg-amber-100 p-1 rounded-md shrink-0">biotech</span>
-                <span>Pending Results</span>
+                <span>Lab</span>
               </div>
-              <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-mono font-bold">
-                {orders.filter(o => o.status === 'PENDING' || o.status === 'PROCESSING' || o.status === 'CRITICAL').length}
-              </span>
+              <ChevronDown className={`w-3.5 h-3.5 ${labMenuOpen ? 'rotate-180' : ''}`} />
             </button>
+            {labMenuOpen && (
+              <div className="pl-9 pr-1 space-y-0.5 pb-2">
+                {(
+                  [
+                    ['lab-today', "Today's reports"],
+                    ['lab-packages', 'Test packages'],
+                    ['lab-panels', 'Test panels'],
+                    ['lab-categories', 'Test categories'],
+                    ['lab-database', 'Test database'],
+                    ['lab-interpretations', 'Interpretations'],
+                    ['lab-count', 'Test count'],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setActiveTab(id)}
+                    className={`w-full text-left px-2 py-1.5 rounded-md text-[11px] font-bold ${
+                      activeTab === id ? 'bg-amber-100 text-amber-950' : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <button 
               onClick={() => setActiveTab('logistics')}
@@ -632,6 +808,52 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                 Auto
               </span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setBusinessOpen((v) => !v);
+                setLabMenuOpen(false);
+                setManageOpen(false);
+              }}
+              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
+                String(activeTab).startsWith('biz-')
+                  ? 'bg-emerald-50/80 text-emerald-950 shadow-sm border-l-4 border-emerald-600'
+                  : 'text-[#41474e] hover:bg-slate-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-base text-emerald-700 bg-emerald-100 p-1 rounded-md shrink-0">work</span>
+                <span>Business</span>
+              </div>
+              <ChevronDown className={`w-3.5 h-3.5 ${businessOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {businessOpen && (
+              <div className="pl-9 pr-1 space-y-0.5 pb-2">
+                {(
+                  [
+                    ['biz-daily', 'Daily Business'],
+                    ['biz-expenses', 'Expenses'],
+                    ['biz-dues', 'Due Report'],
+                    ['biz-activities', 'Activities'],
+                    ['biz-referrals', 'Referral Business'],
+                    ['biz-analysis', 'Business Analysis'],
+                    ['biz-export', 'Data Export'],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setActiveTab(id)}
+                    className={`w-full text-left px-2 py-1.5 rounded-md text-[11px] font-bold ${
+                      activeTab === id ? 'bg-emerald-100 text-emerald-950' : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <button 
               onClick={() => setActiveTab('billing')}
@@ -684,6 +906,50 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                 MOH
               </span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setManageOpen((v) => !v);
+                setBusinessOpen(false);
+                setLabMenuOpen(false);
+              }}
+              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
+                String(activeTab).startsWith('manage-')
+                  ? 'bg-indigo-50/80 text-indigo-950 shadow-sm border-l-4 border-indigo-600'
+                  : 'text-[#41474e] hover:bg-slate-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-base text-indigo-600 bg-indigo-100 p-1 rounded-md shrink-0">manage_accounts</span>
+                <span>Manage</span>
+              </div>
+              <ChevronDown className={`w-3.5 h-3.5 ${manageOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {manageOpen && (
+              <div className="pl-9 pr-1 space-y-0.5 pb-2">
+                {(
+                  [
+                    ['manage-logins', 'Employee login'],
+                    ['manage-doctors', 'Doctor access'],
+                    ['manage-employees', 'Employee'],
+                    ['manage-diagnofy', 'Diagnofy'],
+                    ['manage-browser', 'Browser security'],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setActiveTab(id)}
+                    className={`w-full text-left px-2 py-1.5 rounded-md text-[11px] font-bold ${
+                      activeTab === id ? 'bg-indigo-100 text-indigo-950' : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Settings section */}
             <button 
@@ -747,69 +1013,62 @@ The lab results indicate a significantly elevated level indicating pathology. Th
               {/* Header block */}
               <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                 <div>
-                  <h1 className="font-serif text-3xl font-bold text-primary tracking-tight">Lab Operations Dashboard</h1>
-                  <p className="text-on-surface-variant text-xs mt-1">Real-time diagnostics tracking for Colombo General Practice</p>
+                  <h1 className="font-serif text-3xl font-bold bg-gradient-to-r from-sky-700 via-indigo-700 to-violet-700 bg-clip-text text-transparent tracking-tight">Lab Operations Dashboard</h1>
+                  <p className="text-indigo-700/80 text-xs mt-1 font-medium">Completed assays on this board · pending work lives in Lab → Today&apos;s reports</p>
                 </div>
-                <div className="flex items-center gap-3 bg-surface-container-highest px-3 py-1.5 rounded-full text-xs font-semibold text-slate-800 border border-slate-300">
-                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse inline-block"></span>
+                <div className="flex items-center gap-3 bg-gradient-to-r from-emerald-100 to-teal-100 px-3 py-1.5 rounded-full text-xs font-semibold text-emerald-900 border border-emerald-300">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
                   <span>Live System Status: Optimal</span>
                 </div>
               </div>
 
               {/* Metrics Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 
-                {/* Metric 1 */}
                 <div 
-                  onClick={() => setStatusFilter('ALL')}
-                  className="cursor-pointer bg-white border border-[#c1c7cf] p-4 rounded-xl shadow-sm hover:ring-2 hover:ring-primary/40 transition-all relative overflow-hidden group"
+                  onClick={() => setActiveTab('lab-today')}
+                  className="cursor-pointer bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-100 border-2 border-amber-400 p-4 rounded-xl shadow-md hover:ring-2 hover:ring-amber-500/50 hover:shadow-lg transition-all relative overflow-hidden group"
                 >
-                  <div className="absolute right-0 top-0 p-3 opacity-15 group-hover:opacity-25 transition-opacity text-primary">
+                  <div className="absolute right-0 top-0 p-3 opacity-20 group-hover:opacity-35 transition-opacity text-amber-600">
                     <Clock className="w-16 h-16" />
                   </div>
-                  <h3 className="text-[11px] font-bold text-[#41474e] uppercase tracking-wider mb-1">PENDING TESTS</h3>
+                  <h3 className="text-[11px] font-black text-amber-800 uppercase tracking-wider mb-1">PENDING TESTS</h3>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3.5xl font-bold font-sans text-primary">{metrics.pending}</span>
-                    <span className="text-xs text-green-600 font-bold">↑ 12% vs yesterday</span>
+                    <span className="text-3.5xl font-bold font-sans text-amber-600">{metrics.queued}</span>
+                    {metrics.critical > 0 && (
+                      <span className="text-[10px] font-black text-red-700 bg-red-100 px-1.5 py-0.5 rounded">{metrics.critical} critical</span>
+                    )}
                   </div>
-                  <p className="text-[11px] text-[#41474e] mt-2 font-medium">Avg. turnaround: 4.2 hours</p>
+                  <p className="text-[11px] text-amber-900/80 mt-2 font-medium">Open Lab → Today&apos;s reports to process the queue</p>
                 </div>
 
-                {/* Metric 2 */}
-                <div 
-                  onClick={() => setStatusFilter('CRITICAL')}
-                  className="cursor-pointer bg-white border-2 border-red-600 p-4 rounded-xl shadow-sm hover:ring-2 hover:ring-red-300 transition-all relative overflow-hidden group"
-                >
-                  <div className="absolute right-0 top-0 p-3 opacity-15 group-hover:opacity-25 transition-opacity text-red-600">
-                    <AlertTriangle className="w-16 h-16" />
-                  </div>
-                  <h3 className="text-[11px] font-bold text-red-600 uppercase tracking-wider mb-1">CRITICAL RESULTS</h3>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3.5xl font-bold font-sans text-red-600">
-                      {String(metrics.critical).padStart(2, '0')}
-                    </span>
-                    <div className="flex gap-1 items-center">
-                      <span className="h-2 w-2 rounded-full bg-red-600 animate-ping"></span>
-                      <span className="text-[10px] text-red-600 font-bold uppercase tracking-wide">Action needed</span>
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-red-600 font-bold mt-2">Immediate physician notification required</p>
-                </div>
-
-                {/* Metric 3 */}
                 <div 
                   onClick={() => setActiveTab('logistics')}
-                  className="cursor-pointer bg-white border border-[#c1c7cf] p-4 rounded-xl shadow-sm hover:ring-2 hover:ring-secondary/40 transition-all relative overflow-hidden group"
+                  className="cursor-pointer bg-gradient-to-br from-teal-50 via-cyan-50 to-sky-100 border-2 border-teal-400 p-4 rounded-xl shadow-md hover:ring-2 hover:ring-teal-500/50 hover:shadow-lg transition-all relative overflow-hidden group"
                 >
-                  <div className="absolute right-0 top-0 p-3 opacity-15 group-hover:opacity-25 transition-opacity text-secondary">
+                  <div className="absolute right-0 top-0 p-3 opacity-20 group-hover:opacity-35 transition-opacity text-teal-600">
                     <Truck className="w-16 h-16" />
                   </div>
-                  <h3 className="text-[11px] font-bold text-[#41474e] uppercase tracking-wider mb-1">SAMPLES IN TRANSIT</h3>
+                  <h3 className="text-[11px] font-black text-teal-800 uppercase tracking-wider mb-1">SAMPLES IN TRANSIT</h3>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3.5xl font-bold font-sans text-primary">{metrics.transit}</span>
-                    <span className="text-xs text-secondary font-semibold">Across 3 courier routes</span>
+                    <span className="text-3.5xl font-bold font-sans text-teal-600">{metrics.transit}</span>
+                    <span className="text-xs text-sky-700 font-semibold">3 courier routes</span>
                   </div>
-                  <p className="text-[11px] text-[#41474e] mt-2 font-medium">Last courier dispatch: 14 mins ago</p>
+                  <p className="text-[11px] text-teal-900/80 mt-2 font-medium">Last courier dispatch: 14 mins ago</p>
+                </div>
+
+                <div 
+                  className="bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100 border-2 border-emerald-400 p-4 rounded-xl shadow-md relative overflow-hidden"
+                >
+                  <div className="absolute right-0 top-0 p-3 opacity-20 text-emerald-600">
+                    <CheckCircle className="w-16 h-16" />
+                  </div>
+                  <h3 className="text-[11px] font-black text-emerald-800 uppercase tracking-wider mb-1">COMPLETED TESTS</h3>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3.5xl font-bold font-sans text-emerald-600">{metrics.completed}</span>
+                    <span className="text-xs text-teal-700 font-semibold">on this board</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-900/80 mt-2 font-medium">Validated assays only — listed below</p>
                 </div>
 
               </div>
@@ -820,48 +1079,22 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                 {/* Left Side: Active Orders List & Table (Takes up 7 or 12 depending on sidebar active) */}
                 <div className="xl:col-span-7 space-y-6">
                   
-                  <div className="bg-white border border-[#c1c7cf] rounded-xl overflow-hidden shadow-sm">
+                  <div className="bg-white border-2 border-emerald-200 rounded-xl overflow-hidden shadow-md">
                     {/* Header bar controls */}
-                    <div className="px-5 py-4 border-b border-[#c1c7cf] flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-[#f0f3ff]">
+                    <div className="px-5 py-4 border-b border-emerald-200 flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-gradient-to-r from-emerald-100 via-teal-50 to-sky-100">
                       <div>
-                        <h2 className="text-base font-bold text-primary font-headline-md">Active Lab Orders</h2>
-                        <p className="text-[11px] text-[#41474e]">Select any patient row to trigger instant pathology summary interpretations</p>
+                        <h2 className="text-base font-bold text-emerald-900 font-headline-md">Active Lab Orders</h2>
+                        <p className="text-[11px] text-emerald-800">Completed tests only. Pending assays are on Lab → Today&apos;s reports.</p>
                       </div>
                       
                       <div className="flex items-center gap-2 self-end sm:self-auto">
-                        {/* Selector/Filter */}
-                        <div className="flex border border-slate-300 rounded divide-x divide-slate-300 overflow-hidden bg-white text-[11px]">
-                          <button 
-                            onClick={() => { setStatusFilter('ALL'); setCurrentPage(1); }}
-                            className={`px-2.5 py-1 font-bold uppercase transition-all ${statusFilter === 'ALL' ? 'bg-primary text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                          >
-                            All
-                          </button>
-                          <button 
-                            onClick={() => { setStatusFilter('PENDING'); setCurrentPage(1); }}
-                            className={`px-2.5 py-1 font-bold uppercase transition-all ${statusFilter === 'PENDING' ? 'bg-primary text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                          >
-                            Pending
-                          </button>
-                          <button 
-                            onClick={() => { setStatusFilter('PROCESSING'); setCurrentPage(1); }}
-                            className={`px-2.5 py-1 font-bold uppercase transition-all ${statusFilter === 'PROCESSING' ? 'bg-primary text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                          >
-                            Work
-                          </button>
-                          <button 
-                            onClick={() => { setStatusFilter('CRITICAL'); setCurrentPage(1); }}
-                            className={`px-2.5 py-1 font-bold uppercase transition-all ${statusFilter === 'CRITICAL' ? 'bg-red-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                          >
-                            Alert
-                          </button>
-                          <button 
-                            onClick={() => { setStatusFilter('COMPLETED'); setCurrentPage(1); }}
-                            className={`px-2.5 py-1 font-bold uppercase transition-all ${statusFilter === 'COMPLETED' ? 'bg-emerald-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                          >
-                            Done
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('lab-today')}
+                          className="px-2.5 py-1 rounded-md text-[11px] font-black uppercase bg-amber-400 text-amber-950 hover:bg-amber-300"
+                        >
+                          {metrics.queued} pending
+                        </button>
 
                         {/* Order-specific search field */}
                         <div className="relative">
@@ -882,7 +1115,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                     {/* Table Container */}
                     <div className="overflow-x-auto">
                       <table className="w-full text-left font-sans text-xs">
-                        <thead className="bg-primary text-on-primary font-bold">
+                        <thead className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold">
                           <tr>
                             <th className="px-4 py-3 text-left">Patient Name</th>
                             <th className="px-3 py-3 text-left">Test Type</th>
@@ -895,8 +1128,10 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                         <tbody className="divide-y divide-[#c1c7cf]">
                           {paginatedOrders.map((order) => {
                             const isSelected = selectedOrder?.id === order.id;
-                            const isCriticalStatus = order.status === 'CRITICAL';
+                            const isCriticalStatus = order.status === 'CRITICAL' || Boolean(order.flaggedCritical);
                             const isCompletedStatus = order.status === 'COMPLETED';
+                            const isPendingStatus = order.status === 'PENDING';
+                            const isProcessingStatus = order.status === 'PROCESSING';
                             
                             // Initialize initials bg
                             const avatarChar = order.patientName ? order.patientName.split(' ').map(n=>n[0]).join('').substring(0,2) : 'PT';
@@ -904,21 +1139,33 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                             return (
                               <tr 
                                 key={order.id}
-                                className={`transition-all cursor-pointer group hover:bg-[#e7eeff] ${
-                                  isSelected ? 'bg-[#dee8ff] font-semibold border-l-4 border-primary' : ''
-                                } ${isCriticalStatus ? 'bg-red-50/70 hover:bg-red-100/90' : ''}`}
+                                className={`transition-all cursor-pointer group border-l-4 ${
+                                  isCriticalStatus
+                                    ? 'bg-red-50 hover:bg-red-100/90 border-red-600'
+                                    : isPendingStatus
+                                      ? 'bg-amber-50 hover:bg-amber-100/80 border-amber-400'
+                                      : isProcessingStatus
+                                        ? 'bg-orange-50 hover:bg-orange-100/80 border-orange-400'
+                                        : isCompletedStatus
+                                          ? 'bg-emerald-50/70 hover:bg-emerald-100/80 border-emerald-400'
+                                          : 'hover:bg-[#e7eeff] border-transparent'
+                                } ${isSelected ? 'font-semibold ring-1 ring-inset ring-primary/30' : ''}`}
                                 onClick={() => setSelectedOrder(order)}
                               >
                                 <td className="px-4 py-3.5">
                                   <div className="flex items-center gap-2.5">
                                     <div className={`w-7.5 h-7.5 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
-                                      isCriticalStatus ? 'bg-red-600 text-white' : 'bg-sky-100 text-primary-container'
+                                      isCriticalStatus ? 'bg-red-600 text-white' :
+                                      isPendingStatus ? 'bg-amber-400 text-amber-950' :
+                                      isProcessingStatus ? 'bg-orange-500 text-white' :
+                                      isCompletedStatus ? 'bg-emerald-500 text-white' :
+                                      'bg-sky-100 text-primary-container'
                                     }`}>
                                       {avatarChar}
                                     </div>
                                     <div>
                                       <div className="flex items-center flex-wrap gap-1.5">
-                                        <p className={`text-xs ${isCriticalStatus ? 'text-red-700 font-bold' : 'text-primary font-semibold'}`}>
+                                        <p className={`text-xs ${isCriticalStatus ? 'text-red-700 font-bold' : isPendingStatus ? 'text-amber-900 font-bold' : 'text-primary font-semibold'}`}>
                                           {order.patientName}
                                         </p>
                                         {order.suwasiriBarcode && (
@@ -943,7 +1190,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                                   {order.testType}
                                 </td>
 
-                                <td className={`px-3 py-3.5 text-xs ${isCriticalStatus ? 'text-red-600 font-bold' : 'text-slate-600'}`}>
+                                <td className={`px-3 py-3.5 text-xs ${isCriticalStatus ? 'text-red-600 font-bold' : isPendingStatus ? 'text-amber-800 font-semibold' : 'text-slate-600'}`}>
                                   {order.orderTime}
                                 </td>
 
@@ -953,7 +1200,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
 
                                 <td className="px-3 py-3.5">
                                   {order.status === 'PROCESSING' && (
-                                    <span className="px-2 py-0.5 rounded-full border border-orange-300 bg-orange-50 text-orange-700 text-[9px] font-bold uppercase tracking-wider">
+                                    <span className="px-2 py-0.5 rounded-full border border-orange-400 bg-orange-500 text-white text-[9px] font-bold uppercase tracking-wider">
                                       Processing
                                     </span>
                                   )}
@@ -963,13 +1210,17 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                                     </span>
                                   )}
                                   {order.status === 'PENDING' && (
-                                    <span className="px-2 py-0.5 rounded-full border border-primary bg-[#f0f3ff] text-primary text-[9px] font-bold uppercase tracking-wider">
+                                    <span className="px-2 py-0.5 rounded-full border border-amber-500 bg-amber-400 text-amber-950 text-[9px] font-black uppercase tracking-wider">
                                       Pending
                                     </span>
                                   )}
                                   {order.status === 'COMPLETED' && (
-                                    <span className="px-2 py-0.5 rounded-full border border-green-300 bg-green-50 text-green-700 text-[9px] font-bold uppercase tracking-wider">
-                                      Completed
+                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                                      order.flaggedCritical
+                                        ? 'border border-red-500 bg-red-600 text-white animate-pulse'
+                                        : 'border border-emerald-400 bg-emerald-500 text-white'
+                                    }`}>
+                                      {order.flaggedCritical ? 'Critical' : 'Completed'}
                                     </span>
                                   )}
                                 </td>
@@ -977,35 +1228,24 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                                 <td className="px-4 py-3.5 text-right relative" onClick={(e) => e.stopPropagation()}>
                                   <div className="flex items-center justify-end gap-1.5">
                                     {isCompletedStatus ? (
-                                      <>
-                                        <button 
-                                          title="Download Pathology PDF" 
-                                          onClick={() => alert(`Generating LankaLab Laboratory Assay Sheet for ${order.patientName}...`)}
-                                          className="p-1 hover:bg-slate-200 rounded text-slate-600 hover:text-primary transition-colors"
-                                        >
-                                          <Download className="w-4 h-4" />
-                                        </button>
-                                        <button 
-                                          title="Share results with patient"
-                                          onClick={() => alert(`Shared secure patient link to: ${order.patientName}`)}
-                                          className="p-1 hover:bg-slate-200 rounded text-slate-600 hover:text-primary transition-all"
-                                        >
-                                          <Share2 className="w-4 h-4" />
-                                        </button>
-                                      </>
-                                    ) : isCriticalStatus ? (
-                                      <div className="flex gap-1">
-                                        <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded text-[9px] font-bold inline-flex items-center gap-0.5 animate-pulse">
-                                          ⚠️ CALL MD
-                                        </span>
-                                      </div>
-                                    ) : (
-                                      <button 
-                                        title="View analysis parameters"
-                                        onClick={() => setSelectedOrder(order)}
-                                        className="p-1 hover:bg-slate-200 rounded text-slate-500 hover:text-primary transition-colors"
+                                      <LabOrderActions order={order} onPatch={patchOrder} />
+                                    ) : isCriticalStatus && order.status === 'CRITICAL' ? (
+                                      <button
+                                        type="button"
+                                        title="Re-open critical profile in GP Care"
+                                        onClick={() => void handleMarkCritical(order)}
+                                        className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[9px] font-black uppercase tracking-wide inline-flex items-center gap-1 animate-pulse"
                                       >
-                                        <Eye className="w-4 h-4" />
+                                        <ExternalLink className="w-3 h-3" /> GP Care
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        title="Flag critical and open GP Care patient profile"
+                                        onClick={() => void handleMarkCritical(order)}
+                                        className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[9px] font-black uppercase tracking-wide inline-flex items-center gap-1"
+                                      >
+                                        <AlertTriangle className="w-3 h-3" /> Critical
                                       </button>
                                     )}
 
@@ -1020,13 +1260,13 @@ The lab results indicate a significantly elevated level indicating pathology. Th
 
                                   {/* Simulated Micro-Action dropdown */}
                                   {activeMenuId === order.id && (
-                                    <div className="absolute right-4 mt-1 bg-white border border-slate-300 rounded-lg shadow-xl py-1 z-50 text-left w-36 overflow-hidden">
+                                    <div className="absolute right-4 mt-1 bg-white border border-slate-300 rounded-lg shadow-xl py-1 z-50 text-left w-44 overflow-hidden">
                                       <p className="text-[9px] text-[#41474e] px-2.5 py-1 border-b uppercase font-bold tracking-wider bg-slate-50">Simulate Status</p>
                                       <button 
                                         onClick={() => updateOrderStatus(order.id, 'PENDING')} 
                                         className="w-full text-left px-3 py-1.5 text-[11px] text-slate-700 hover:bg-slate-150 flex items-center gap-1"
                                       >
-                                        <span className="w-2 h-2 rounded-full bg-slate-400"></span> Set Pending
+                                        <span className="w-2 h-2 rounded-full bg-amber-400"></span> Set Pending
                                       </button>
                                       <button 
                                         onClick={() => updateOrderStatus(order.id, 'PROCESSING')} 
@@ -1035,13 +1275,13 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                                         <span className="w-2 h-2 rounded-full bg-orange-400"></span> Set Processing
                                       </button>
                                       <button 
-                                        onClick={() => updateOrderStatus(order.id, 'CRITICAL')} 
+                                        onClick={() => void handleMarkCritical(order)} 
                                         className="w-full text-left px-3 py-1.5 text-[11px] text-red-600 font-bold hover:bg-red-50 flex items-center gap-1"
                                       >
                                         <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span> Set Critical
                                       </button>
                                       <button 
-                                        onClick={() => updateOrderStatus(order.id, 'COMPLETED')} 
+                                        onClick={() => void completeAssayAndNotify(order.id)} 
                                         className="w-full text-left px-3 py-1.5 text-[11px] text-slate-700 hover:bg-slate-150 flex items-center gap-1"
                                       >
                                         <span className="w-2 h-2 rounded-full bg-green-500"></span> Set Completed
@@ -1056,9 +1296,22 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                           {filteredOrders.length === 0 && (
                             <tr>
                               <td colSpan={6} className="py-12 text-center text-slate-500 class-dense">
-                                <Info className="w-10 h-10 mx-auto mb-2 text-slate-300" />
-                                <p className="font-semibold text-xs">No active laboratory orders found matching requirements</p>
-                                <p className="text-[11px] text-slate-400 mt-0.5">Try searching with a different patient name or adjust filters.</p>
+                                <CheckCircle className="w-10 h-10 mx-auto mb-2 text-emerald-300" />
+                                <p className="font-semibold text-xs text-emerald-900">No completed laboratory assays on this board</p>
+                                <p className="text-[11px] text-slate-500 mt-0.5">
+                                  {metrics.queued > 0
+                                    ? `${metrics.queued} test(s) are still in the pending queue.`
+                                    : 'Validate an assay on Lab → Today\'s reports to list it here.'}
+                                </p>
+                                {metrics.queued > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveTab('lab-today')}
+                                    className="mt-3 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-amber-950 text-[11px] font-black rounded-lg uppercase"
+                                  >
+                                    Open Today&apos;s reports
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           )}
@@ -1095,98 +1348,6 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                       </div>
                     </div>
 
-                  </div>
-
-                  {/* Secondary: Sample Logistics Widget */}
-                  <div className="bg-white border border-[#c1c7cf] rounded-xl p-5 shadow-sm">
-                    <div className="flex justify-between items-center mb-4">
-                      <div>
-                        <h3 className="font-sans text-[#111c2d] font-bold text-sm tracking-tight flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-secondary text-lg">local_shipping</span>
-                          Sample Dispatch Monitor
-                        </h3>
-                        <p className="text-[11px] text-[#41474e]">Interactive real-time transit telemetry from suburban general practices</p>
-                      </div>
-                      
-                      <button 
-                        onClick={() => setActiveTab('logistics')}
-                        className="text-xs text-primary font-bold hover:underline flex items-center gap-0.5"
-                      >
-                        Expand Map <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                      
-                      {/* Left: Little Map Representation (6 columns) */}
-                      <div className="md:col-span-7 bg-[#dee8ff] border border-slate-300 rounded-lg relative overflow-hidden h-48 flex items-center justify-center">
-                        <img 
-                          src="https://lh3.googleusercontent.com/aida-public/AB6AXuDH7OxXiaF90hH-A_5RZLqtY8_U6IhJ5O1XHjYiVjyKpuZVxY4j-Ccfli-ptvC4h0PM_bm_BR6TCDNaLx4UkJgv2BZKTdlM987e3ypbsUNy-mkbOOz-5R183TEEvmc3olwCklwHfkWp6pdGpHKigMQQKnfXmUL3VfOcS9qLPyxlCOdx1fSVb3Fky8FR8RZCUr0g4mfO3uOCirfW4VwpXBxZxZbt0hs4hzhWsqyoW4o80ybg4vfNgS86deN5oQ-PxX2pQEbt5HKXEo0" 
-                          alt="Colombo Route Screen" 
-                          className="absolute inset-0 w-full h-full object-cover opacity-80"
-                        />
-                        {/* Interactive glow marker */}
-                        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center">
-                          <div className="px-2 py-0.5 bg-primary text-white font-bold text-[8px] uppercase tracking-wider rounded shadow-md mb-1.5 flex items-center gap-0.5 animate-bounce">
-                            <MapPin className="w-2.5 h-2.5 text-secondary shrink-0" /> Courier Active
-                          </div>
-                          <span className="w-4 h-4 bg-secondary border-2 border-white rounded-full inline-block animate-ping"></span>
-                          <span className="w-3.5 h-3.5 bg-secondary border-2 border-white rounded-full inline-block -mt-3.5"></span>
-                        </div>
-                      </div>
-
-                      {/* Right: Selected Route status selectors (5 columns) */}
-                      <div className="md:col-span-5 flex flex-col justify-between">
-                        <div className="space-y-2 text-xs">
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Select Courier route</label>
-                          <div className="space-y-1.5">
-                            {routes.map(r => (
-                              <button 
-                                key={r.id}
-                                onClick={() => setSelectedRoute(r)}
-                                className={`w-full text-left px-2.5 py-1.5 rounded border transition-all text-[11px] font-semibold flex justify-between items-center ${
-                                  selectedRoute.id === r.id 
-                                    ? 'bg-secondary-container border-emerald-300 text-slate-800 font-bold' 
-                                    : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-[#41474e]'
-                                }`}
-                              >
-                                <span className="truncate">{r.routeName}</span>
-                                <span className="text-[9px] bg-slate-200 text-[#41474e] py-0.5 px-1 rounded shrink-0 ml-1">
-                                  {r.totalSamples} assays
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Status detail of selected courier */}
-                        <div className="mt-3 bg-slate-50 border border-slate-200 rounded p-2.5 space-y-1.5">
-                          <div className="flex justify-between text-[11px]">
-                            <span className="text-slate-500 font-bold">Courier Name:</span>
-                            <span className="font-bold text-slate-900">{selectedRoute.courierName}</span>
-                          </div>
-                          <div className="flex justify-between text-[11px]">
-                            <span className="text-slate-500 font-bold">ETA to Patholab:</span>
-                            <span className="font-bold text-emerald-700 font-mono">{selectedRoute.etaMinutes} mins</span>
-                          </div>
-                          <div className="flex justify-between text-[11px]">
-                            <span className="text-slate-500 font-bold">Specimen Urgency:</span>
-                            <span className="font-semibold text-slate-900">
-                              {selectedRoute.totalSamples} Total ({selectedRoute.urgentSamples} Urgent)
-                            </span>
-                          </div>
-                          
-                          {/* progress bar */}
-                          <div className="w-full bg-slate-200 rounded-full h-1.5 mt-2">
-                            <div 
-                              className="bg-secondary h-1.5 rounded-full transition-all duration-300"
-                              style={{ width: `${selectedRoute.progressPercent}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      </div>
-
-                    </div>
                   </div>
 
                 </div>
@@ -1303,6 +1464,15 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                           )}
                         </div>
 
+                        {selectedOrder.status === 'COMPLETED' && (
+                          <div className="border border-emerald-200 rounded-lg p-3 bg-emerald-50/80 space-y-2">
+                            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
+                              Report actions
+                            </span>
+                            <LabOrderActions order={selectedOrder} onPatch={patchOrder} />
+                          </div>
+                        )}
+
                         {/* CLINICAL ACTIONS PANEL */}
                         <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/80 space-y-2">
                           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
@@ -1310,18 +1480,18 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                           </span>
                           <div className="grid grid-cols-2 gap-2 text-xs">
                             <button
-                              onClick={() => alert(`Specimen barcode label printed for ${selectedOrder.patientName} (${selectedOrder.specimenId}).`)}
+                              onClick={() => printLabReport(selectedOrder)}
                               className="px-2.5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                             >
                               <FileText className="w-3.5 h-3.5" />
-                              <span>Print Specimen Label</span>
+                              <span>Print report</span>
                             </button>
                             <button
-                              onClick={() => alert(`Diagnostic PDF report downloaded for ${selectedOrder.patientName}.`)}
+                              onClick={() => downloadLabReport(selectedOrder)}
                               className="px-2.5 py-2 bg-[#dee8ff] hover:bg-[#c9daff] text-primary rounded text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                             >
                               <Download className="w-3.5 h-3.5" />
-                              <span>Download PDF</span>
+                              <span>Download report</span>
                             </button>
                           </div>
                         </div>
@@ -1376,93 +1546,10 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                     </div>
                   )}
 
-                  {/* Sidebar Widget: Active Alerts Feed */}
-                  <div className="bg-white border border-[#c1c7cf] rounded-xl p-5 shadow-sm space-y-4">
-                    <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                      <h3 className="font-sans font-bold text-slate-900 text-xs uppercase tracking-wider flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 bg-red-600 rounded-full animate-pulse"></span>
-                        Active Alerts Feed
-                      </h3>
-                      <button 
-                        onClick={() => setActiveTab('notifications')}
-                        className="text-[11px] text-primary font-bold hover:underline"
-                      >
-                        All alerts
-                      </button>
-                    </div>
-
-                    <div className="space-y-2.5 max-h-56 overflow-y-auto no-scrollbar">
-                      {notifications.map((notif) => {
-                        const isCritical = notif.type === 'CRITICAL';
-                        const isWarning = notif.type === 'WARNING';
-                        
-                        return (
-                          <div 
-                            key={notif.id}
-                            onClick={() => {
-                              // If there's a reference to Kamala or other, search/select it!
-                              if (notif.message.includes('Kamala')) {
-                                const found = orders.find(o => o.patientName.includes('Kamala'));
-                                if (found) setSelectedOrder(found);
-                              } else if (notif.message.includes('Anura')) {
-                                const found = orders.find(o => o.patientName.includes('Anura'));
-                                if (found) setSelectedOrder(found);
-                              }
-                            }}
-                            className={`p-3 border-l-4 rounded transition-all cursor-pointer hover:translate-x-0.5 ${
-                              isCritical 
-                                ? 'bg-red-50/50 border-red-600' 
-                                : isWarning 
-                                  ? 'bg-amber-50/40 border-amber-600' 
-                                  : 'bg-blue-50/40 border-primary'
-                            }`}
-                          >
-                            <div className="flex gap-2 items-start text-xs">
-                              <span className="material-symbols-outlined text-base mt-0.5 leading-none shrink-0" style={{
-                                color: isCritical ? '#ba1a1a' : isWarning ? '#452900' : '#00334f'
-                              }}>
-                                {isCritical ? 'warning' : isWarning ? 'inventory_2' : 'info'}
-                              </span>
-                              <div>
-                                <p className={`font-bold uppercase tracking-wider text-[10px] ${
-                                  isCritical ? 'text-red-700' : isWarning ? 'text-amber-700' : 'text-primary'
-                                }`}>
-                                  {notif.title}
-                                </p>
-                                <p className="text-slate-700 text-[11px] mt-0.5 leading-relaxed">{notif.message}</p>
-                                <span className="text-[10px] opacity-60 block mt-1">{notif.timeAgo}</span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
                 </div>
 
               </div>
 
-            </div>
-          )}
-
-          {/* Active Tab: Test Catalog */}
-          {activeTab === 'catalog' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-end">
-                <div>
-                  <h1 className="font-serif text-3xl font-bold text-primary tracking-tight">Diagnostics Test Catalog</h1>
-                  <p className="text-on-surface-variant text-xs mt-1">LankaLab Pathology Services Standard Operating Assays &amp; Specimen Demands</p>
-                </div>
-                <button 
-                  onClick={() => setActiveTab('overview')}
-                  className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-bold text-[#41474e] hover:bg-white bg-slate-50 transition-all flex items-center gap-1"
-                >
-                  <ChevronRight className="w-4 h-4 rotate-180" /> Back to Dashboard
-                </button>
-              </div>
-
-              <TestCatalog orders={orders} />
             </div>
           )}
 
@@ -1472,7 +1559,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
               <div className="flex justify-between items-end border-b border-slate-200 pb-3">
                 <div>
                   <h1 className="font-serif text-3xl font-bold text-primary tracking-tight">Electronic Result Delivery &amp; Management</h1>
-                  <p className="text-on-surface-variant text-xs mt-1">Medway Secure Real-Time Clinician Reporting, Supplementary Tests &amp; MDT Share</p>
+                  <p className="text-on-surface-variant text-xs mt-1">Medway Secure Real-Time Clinician Reporting &amp; MDT Share</p>
                 </div>
                 <button 
                   onClick={() => setActiveTab('overview')}
@@ -1481,7 +1568,25 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                   <ChevronRight className="w-4 h-4 rotate-180" /> Back to Dashboard
                 </button>
               </div>
-              <ResultDeliveryManager orders={orders} onUpdateOrderStatus={updateOrderStatus} />
+              <ResultDeliveryManager
+                orders={orders}
+                onCompletedNavigate={(order) => {
+                  void (async () => {
+                    const completed = await completeAssayAndNotify(order.id);
+                    const next = completed || { ...order, status: 'COMPLETED' as const };
+                    const completedIds = orders
+                      .map((o) => (o.id === order.id ? next : o))
+                      .filter((o) => o.status === 'COMPLETED')
+                      .map((o) => o.id);
+                    const index = completedIds.indexOf(order.id);
+                    setSelectedOrder(next);
+                    setOrderTableSearch('');
+                    setGlobalSearch('');
+                    setCurrentPage(index >= 0 ? Math.floor(index / itemsPerPage) + 1 : 1);
+                    setActiveTab('overview');
+                  })();
+                }}
+              />
             </div>
           )}
 
@@ -1504,40 +1609,75 @@ The lab results indicate a significantly elevated level indicating pathology. Th
             </div>
           )}
 
+          {(activeTab === 'lab-today' || activeTab === 'lab-packages' || activeTab === 'lab-panels' || activeTab === 'lab-categories' || activeTab === 'lab-database' || activeTab === 'lab-interpretations' || activeTab === 'lab-count') && (
+            <LabModule
+              orders={orders}
+              panel={
+                activeTab === 'lab-packages'
+                  ? 'packages'
+                  : activeTab === 'lab-panels'
+                    ? 'panels'
+                    : activeTab === 'lab-categories'
+                      ? 'categories'
+                      : activeTab === 'lab-database'
+                        ? 'database'
+                        : activeTab === 'lab-interpretations'
+                          ? 'interpretations'
+                          : activeTab === 'lab-count'
+                            ? 'count'
+                            : 'today'
+              }
+              onSaveResults={(order, results, extra) => persistEnteredResults(order, results, extra, 'save')}
+              onFinalResults={(order, results, extra) => persistEnteredResults(order, results, extra, 'final')}
+              onSignOffResults={(order, results, extra) => persistEnteredResults(order, results, extra, 'sign')}
+              onView={(order) => {
+                setSelectedOrder(order);
+                setActiveTab('results');
+              }}
+            />
+          )}
+
           {/* Active Tab: Pending Results */}
           {activeTab === 'pending' && (
             <div className="space-y-6">
-              <div className="flex justify-between items-end border-b border-slate-200 pb-4">
+              <div className="flex justify-between items-end border-b-2 border-amber-200 pb-4">
                 <div>
-                  <h1 className="font-serif text-3xl font-bold text-primary tracking-tight">Pending &amp; Queue Worklist</h1>
-                  <p className="text-on-surface-variant text-xs mt-1">Chemical assays currently being run or awaiting pathology confirmation</p>
+                  <h1 className="font-serif text-3xl font-bold bg-gradient-to-r from-amber-700 via-orange-600 to-red-600 bg-clip-text text-transparent tracking-tight">Pending &amp; Queue Worklist</h1>
+                  <p className="text-amber-800/80 text-xs mt-1 font-medium">Pending, processing, and critical assays — completed tests move to Active Lab Orders</p>
                 </div>
                 <button 
                   onClick={() => setIsNewOrderOpen(true)}
-                  className="px-4 py-2 bg-primary text-on-primary rounded-lg text-xs font-bold hover:bg-[#0c4a6e] transition-colors flex items-center gap-1"
+                  className="px-4 py-2 bg-gradient-to-r from-amber-400 to-orange-500 text-amber-950 rounded-lg text-xs font-bold hover:from-amber-300 hover:to-orange-400 transition-colors flex items-center gap-1 shadow-sm"
                 >
                   <Plus className="w-4 h-4" /> Dispatch Specimen
                 </button>
               </div>
 
-              <div className="bg-white border border-[#c1c7cf] rounded-xl overflow-hidden shadow-sm">
-                <div className="px-5 py-4 bg-[#f0f3ff] border-b border-[#c1c7cf]">
-                  <h4 className="font-bold text-sm text-primary">High-Priority Queue Telemetry</h4>
+              <div className="bg-white border-2 border-amber-200 rounded-xl overflow-hidden shadow-md">
+                <div className="px-5 py-4 bg-gradient-to-r from-amber-100 via-orange-50 to-red-50 border-b border-amber-200 flex items-center justify-between">
+                  <h4 className="font-bold text-sm text-amber-950">High-Priority Queue Telemetry</h4>
+                  <span className="text-[10px] font-black uppercase bg-amber-400 text-amber-950 px-2 py-0.5 rounded">{pendingQueue.length} in queue</span>
                 </div>
                 
-                <div className="divide-y divide-slate-100">
-                  {orders.filter(o => o.status !== 'COMPLETED').map(o => (
-                    <div key={o.id} className="p-5 hover:bg-slate-50 transition-all flex flex-col md:flex-row justify-between md:items-center gap-4">
+                <div className="divide-y divide-amber-100">
+                  {pendingQueue.map(o => (
+                    <div key={o.id} className={`p-5 transition-all flex flex-col md:flex-row justify-between md:items-center gap-4 border-l-4 ${
+                      o.status === 'CRITICAL' ? 'bg-red-50 border-red-600' :
+                      o.status === 'PROCESSING' ? 'bg-orange-50 border-orange-400' :
+                      'bg-amber-50 border-amber-400'
+                    }`}>
                       
                       <div className="flex gap-4 items-start col-span-2">
                         <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
-                          o.status === 'CRITICAL' ? 'bg-red-600 text-white animate-pulse' : 'bg-amber-100 text-amber-800'
+                          o.status === 'CRITICAL' ? 'bg-red-600 text-white animate-pulse' :
+                          o.status === 'PROCESSING' ? 'bg-orange-500 text-white' :
+                          'bg-amber-400 text-amber-950'
                         }`}>
                           {o.patientName ? o.patientName.split(' ').map(n=>n[0]).join('') : 'PT'}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <h4 className="font-semibold text-primary text-sm">{o.patientName}</h4>
+                            <h4 className={`font-semibold text-sm ${o.status === 'CRITICAL' ? 'text-red-700' : o.status === 'PENDING' ? 'text-amber-900' : 'text-primary'}`}>{o.patientName}</h4>
                             <span className="text-[10px] text-slate-500 font-medium">({o.age}y {o.gender})</span>
                             <span className={`px-2 py-0.5 rounded text-[8px] uppercase tracking-wider font-bold ${
                               o.priority === 'Critical' ? 'bg-red-100 text-red-700' : o.priority === 'Urgent' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'
@@ -1550,7 +1690,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                           <p className="text-[11px] text-slate-500 mt-0.5">Dispatched: {o.orderTime} • Specimen ID: <span className="font-mono text-xs font-semibold text-slate-700">#{o.specimenId}</span></p>
                           
                           {o.notes && (
-                            <p className="text-xs font-serif text-[#41474e] mt-2 italic bg-slate-50 p-2.5 rounded border border-gray-150">
+                            <p className="text-xs font-serif text-[#41474e] mt-2 italic bg-white/70 p-2.5 rounded border border-gray-150">
                               "{o.notes}"
                             </p>
                           )}
@@ -1561,7 +1701,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                         <div>
                           <span className="text-[10px] text-slate-500 uppercase tracking-widest block font-bold">Current Phase</span>
                           <span className={`px-3 py-1 rounded text-xs font-bold uppercase tracking-wide inline-block mt-1 ${
-                            o.status === 'CRITICAL' ? 'bg-red-600 text-white animate-pulse' : o.status === 'PROCESSING' ? 'bg-orange-100 text-orange-700 border border-orange-200' : 'bg-sky-50 text-blue-700 border border-slate-300'
+                            o.status === 'CRITICAL' ? 'bg-red-600 text-white animate-pulse' : o.status === 'PROCESSING' ? 'bg-orange-500 text-white' : 'bg-amber-400 text-amber-950'
                           }`}>
                             {o.status}
                           </span>
@@ -1570,26 +1710,24 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                         {/* Simulation trigger */}
                         <div className="flex gap-2">
                           <button
-                            onClick={() => updateOrderStatus(o.id, 'COMPLETED')}
+                            onClick={() => void completeAssayAndNotify(o.id)}
                             className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded shadow-sm transition-all"
                           >
                             ✓ Validate Assay
                           </button>
-                          {o.status !== 'CRITICAL' && (
-                            <button
-                              onClick={() => updateOrderStatus(o.id, 'CRITICAL')}
-                              className="px-2 py-1 bg-red-100 hover:bg-red-200 text-red-700 text-[11px] font-bold rounded transition-all"
-                            >
-                              ⚠️ Trigger Crit Alert
-                            </button>
-                          )}
+                          <button
+                            onClick={() => void handleMarkCritical(o)}
+                            className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-[11px] font-bold rounded transition-all inline-flex items-center gap-1"
+                          >
+                            <AlertTriangle className="w-3 h-3" /> {o.status === 'CRITICAL' ? 'Open GP Care' : 'Critical'}
+                          </button>
                         </div>
                       </div>
 
                     </div>
                   ))}
 
-                  {orders.filter(o => o.status !== 'COMPLETED').length === 0 && (
+                  {pendingQueue.length === 0 && (
                     <div className="py-12 text-center text-slate-500">
                       <p className="font-bold text-xs">All diagnosed assays successfully approved &amp; validated.</p>
                       <button 
@@ -1794,7 +1932,9 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                           <p className="font-bold text-slate-900 text-xs truncate pr-16" title={col.clinicName}>
                             🏥 {col.clinicName}
                           </p>
-                          <p className="text-[10px] text-slate-400 font-mono mt-0.5">Route Dispatch: {col.id}</p>
+                          <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                            Route Dispatch: {col.dispatchNumber || col.id}
+                          </p>
                         </div>
 
                         {/* Driver details */}
@@ -1818,6 +1958,28 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                           <span className="text-slate-500">Samples Scheduled:</span>
                           <span className="text-secondary font-black text-xs font-mono">{col.sampleCount} Vials</span>
                         </div>
+                        {(col.labName || col.issuedPersonName) && (
+                          <div className="bg-white border border-slate-200 p-2 rounded-lg text-[11px] space-y-1">
+                            {col.labName && (
+                              <div className="flex justify-between text-slate-600 gap-2">
+                                <span>Lab:</span>
+                                <span className="font-bold text-zinc-900 text-right">{col.labName}</span>
+                              </div>
+                            )}
+                            {col.issuedPersonName && (
+                              <div className="flex justify-between text-slate-600 gap-2">
+                                <span>Issued by:</span>
+                                <span className="font-bold text-zinc-900 text-right">{col.issuedPersonName}</span>
+                              </div>
+                            )}
+                            {col.issuedDate && (
+                              <div className="flex justify-between text-slate-600 gap-2">
+                                <span>Issued date:</span>
+                                <span className="font-mono text-zinc-900 font-bold">{col.issuedDate}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Collect / Deliver Action Buttons */}
@@ -1912,6 +2074,27 @@ The lab results indicate a significantly elevated level indicating pathology. Th
             />
           )}
 
+          {(activeTab === 'biz-daily' || activeTab === 'biz-expenses' || activeTab === 'biz-dues' || activeTab === 'biz-activities' || activeTab === 'biz-referrals' || activeTab === 'biz-analysis' || activeTab === 'biz-export') && (
+            <BusinessHub
+              orders={orders}
+              panel={
+                activeTab === 'biz-expenses'
+                  ? 'expenses'
+                  : activeTab === 'biz-dues'
+                    ? 'dues'
+                    : activeTab === 'biz-activities'
+                      ? 'activities'
+                      : activeTab === 'biz-referrals'
+                        ? 'referrals'
+                        : activeTab === 'biz-analysis'
+                          ? 'analysis'
+                          : activeTab === 'biz-export'
+                            ? 'export'
+                            : 'daily'
+              }
+            />
+          )}
+
           {/* Active Tab: Billing & Finance Section */}
           {activeTab === 'billing' && (
             <BillingDashboard 
@@ -1988,33 +2171,46 @@ The lab results indicate a significantly elevated level indicating pathology. Th
             />
           )}
 
+          {(activeTab === 'manage-logins' || activeTab === 'manage-doctors' || activeTab === 'manage-employees' || activeTab === 'manage-diagnofy' || activeTab === 'manage-browser') && (
+            <ManageHub
+              panel={
+                activeTab === 'manage-doctors'
+                  ? 'doctors'
+                  : activeTab === 'manage-employees'
+                    ? 'employees'
+                    : activeTab === 'manage-diagnofy'
+                      ? 'diagnofy'
+                      : activeTab === 'manage-browser'
+                        ? 'browser'
+                        : 'logins'
+              }
+            />
+          )}
+
           {/* Active Tab: System & Gateway Settings */}
           {activeTab === 'settings' && (
-            <SettingsSection />
+            <SettingsSection orders={orders} initialTab="facility" />
           )}
 
         </main>
       </div>
 
-      {/* FAB button for quick dispatch on bottom right */}
       <button 
-        onClick={() => setIsNewOrderOpen(true)}
-        className="fixed bottom-8 right-8 w-14 h-14 bg-primary text-on-primary rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50 group hover:bg-[#0c4a6e]"
+        onClick={() => setActiveTab('newbill')}
+        className="fixed bottom-8 right-8 w-14 h-14 bg-[#0a2547] text-white rounded-full shadow-2xl shadow-blue-950/40 flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50 group ring-4 ring-[#1e4a7a]/50 hover:bg-[#123a6b]"
       >
         <Plus className="w-8 h-8 text-white" />
-        <span className="absolute right-16 bg-primary text-on-primary px-3 py-1.5 rounded-lg text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-md">
-          Create Lab Order
+        <span className="absolute right-16 bg-[#0a2547] text-white px-3 py-1.5 rounded-lg text-xs font-black tracking-wide opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-md">
+          NEW BILL
         </span>
       </button>
 
-      {/* New Order Modal Dialog Component */}
       {isNewOrderOpen && (
         <OrderForm 
           onClose={() => setIsNewOrderOpen(false)}
           onAddOrder={handleAddOrder}
         />
       )}
-
     </div>
   );
 }

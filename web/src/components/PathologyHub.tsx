@@ -15,7 +15,7 @@ import {
 import { Patient, LabResult, LabOrder } from "../types";
 import { PATHOLOGY_INVESTIGATIONS } from "../catalogs/pathologyInvestigations";
 import PatientSexAgeBadge from "./PatientSexAgeBadge";
-import PatientCriticalAlertBadge from "./PatientCriticalAlertBadge";
+import PatientCriticalAlertBadge, { hasCriticalPathologyAlert } from "./PatientCriticalAlertBadge";
 
 interface Props {
   patients: Patient[];
@@ -259,7 +259,7 @@ Suwasiri App Sync: ACTIVE (Vault Lab reports)
                     </div>
 
                     <div>
-                      <h2 className="font-serif font-bold text-base text-[#00334f]">{patient.name}</h2>
+                      <h2 className={`font-serif font-bold text-base ${hasCriticalPathologyAlert(patient) ? "text-red-700" : "text-[#00334f]"}`}>{patient.name}</h2>
                       <PatientSexAgeBadge gender={patient.gender} age={patient.age} />
                       <PatientCriticalAlertBadge patient={patient} />
                       <div className="flex flex-wrap items-center gap-2 mt-1">

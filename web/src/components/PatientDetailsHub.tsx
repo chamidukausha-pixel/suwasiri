@@ -9,7 +9,7 @@ import { publishSampleDispatchToLankaLab } from "../sync/suwasiriSampleDispatch"
 import { SAMPLE_COLLECTION_CATEGORIES } from "../catalogs/pathologyInvestigations";
 import { DEFAULT_PARTNER_LABS, type PartnerLab } from "../catalogs/partnerLabs";
 import PatientSexAgeBadge from "./PatientSexAgeBadge";
-import PatientCriticalAlertBadge from "./PatientCriticalAlertBadge";
+import PatientCriticalAlertBadge, { hasCriticalPathologyAlert } from "./PatientCriticalAlertBadge";
 
 interface Props {
   patient: Patient;
@@ -439,6 +439,8 @@ export default function PatientDetailsHub({
           labName: dispatchLab.trim(),
           labAddress: dispatchLabAddress.trim(),
           clinicName: patient.medicalCenter || "",
+          issuedPersonName: dispatchName.trim() || currentRole,
+          issuedDate: new Date().toISOString().slice(0, 10),
         })
       });
       if (!res.ok) throw new Error("Could not process LankaLab portal handshake");
@@ -542,7 +544,7 @@ export default function PatientDetailsHub({
             {!isEditingDemographics ? (
               <div className="space-y-0.5">
                 <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
-                  <h2 className="font-serif font-bold text-lg leading-tight">{patient.name}</h2>
+                  <h2 className={`font-serif font-bold text-lg leading-tight ${hasCriticalPathologyAlert(patient) ? "text-red-300" : ""}`}>{patient.name}</h2>
                   <span className="bg-sky-900 border border-sky-700/80 text-sky-100 font-bold text-[9px] px-2 py-0.5 rounded">
                     ⚕ Center: {patient.medicalCenter || "Colombo Central Clinic"}
                   </span>

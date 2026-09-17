@@ -19,7 +19,7 @@ export default function PatientCriticalAlertBadge({
 }) {
   if (!(show ?? hasCriticalPathologyAlert(patient))) return null;
   return (
-    <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-black px-2 py-0.5 rounded-md bg-red-600 text-white border-2 border-red-900 uppercase tracking-wide shadow-xs">
+    <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-black px-2 py-0.5 rounded-md bg-red-600 text-white border-2 border-red-900 uppercase tracking-wide shadow-xs animate-pulse">
       <AlertTriangle className="w-3 h-3" />
       Red alert · Critical
     </span>

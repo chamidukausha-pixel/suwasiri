@@ -38,6 +38,9 @@ export interface LabOrder {
   email?: string;
   suwasiriBarcode?: string;
   connectedClinic?: string;
+  flaggedCritical?: boolean;
+  gpCareSyncedAt?: string;
+  suwasiriSyncedAt?: string;
 }
 
 export interface CourierRoute {

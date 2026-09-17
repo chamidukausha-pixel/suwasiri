@@ -377,6 +377,15 @@ export interface SampleCollection {
   labName?: string;
   labAddress?: string;
   clinicName?: string;
+  /** Calendar day the bag was issued to the driver (yyyy-MM-dd). */
+  collectedDate?: string;
+  /** Person who issued / handed over on Delivered. */
+  issuedPersonName?: string;
+  issuedDate?: string;
+  /** Patient File IDs included in the same courier batch. */
+  issuedFileIds?: string[];
+  /** Numbered dispatch file shown in Sample Dispatch History (e.g. SD-1042). */
+  dispatchNumber?: string;
   lankaLabSyncStatus?: "NOT_SYNCED" | "SYNCED";
   lankaLabLedgerKey?: string;
   testName?: string;
