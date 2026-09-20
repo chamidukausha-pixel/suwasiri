@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -31,6 +33,8 @@ class FirebaseHealthRepository implements HealthRepository {
 
   CollectionReference<Map<String, dynamic>> get _vault =>
       _db.collection('vault');
+  CollectionReference<Map<String, dynamic>> get _users =>
+      _db.collection('users');
   CollectionReference<Map<String, dynamic>> get _vaccinations =>
       _db.collection('vaccinations');
   CollectionReference<Map<String, dynamic>> get _appointments =>
@@ -50,13 +54,47 @@ class FirebaseHealthRepository implements HealthRepository {
 
   final _doctors = DoctorCatalog.doctors;
 
+  Future<String?> _healthIdFor(String patientId) async {
+    try {
+      final snap = await _users.doc(patientId).get();
+      final data = snap.data();
+      if (data == null) return null;
+      final code = (data['barcodeNumber'] as String?)?.trim();
+      final ceylon = (data['ceylonHealthId'] as String?)?.trim();
+      if (code != null && code.isNotEmpty) return code;
+      if (ceylon != null && ceylon.isNotEmpty) return ceylon;
+    } catch (_) {}
+    return null;
+  }
+
+  List<VaultReport> _docsToReports(
+    QuerySnapshot<Map<String, dynamic>> snap,
+  ) {
+    return snap.docs.map((d) => VaultReport.fromMap(d.id, d.data())).toList();
+  }
+
+  Future<List<VaultReport>> _liveLabReports(String patientId) async {
+    final byId = await _vault.where('patientId', isEqualTo: patientId).get();
+    final map = {for (final r in _docsToReports(byId)) r.id: r};
+    final healthId = await _healthIdFor(patientId);
+    if (healthId != null && healthId.isNotEmpty && healthId != patientId) {
+      final extra =
+          await _vault.where('patientId', isEqualTo: healthId).get();
+      for (final r in _docsToReports(extra)) {
+        map[r.id] = r;
+      }
+      final byCode =
+          await _vault.where('barcodeNumber', isEqualTo: healthId).get();
+      for (final r in _docsToReports(byCode)) {
+        map[r.id] = r;
+      }
+    }
+    return map.values.toList()..sort((a, b) => b.date.compareTo(a.date));
+  }
+
   @override
   Future<List<VaultReport>> getVaultReports(String patientId) async {
-    final snap = await _vault.where('patientId', isEqualTo: patientId).get();
-    final list = snap.docs
-        .map((d) => VaultReport.fromMap(d.id, d.data()))
-        .toList()
-      ..sort((a, b) => b.date.compareTo(a.date));
+    final list = await _liveLabReports(patientId);
     if (list.isNotEmpty) return list;
     return PatientHealthSamples.sampleLabReports(patientId: patientId);
   }
@@ -128,13 +166,10 @@ class FirebaseHealthRepository implements HealthRepository {
   }
 
   List<VaultReport> _mergeLabReports(String patientId, List<VaultReport> live) {
-    final samples = PatientHealthSamples.sampleLabReports(patientId: patientId);
-    if (live.isEmpty) return samples;
-    final ids = {for (final r in live) r.id};
-    return [
-      ...live,
-      ...samples.where((s) => !ids.contains(s.id)),
-    ]..sort((a, b) => b.date.compareTo(a.date));
+    if (live.isNotEmpty) {
+      return live..sort((a, b) => b.date.compareTo(a.date));
+    }
+    return PatientHealthSamples.sampleLabReports(patientId: patientId);
   }
 
   List<VaccineHistoryEntry> _mergeVaccineHistory(
@@ -152,13 +187,49 @@ class FirebaseHealthRepository implements HealthRepository {
 
   @override
   Stream<List<VaultReport>> watchVaultReports(String patientId) {
-    return _vault.where('patientId', isEqualTo: patientId).snapshots().map((snap) {
-      final live = snap.docs
-          .map((d) => VaultReport.fromMap(d.id, d.data()))
-          .toList()
+    final controller = StreamController<List<VaultReport>>();
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? subId;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? subHealth;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? subCode;
+    var byId = <VaultReport>[];
+    var byHealth = <VaultReport>[];
+    var byCode = <VaultReport>[];
+
+    void emitMerged() {
+      if (controller.isClosed) return;
+      final map = <String, VaultReport>{
+        for (final r in [...byId, ...byHealth, ...byCode]) r.id: r,
+      };
+      final live = map.values.toList()
         ..sort((a, b) => b.date.compareTo(a.date));
-      return _mergeLabReports(patientId, live);
+      controller.add(_mergeLabReports(patientId, live));
+    }
+
+    subId = _vault.where('patientId', isEqualTo: patientId).snapshots().listen((snap) {
+      byId = _docsToReports(snap);
+      emitMerged();
+    }, onError: controller.addError);
+
+    _healthIdFor(patientId).then((healthId) {
+      if (controller.isClosed || healthId == null || healthId.isEmpty || healthId == patientId) {
+        return;
+      }
+      subHealth = _vault.where('patientId', isEqualTo: healthId).snapshots().listen((snap) {
+        byHealth = _docsToReports(snap);
+        emitMerged();
+      }, onError: controller.addError);
+      subCode = _vault.where('barcodeNumber', isEqualTo: healthId).snapshots().listen((snap) {
+        byCode = _docsToReports(snap);
+        emitMerged();
+      }, onError: controller.addError);
     });
+
+    controller.onCancel = () async {
+      await subId?.cancel();
+      await subHealth?.cancel();
+      await subCode?.cancel();
+    };
+    return controller.stream;
   }
 
   @override

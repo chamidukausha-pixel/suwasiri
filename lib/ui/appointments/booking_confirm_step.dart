@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/theme/app_colors.dart';
 import '../../data/catalogs/doctor_schedule_slots.dart';
 import '../../data/models/appointment.dart';
 import '../../localization/app_localizations.dart';
@@ -30,15 +31,15 @@ class BookingConfirmStep extends StatelessWidget {
     required this.onProceed,
   });
 
-  static const bg = Color(0xFFFAF9F7);
-  static const coral = Color(0xFFE85D4C);
-  static const sage = Color(0xFF8FA88E);
-  static const sageBorder = Color(0xFF6F8B6E);
-  static const reasonBlue = Color(0xFF5C9CEC);
-  static const ink = Color(0xFF1A1A1A);
-  static const muted = Color(0xFF8A8A8A);
-  static const chip = Color(0xFFF0EFED);
-  static const line = Color(0xFFE4E2DE);
+  static const bg = AppColors.canvas;
+  static const coral = AppColors.emergencyRed;
+  static const sage = AppColors.emerald;
+  static const sageBorder = AppColors.brandGreenDeep;
+  static const reasonBlue = AppColors.trustBlue;
+  static const ink = AppColors.trustBlueDark;
+  static const muted = AppColors.slateMuted;
+  static const chip = AppColors.trustBlueSoft;
+  static const line = AppColors.border;
 
   final Doctor doctor;
   final ConsultMode mode;
@@ -193,7 +194,7 @@ class BookingConfirmStep extends StatelessWidget {
                                   const Icon(
                                     Icons.star_rounded,
                                     size: 16,
-                                    color: Color(0xFFE11D48),
+                                    color: AppColors.emergencyRed,
                                   ),
                                   const SizedBox(width: 2),
                                   Text(
@@ -391,14 +392,14 @@ class BookingConfirmStep extends StatelessWidget {
                             color: selected
                                 ? coral
                                 : taken
-                                    ? const Color(0xFFF3F2F0)
+                                    ? AppColors.trustBlueSoft
                                     : Colors.white,
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
                               color: selected
                                   ? coral
                                   : taken
-                                      ? const Color(0xFFE8E6E2)
+                                      ? AppColors.border
                                       : line,
                             ),
                           ),
@@ -411,21 +412,21 @@ class BookingConfirmStep extends StatelessWidget {
                                   color: selected
                                       ? Colors.white
                                       : taken
-                                          ? const Color(0xFFB0AEA9)
+                                          ? AppColors.slateMuted
                                           : ink,
                                   fontWeight: FontWeight.w700,
                                   fontSize: 15,
                                   decoration: taken
                                       ? TextDecoration.lineThrough
                                       : TextDecoration.none,
-                                  decorationColor: const Color(0xFFB0AEA9),
+                                  decorationColor: AppColors.slateMuted,
                                 ),
                               ),
                               if (taken)
                                 const Text(
                                   'BOOKED',
                                   style: TextStyle(
-                                    color: Color(0xFFB42318),
+                                    color: AppColors.brandRedDeep,
                                     fontWeight: FontWeight.w800,
                                     fontSize: 8,
                                     letterSpacing: 0.4,
@@ -457,9 +458,9 @@ class BookingConfirmStep extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF3F2F0),
+                            color: AppColors.trustBlueSoft,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFE8E6E2)),
+                            border: Border.all(color: AppColors.border),
                           ),
                           child: Text(
                             '${_fmtTime24(t)} · Booked',
@@ -527,7 +528,7 @@ class BookingConfirmStep extends StatelessWidget {
             ),
             decoration: const BoxDecoration(
               color: bg,
-              border: Border(top: BorderSide(color: Color(0xFFEDEBE7))),
+              border: Border(top: BorderSide(color: AppColors.border)),
             ),
             child: Column(
               children: [
@@ -676,7 +677,7 @@ class _ReasonChip extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                color: selected ? Colors.white : const Color(0xFF5A5A5A),
+                color: selected ? Colors.white : AppColors.slateMuted,
                 fontWeight: FontWeight.w700,
                 fontSize: 13,
               ),

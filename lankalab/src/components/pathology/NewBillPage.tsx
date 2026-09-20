@@ -25,6 +25,9 @@ import {
 import type { LabOrder } from "../../types";
 import RateListPage from "./RateListPage";
 import { type DeptId, linesForDept, loadRateStore } from "./rateCatalog";
+import { MEDICAL_TESTS, matchMedicalTest, type MedicalTest } from "../../data/medicalTests";
+import { uniqueHealthId } from "../../utils/healthId";
+import MedicalTestTable from "./MedicalTestTable";
 import BillView from "../BillView";
 
 type Line = { name: string; price: number };
@@ -62,7 +65,33 @@ function lastRegNo(orders: LabOrder[]) {
   return nums.length ? Math.max(...nums) : 1016;
 }
 
+function toYmd(d: Date) {
+  const x = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return x.toISOString().slice(0, 10);
+}
+
+function ymdFromAge(age: number) {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - (age || 0));
+  return toYmd(d);
+}
+
+function ageFromDob(ymd: string) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (!y || !m || !d) return 0;
+  const born = new Date(y, m - 1, d);
+  const now = new Date();
+  let age = now.getFullYear() - born.getFullYear();
+  const md = now.getMonth() - born.getMonth();
+  if (md < 0 || (md === 0 && now.getDate() < born.getDate())) age -= 1;
+  return Math.max(0, age);
+}
+
 function patientDob(order: LabOrder) {
+  if (order.dateOfBirth) {
+    const [y, m, d] = order.dateOfBirth.split("-");
+    return `${d}/${m}/${y}`;
+  }
   const d = order.orderTimestamp instanceof Date ? order.orderTimestamp : new Date();
   const born = new Date(d);
   born.setFullYear(born.getFullYear() - (order.age || 0));
@@ -85,7 +114,7 @@ export default function NewBillPage({
   onCreate: (order: LabOrder) => void;
   onClose: () => void;
   onSettings: () => void;
-  onEnterResults?: () => void;
+  onEnterResults?: (order: LabOrder) => void;
 }) {
   const [phone, setPhone] = useState("");
   const [picked, setPicked] = useState<LabOrder | null>(null);
@@ -96,6 +125,7 @@ export default function NewBillPage({
   const [ageY, setAgeY] = useState("");
   const [ageM, setAgeM] = useState("");
   const [ageD, setAgeD] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [openDepts, setOpenDepts] = useState<DeptId[]>(["LAB"]);
   const [lines, setLines] = useState<Record<string, Line[]>>({ LAB: [] });
   const [deptPaid, setDeptPaid] = useState<Record<string, string>>({});
@@ -146,6 +176,13 @@ export default function NewBillPage({
   }, [orders, phone]);
 
   const deptMeta = (id: DeptId) => DEPTS.find((d) => d.id === id)!;
+  const selectedCodes = useMemo(() => {
+    const codes = Object.values(lines)
+      .flat()
+      .map((l) => matchMedicalTest(l.name)?.code)
+      .filter((c): c is string => Boolean(c));
+    return new Set(codes);
+  }, [lines]);
 
   const deptTotal = (id: string) => (lines[id] || []).reduce((s, l) => s + l.price, 0);
   const grandTotal = openDepts.reduce((s, id) => s + deptTotal(id), 0);
@@ -159,9 +196,10 @@ export default function NewBillPage({
     setGender(o.gender);
     setEmail(o.email || "");
     setAgeY(String(o.age || ""));
-    const { first, last } = splitName(o.patientName);
-    setFirstName(first);
-    setLastName(last);
+    setDateOfBirth(o.dateOfBirth || (o.age ? ymdFromAge(o.age) : ""));
+    const { first, last } = splitName(o.firstName && o.lastName ? `${o.firstName} ${o.lastName}` : o.patientName);
+    setFirstName(o.firstName || first);
+    setLastName(o.lastName || last);
     if (/mrs/i.test(o.patientName) || o.gender === "Female") setTitle("Mrs.");
     else if (o.gender === "Male") setTitle("Mr.");
     if (o.connectedClinic) setReferredBy(o.connectedClinic);
@@ -199,6 +237,20 @@ export default function NewBillPage({
       setDeptPaid((p) => ({ ...p, [id]: String(nextItems.reduce((s, l) => s + l.price, 0)) }));
       return { ...prev, [id]: nextItems };
     });
+  };
+
+  const toggleMedicalTest = (t: MedicalTest) => {
+    const existing = (Object.entries(lines) as [DeptId, Line[]][]).flatMap(([dept, items]) =>
+      items
+        .filter((x) => matchMedicalTest(x.name)?.code === t.code)
+        .map((x) => ({ dept, name: x.name }))
+    );
+    if (existing[0]) {
+      removeLine(existing[0].dept, existing[0].name);
+      return;
+    }
+    toggleDept(t.dept);
+    addLine(t.dept, { name: t.billName, price: t.fee });
   };
 
   useEffect(() => {
@@ -241,11 +293,15 @@ export default function NewBillPage({
     }
     const specimen = `LNK-${lastRegNo(orders) + 1}`;
     const testType = allTests.map((t) => t.name).join(" + ");
-    const age = Number(ageY) || picked?.age || 0;
+    const dob = dateOfBirth || picked?.dateOfBirth || ymdFromAge(Number(ageY) || picked?.age || 0);
+    const age = Number(ageY) || (dob ? ageFromDob(dob) : 0) || picked?.age || 0;
     const now = new Date();
     const order: LabOrder = {
       id: String(Date.now()),
       patientName: `${title} ${name}`.replace(/\s+/g, " ").trim(),
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      dateOfBirth: dob,
       age,
       gender,
       testType,
@@ -268,9 +324,22 @@ export default function NewBillPage({
           .join(" · ") || undefined,
       phone: picked?.phone || (phone ? (phone.startsWith("+") ? phone : `+94 ${phone}`) : undefined),
       email: email || picked?.email,
-      suwasiriBarcode: picked?.suwasiriBarcode,
+      suwasiriBarcode:
+        picked?.suwasiriBarcode ||
+        uniqueHealthId({
+          suwasiriBarcode: "",
+          phone: picked?.phone || (phone ? (phone.startsWith("+") ? phone : `+94 ${phone}`) : undefined),
+          email: email || picked?.email,
+          patientName: `${title} ${name}`.replace(/\s+/g, " ").trim(),
+          specimenId: specimen,
+        }),
       connectedClinic: referredBy || picked?.connectedClinic,
       results: [],
+      billedAmount: allTests.reduce((s, t) => s + t.price, 0),
+      paidAmount: recvN,
+      discountAmount: discN,
+      paymentMode: mode,
+      billItems: allTests.map((t) => ({ name: t.name, amount: t.price })),
     };
     onCreate(order);
     setCreated({
@@ -299,8 +368,10 @@ export default function NewBillPage({
             onClose();
           }}
           onEnterResults={() => {
+            const billed = created.order;
             setCreated(null);
-            (onEnterResults || onClose)();
+            if (onEnterResults) onEnterResults(billed);
+            else onClose();
           }}
         />
       )}
@@ -410,8 +481,29 @@ export default function NewBillPage({
 
         <div className="flex flex-wrap items-end gap-3 mb-4">
           <label className="text-[12px] font-bold text-slate-900">
+            Date of birth
+            <input
+              type="date"
+              value={dateOfBirth}
+              onChange={(e) => {
+                const next = e.target.value;
+                setDateOfBirth(next);
+                if (next) setAgeY(String(ageFromDob(next)));
+              }}
+              className={`${field} mt-1 w-40`}
+            />
+          </label>
+          <label className="text-[12px] font-bold text-slate-900">
             <span className="text-rose-500">*</span> Age
-            <input value={ageY} onChange={(e) => setAgeY(e.target.value)} className={`${field} mt-1 w-20`} />
+            <input
+              value={ageY}
+              onChange={(e) => {
+                setAgeY(e.target.value);
+                const n = Number(e.target.value);
+                if (Number.isFinite(n) && n > 0) setDateOfBirth(ymdFromAge(n));
+              }}
+              className={`${field} mt-1 w-20`}
+            />
           </label>
           <label className="text-[12px] font-bold text-slate-900">
             Months
@@ -532,6 +624,10 @@ export default function NewBillPage({
           ))}
         </div>
 
+        <div className="mb-5">
+          <MedicalTestTable selectedCodes={selectedCodes} onToggle={toggleMedicalTest} />
+        </div>
+
         <div className="space-y-4">
           {openDepts.map((id) => {
             const meta = deptMeta(id);
@@ -541,8 +637,10 @@ export default function NewBillPage({
             const disc = Number(deptDisc[id] || 0) || 0;
             const due = Math.max(0, tot - paid - disc);
             const catalog = linesForDept(loadRateStore(), id);
+            const extras = MEDICAL_TESTS.filter((t) => t.dept === id).map((t) => ({ name: t.billName, price: t.fee }));
+            const merged = [...extras, ...catalog.filter((c) => !extras.some((e) => e.name === c.name))];
             void rateRev;
-            const filtered = catalog.filter((t) => !addQuery || t.name.toLowerCase().includes(addQuery.toLowerCase()));
+            const filtered = merged.filter((t) => !addQuery || t.name.toLowerCase().includes(addQuery.toLowerCase()));
             return (
               <div key={id} className={`border-2 rounded-xl p-4 ${meta.panel}`}>
                 <div className="grid grid-cols-1 lg:grid-cols-[1fr_140px_140px] gap-3 items-start">

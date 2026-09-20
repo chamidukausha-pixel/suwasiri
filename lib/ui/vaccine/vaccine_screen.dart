@@ -214,7 +214,7 @@ class _VaccineScreenState extends State<VaccineScreen> {
                   ),
                 ),
               SoftCard(
-                color: const Color(0xFFF1F5F9),
+                color: AppColors.trustBlueSoft,
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -261,7 +261,7 @@ class _MohPortalCard extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF0D1B2E), Color(0xFF071526)],
+          colors: [AppColors.brandBlueDeep, AppColors.trustBlueDark],
         ),
         borderRadius: BorderRadius.circular(20),
       ),
@@ -325,12 +325,12 @@ class _MohPortalCard extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.circle, size: 8, color: Color(0xFF00E676)),
+                    const Icon(Icons.circle, size: 8, color: AppColors.emerald),
                     const SizedBox(width: 4),
                     Text(
                       l.t('liveSyncedCaps'),
                       style: const TextStyle(
-                        color: Color(0xFF00E676),
+                        color: AppColors.emerald,
                         fontWeight: FontWeight.w800,
                         fontSize: 10,
                       ),
@@ -347,7 +347,7 @@ class _MohPortalCard extends StatelessWidget {
                 child: _MohStatBox(
                   label: l.t('syncTimestamp'),
                   value: time,
-                  valueColor: const Color(0xFF00E676),
+                  valueColor: AppColors.emerald,
                 ),
               ),
               const SizedBox(width: 10),
@@ -371,7 +371,7 @@ class _MohPortalCard extends StatelessWidget {
             child: Row(
               children: [
                 const Icon(Icons.campaign_outlined,
-                    color: Color(0xFFF472B6), size: 18),
+                    color: AppColors.trustBlue, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -540,7 +540,7 @@ class _ActiveProtocolCard extends StatelessWidget {
                 Text(
                   '${l.t('immunityIndex')}: $immunity%',
                   style: const TextStyle(
-                    color: Color(0xFF00E676),
+                    color: AppColors.emerald,
                     fontWeight: FontWeight.w800,
                     fontSize: 12,
                   ),

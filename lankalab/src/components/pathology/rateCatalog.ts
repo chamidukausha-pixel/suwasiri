@@ -1,4 +1,5 @@
 import { testCatalogItems } from "../../data/mockData";
+import { MEDICAL_TESTS } from "../../data/medicalTests";
 import { getTestPrice } from "../BillingDashboard";
 
 export type DeptId =
@@ -50,53 +51,45 @@ function asEntry(name: string, fee: number, entryType: EntryType = "Test"): Rate
   };
 }
 
+function catalogSeed(dept: DeptId): RateEntry[] {
+  return MEDICAL_TESTS.filter((t) => t.dept === dept).map((t) => asEntry(t.billName, t.fee));
+}
+
 const LAB_SEED: RateEntry[] = [
-  ["ABG", 100],
-  ["AEC", 100],
-  ["AFB", 100],
-  ["AFP", 100],
-  ["A/G Ratio", 100],
-  ["AMH", 100],
-  ["AMH Panel", 100],
-  ["Ammonia", 100],
-  ["Dengue (Card Method)", 100],
-  ["DLC", 100],
-  ["G6PD", 100],
-  ["TSH", 100],
-  ["CBC (with absolute counts)", 500],
-  ["FBC + ESR", 2500],
-  ["Lipid Profile", 3200],
-  ["HbA1c + Fasting Glucose", 2200],
-  ["Liver Function Test (LFT)", 4000],
-  ["KFT without eGFR", 100],
-  ...testCatalogItems.map((item) => [item.name, getTestPrice(item.name)] as const),
-].map(([name, fee]) => asEntry(String(name), Number(fee), String(name).toLowerCase().includes("panel") ? "Panel" : "Test"));
+  ...catalogSeed("LAB"),
+  ...(
+    [
+      ["AEC", 100],
+      ["AFB", 100],
+      ["AFP", 100],
+      ["A/G Ratio", 100],
+      ["AMH", 100],
+      ["AMH Panel", 100],
+      ["Ammonia", 100],
+      ["Dengue (Card Method)", 100],
+      ["G6PD", 100],
+      ["CBC (with absolute counts)", 500],
+      ["FBC + ESR", 2500],
+      ["HbA1c + Fasting Glucose", 2200],
+      ["KFT without eGFR", 100],
+      ...testCatalogItems.map((item) => [item.name, getTestPrice(item.name)] as const),
+    ] as const
+  ).map(([name, fee]) => asEntry(String(name), Number(fee), String(name).toLowerCase().includes("panel") ? "Panel" : "Test")),
+];
 
 const SEED_BY_DEPT: Record<DeptId, RateEntry[]> = {
   LAB: LAB_SEED,
-  USG: [
-    asEntry("2d Echo", 1800),
-    asEntry("Upper Abdomen", 400),
-    asEntry("KUB", 1500),
-    asEntry("Pelvis", 1800),
-    asEntry("Thyroid USG", 2200),
-    asEntry("Obstetric scan", 2500),
-  ],
-  "DIGITAL XRAY": [
-    asEntry("Chest PA", 1200),
-    asEntry("KUB X-ray", 1400),
-    asEntry("Cervical spine", 1800),
-    asEntry("Lumbar spine", 2000),
-  ],
+  USG: [...catalogSeed("USG"), asEntry("2d Echo", 1800), asEntry("Upper Abdomen", 400), asEntry("KUB", 1500), asEntry("Pelvis", 1800), asEntry("Thyroid USG", 2200), asEntry("Obstetric scan", 2500)],
+  "DIGITAL XRAY": [...catalogSeed("DIGITAL XRAY"), asEntry("Chest PA", 1200), asEntry("KUB X-ray", 1400), asEntry("Cervical spine", 1800), asEntry("Lumbar spine", 2000)],
   XRAY: [asEntry("Chest PA", 900), asEntry("Hand AP/Lat", 800), asEntry("Knee AP/Lat", 1100)],
-  "OUTSOURCE LAB": [asEntry("Histopathology block", 4500), asEntry("GeneXpert", 6200)],
-  ECG: [asEntry("12-lead ECG", 800), asEntry("ECG with report", 1200)],
-  "CT SCAN": [asEntry("CT Brain", 12000), asEntry("CT Chest", 18000)],
-  MRI: [asEntry("MRI Brain", 28000), asEntry("MRI Lumbar spine", 32000)],
-  EPS: [asEntry("EP study", 8500)],
+  "OUTSOURCE LAB": [...catalogSeed("OUTSOURCE LAB"), asEntry("Histopathology block", 4500), asEntry("GeneXpert", 6200)],
+  ECG: [...catalogSeed("ECG"), asEntry("12-lead ECG", 800), asEntry("ECG with report", 1200)],
+  "CT SCAN": [...catalogSeed("CT SCAN"), asEntry("CT Brain", 12000), asEntry("CT Chest", 18000)],
+  MRI: [...catalogSeed("MRI"), asEntry("MRI Brain", 28000), asEntry("MRI Lumbar spine", 32000)],
+  EPS: [...catalogSeed("EPS"), asEntry("EP study", 8500)],
   OPG: [asEntry("OPG", 2500), asEntry("Lateral cephalogram", 2800)],
   CARDIOLOGY: [asEntry("2d Echo", 1800), asEntry("TMT", 4500), asEntry("Holter 24h", 6500)],
-  EEG: [asEntry("EEG routine", 5500)],
+  EEG: [...catalogSeed("EEG"), asEntry("EEG routine", 5500)],
   MAMMOGRAPHY: [asEntry("Bilateral mammogram", 7200)],
 };
 
@@ -119,13 +112,37 @@ function seedStore(): RateStore {
   return { lists, activeListId, rows };
 }
 
+function mergeCatalogTests(store: RateStore): RateStore {
+  let changed = false;
+  (Object.keys(SEED_BY_DEPT) as DeptId[]).forEach((dept) => {
+    const listId = store.activeListId[dept];
+    if (!listId) return;
+    const rows = store.rows[listId] || [];
+    const extras = MEDICAL_TESTS.filter((t) => t.dept === dept).filter((t) => {
+      const keys = [t.billName, t.code, t.fullForm].map((s) => s.toLowerCase());
+      return !rows.some((r) => keys.some((k) => r.name.toLowerCase() === k || r.name.toLowerCase().includes(k)));
+    });
+    if (!extras.length) return;
+    store.rows[listId] = [...rows, ...extras.map((t) => asEntry(t.billName, t.fee))];
+    changed = true;
+  });
+  if (changed) {
+    try {
+      localStorage.setItem(STORE, JSON.stringify(store));
+    } catch {
+      /* ignore quota */
+    }
+  }
+  return store;
+}
+
 export function loadRateStore(): RateStore {
   try {
     const raw = localStorage.getItem(STORE);
     if (!raw) return seedStore();
     const parsed = JSON.parse(raw) as RateStore;
     if (!parsed?.lists?.length) return seedStore();
-    return parsed;
+    return mergeCatalogTests(parsed);
   } catch {
     return seedStore();
   }

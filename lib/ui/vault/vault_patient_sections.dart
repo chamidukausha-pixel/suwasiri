@@ -18,7 +18,7 @@ import 'lab_report_detail_sheet.dart';
 import 'prescription_form_view.dart';
 import 'previous_medical_history_panel.dart';
 
-/// Pending e-prescriptions only — shown above AI Lab Assistant in Vault.
+/// Pending e-prescriptions only  shown above AI Lab Assistant in Vault.
 class VaultEPrescriptionSection extends StatelessWidget {
   const VaultEPrescriptionSection({super.key, required this.state});
 
@@ -186,7 +186,7 @@ class IssuedMedicalHistorySection extends StatelessWidget {
   static const _medColor = Color(0xFF1A66FF);
   static const _labColor = Color(0xFF0D9488);
   static const _vaxColor = Color(0xFF059669);
-  static const _certColor = Color(0xFF7C3AED);
+  static const _certColor = AppColors.trustBlue;
   static const _noteColor = Color(0xFFD97706);
 
   @override
@@ -308,7 +308,7 @@ class IssuedMedicalHistorySection extends StatelessWidget {
                 icon: Icons.folder_shared_outlined,
                 title: 'Previous medical history',
                 count: state.previousMedical.length,
-                color: const Color(0xFF7C3AED),
+                color: const AppColors.trustBlue,
                 selected: state.healthTab == HealthHistoryTab.previousHistory,
                 onTap: () => context
                     .read<VaultCubit>()
@@ -742,7 +742,7 @@ class _CertificatesList extends StatelessWidget {
                   style: const TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 18,
-                    color: Color(0xFF7C3AED),
+                    color: AppColors.trustBlue,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -859,12 +859,12 @@ class _CertificatesList extends StatelessWidget {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF7C3AED).withValues(alpha: 0.15),
+                        color: const AppColors.trustBlue.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(
                         Icons.workspace_premium_outlined,
-                        color: Color(0xFF7C3AED),
+                        color: AppColors.trustBlue,
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -890,7 +890,7 @@ class _CertificatesList extends StatelessWidget {
                           Text(
                             l.t('tapToViewCert'),
                             style: const TextStyle(
-                              color: Color(0xFF7C3AED),
+                              color: AppColors.trustBlue,
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
                             ),

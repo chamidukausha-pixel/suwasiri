@@ -10,7 +10,7 @@ import '../../data/models/appointment.dart';
 import '../../localization/app_localizations.dart';
 
 /// HotDoc-style forest green used for primary booking CTAs.
-const bookingGreen = Color(0xFF217D4C);
+const bookingGreen = AppColors.emerald;
 
 class DoctorAvatar extends StatelessWidget {
   const DoctorAvatar({

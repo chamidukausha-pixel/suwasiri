@@ -23,6 +23,7 @@ import {
   syncResultToSuwasiriVault,
 } from "../sync/gpCareResultSync";
 import { syncClinicAndTextPatient } from "../sync/completeNotify";
+import { uniqueHealthId } from "../utils/healthId";
 
 type Props = {
   order: LabOrder;
@@ -106,38 +107,38 @@ export default function LabOrderActions({ order, onPatch }: Props) {
         <Building2 className="w-3 h-3" />
         {busy === "clinic" ? "…" : "Clinic"}
       </button>
-      {!critical && (
-        <button
-          type="button"
-          title="Sync to patient Suwasiri app · Vault → Lab reports"
-          disabled={busy !== null}
-          onClick={() =>
-            void run("vault", async () => {
-              let vaultId = order.suwasiriBarcode || "";
-              if (!order.gpCareSyncedAt) {
-                const clinic = await syncResultToGpCareClinic(order);
-                if (clinic.ok) {
-                  onPatch(order.id, { gpCareSyncedAt: new Date().toISOString() });
-                  vaultId = clinic.suwasiriPatientId || vaultId;
-                }
+      <button
+        type="button"
+        title="Sync to this patient's Suwasiri Vault → Lab reports (under each test name)"
+        disabled={busy !== null}
+        onClick={() =>
+          void run("vault", async () => {
+            const healthId = uniqueHealthId(order);
+            const tagged = { ...order, suwasiriBarcode: healthId };
+            onPatch(order.id, { suwasiriBarcode: healthId });
+            let vaultId = healthId;
+            if (!order.gpCareSyncedAt) {
+              const clinic = await syncResultToGpCareClinic(tagged);
+              if (clinic.ok) {
+                onPatch(order.id, { gpCareSyncedAt: new Date().toISOString(), suwasiriBarcode: clinic.suwasiriPatientId || healthId });
+                vaultId = clinic.suwasiriPatientId || healthId;
               }
-              const vault = await syncResultToSuwasiriVault(order, vaultId);
-              if (!vault.ok) {
-                alert(vault.error || "Could not sync to Suwasiri Vault.");
-                return;
-              }
-              onPatch(order.id, { suwasiriSyncedAt: new Date().toISOString() });
-              alert(`Sent to ${order.patientName}'s Suwasiri Vault → Lab reports.`);
-            })
-          }
-          className={`px-1.5 py-1 rounded-md text-[8px] font-black uppercase inline-flex items-center gap-0.5 ${
-            order.suwasiriSyncedAt ? "bg-emerald-600 text-white" : "bg-emerald-100 text-emerald-900 hover:bg-emerald-200"
-          }`}
-        >
-          <Smartphone className="w-3 h-3" />
-          {busy === "vault" ? "…" : "App"}
-        </button>
-      )}
+            }
+            const vault = await syncResultToSuwasiriVault(tagged, vaultId);
+            if (!vault.ok) {
+              alert(vault.error || "Could not sync to Suwasiri Vault.");
+              return;
+            }
+            onPatch(order.id, { suwasiriSyncedAt: new Date().toISOString(), suwasiriBarcode: vault.suwasiriPatientId || healthId });
+          })
+        }
+        className={`px-1.5 py-1 rounded-md text-[8px] font-black uppercase inline-flex items-center gap-0.5 ${
+          order.suwasiriSyncedAt ? "bg-emerald-600 text-white" : "bg-emerald-100 text-emerald-900 hover:bg-emerald-200"
+        }`}
+      >
+        <Smartphone className="w-3 h-3" />
+        {busy === "vault" ? "…" : "App"}
+      </button>
       <button
         type="button"
         title="Mark critical — open GP Care patient file in red"

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/theme/app_colors.dart';
 import '../../data/models/user_profile.dart';
 import '../../data/models/vault_report.dart';
 import '../../localization/app_localizations.dart';
@@ -29,7 +30,7 @@ class PrescriptionFormView extends StatelessWidget {
         Text(
           l.t('issuedPrescriptionForm'),
           style: const TextStyle(
-            color: Color(0xFF64748B),
+            color: AppColors.slateMuted,
             fontSize: 11,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.3,
@@ -87,10 +88,10 @@ class _FormCopy extends StatelessWidget {
   final String doctorName;
   final String clinicName;
 
-  static const _ink = Color(0xFF1A1A1A);
-  static const _teal = Color(0xFFB8D4D8);
-  static const _tealDeep = Color(0xFF7BA8B0);
-  static const _bodyWash = Color(0xFFE8F4F6);
+  static const _ink = AppColors.trustBlueDark;
+  static const _teal = AppColors.trustBlueSoft;
+  static const _tealDeep = AppColors.trustBlue;
+  static const _bodyWash = AppColors.trustBlueSoft;
 
   @override
   Widget build(BuildContext context) {
@@ -129,7 +130,7 @@ class _FormCopy extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFF9CA3AF), width: 1.2),
+        border: Border.all(color: AppColors.border, width: 1.2),
       ),
       child: IntrinsicHeight(
         child: Row(
@@ -146,7 +147,7 @@ class _FormCopy extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Color(0xFF334155),
+                    color: AppColors.trustBlueDark,
                     fontSize: 9,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.4,
@@ -352,7 +353,7 @@ class _FormCopy extends StatelessWidget {
                         l.t('rxDoctorSign'),
                         textAlign: TextAlign.center,
                         style: const TextStyle(
-                          color: Color(0xFF1E3A3F),
+                          color: AppColors.brandBlueDeep,
                           fontSize: 9,
                           fontWeight: FontWeight.w700,
                         ),
@@ -402,7 +403,7 @@ class _FormCopy extends StatelessWidget {
                       child: Text(
                         l.t('rxPrivacyNote'),
                         style: const TextStyle(
-                          color: Color(0xFF64748B),
+                          color: AppColors.slateMuted,
                           fontSize: 7,
                           fontStyle: FontStyle.italic,
                         ),
@@ -434,8 +435,8 @@ class _TinyCheck extends StatelessWidget {
           width: 10,
           height: 10,
           decoration: BoxDecoration(
-            border: Border.all(color: const Color(0xFF1A1A1A)),
-            color: checked ? const Color(0xFF1A1A1A) : Colors.white,
+            border: Border.all(color: AppColors.trustBlueDark),
+            color: checked ? AppColors.trustBlueDark : Colors.white,
           ),
           child: checked
               ? const Icon(Icons.check, size: 8, color: Colors.white)
@@ -445,7 +446,7 @@ class _TinyCheck extends StatelessWidget {
         Text(
           label,
           style: const TextStyle(
-            color: Color(0xFF1A1A1A),
+            color: AppColors.trustBlueDark,
             fontSize: 8,
             fontWeight: FontWeight.w600,
           ),

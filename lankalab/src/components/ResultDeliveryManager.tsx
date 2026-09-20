@@ -1,45 +1,39 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { 
   LabOrder, 
-  DiagnosticReportFormat, 
-  QuickShareLog, 
-  MQLinkRecord 
+  QuickShareLog
 } from '../types';
+import { patientNameTone, uniqueHealthId } from '../utils/healthId';
 import { 
-  initialQuickShareLogs, 
-  initialCumulativeHistories,
-  initialMQLinkRecords 
+  initialQuickShareLogs
 } from '../data/mockData';
 import { 
   Search, 
   Share2, 
-  Clock, 
-  ShieldCheck, 
-  Lock, 
-  Unlock, 
   FileText, 
   RefreshCw, 
-  Send, 
-  ExternalLink, 
-  Copy, 
-  Download, 
-  History, 
   Laptop, 
-  TrendingUp, 
-  TrendingDown, 
-  AlertCircle,
   CheckCircle2,
-  FileCheck
+  Pencil
 } from 'lucide-react';
 
 interface ResultDeliveryManagerProps {
   orders: LabOrder[];
   onCompletedNavigate?: (order: LabOrder) => void;
+  onEnterResults?: (order: LabOrder) => void;
 }
 
-export default function ResultDeliveryManager({ orders, onCompletedNavigate }: ResultDeliveryManagerProps) {
+export default function ResultDeliveryManager({ orders, onCompletedNavigate, onEnterResults }: ResultDeliveryManagerProps) {
   const deliveryQueue = useMemo(
-    () => orders.filter((o) => o.status !== 'COMPLETED'),
+    () =>
+      orders
+        .filter((o) => o.status !== 'COMPLETED')
+        .slice()
+        .sort((a, b) => {
+          const ta = a.orderTimestamp instanceof Date ? a.orderTimestamp.getTime() : 0;
+          const tb = b.orderTimestamp instanceof Date ? b.orderTimestamp.getTime() : 0;
+          return tb - ta;
+        }),
     [orders]
   );
   const [selectedOrderId, setSelectedOrderId] = useState<string>(
@@ -47,7 +41,6 @@ export default function ResultDeliveryManager({ orders, onCompletedNavigate }: R
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'CRITICAL' | 'PROCESSING' | 'PENDING'>('ALL');
-  const [reportFormat, setReportFormat] = useState<DiagnosticReportFormat>('STANDARD');
 
   // Quick Share MDT state
   const [quickShareLogs, setQuickShareLogs] = useState<QuickShareLog[]>(initialQuickShareLogs);
@@ -59,16 +52,8 @@ export default function ResultDeliveryManager({ orders, onCompletedNavigate }: R
   const [shareNote, setShareNote] = useState('Urgent MDT review requested regarding acute Troponin-I kinetic surge.');
   const [shareSuccessMsg, setShareSuccessMsg] = useState<string | null>(null);
 
-  // Confidential unlock state
-  const [isConfidentialUnlocked, setIsConfidentialUnlocked] = useState(false);
-  const [confidentialPasscode, setConfidentialPasscode] = useState('');
-  const [confidentialError, setConfidentialError] = useState(false);
-
-  // MQLink EDI state
-  const [mqRecords, setMqRecords] = useState<MQLinkRecord[]>(initialMQLinkRecords);
   const [isPollingMQ, setIsPollingMQ] = useState(false);
   const [mqSuccessAlert, setMqSuccessAlert] = useState<string | null>(null);
-  const [selectedPms, setSelectedPms] = useState<string>('ALL');
 
   useEffect(() => {
     if (!deliveryQueue.some((o) => o.id === selectedOrderId)) {
@@ -86,9 +71,6 @@ export default function ResultDeliveryManager({ orders, onCompletedNavigate }: R
     const matchesStatus = statusFilter === 'ALL' || o.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
-
-  // Cumulative data for selected patient
-  const cumulativeData = selectedOrder ? initialCumulativeHistories[selectedOrder.patientName] : undefined;
 
   // Submit Quick Share
   const handleQuickShareSubmit = (e: React.FormEvent) => {
@@ -115,17 +97,6 @@ export default function ResultDeliveryManager({ orders, onCompletedNavigate }: R
     setTimeout(() => setShareSuccessMsg(null), 5000);
   };
 
-  // Handle Confidential Unlock
-  const handleUnlockConfidential = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (confidentialPasscode === '1234' || confidentialPasscode.length >= 4) {
-      setIsConfidentialUnlocked(true);
-      setConfidentialError(false);
-    } else {
-      setConfidentialError(true);
-    }
-  };
-
   // Trigger MQLink Poll
   const handleTriggerMQLinkPoll = () => {
     setIsPollingMQ(true);
@@ -143,9 +114,6 @@ export default function ResultDeliveryManager({ orders, onCompletedNavigate }: R
       <div className="bg-white border border-[#c1c7cf] rounded-xl p-5 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded text-[11px] font-extrabold bg-blue-100 text-blue-900 uppercase tracking-wider">
-              Medway Secure Clinician Portal
-            </span>
             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               Real-Time Online Access Active
@@ -204,10 +172,10 @@ export default function ResultDeliveryManager({ orders, onCompletedNavigate }: R
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                 <FileText className="w-4 h-4 text-primary" />
-                Live Patient Results ({filteredOrders.length})
+                Registered patients ({filteredOrders.length})
               </h3>
               <span className="text-[10px] text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded">
-                Live Feed
+                Pending delivery
               </span>
             </div>
 
@@ -225,19 +193,25 @@ export default function ResultDeliveryManager({ orders, onCompletedNavigate }: R
 
             {/* Status Filter Buttons */}
             <div className="flex gap-1 overflow-x-auto no-scrollbar pb-1">
-              {(['ALL', 'CRITICAL', 'PROCESSING', 'PENDING'] as const).map(st => (
+              {(['ALL', 'CRITICAL', 'PROCESSING', 'PENDING'] as const).map(st => {
+                const tones = {
+                  ALL: { on: 'bg-slate-800 text-white', off: 'bg-slate-100 text-slate-600 hover:bg-slate-200' },
+                  CRITICAL: { on: 'bg-red-600 text-white', off: 'bg-red-100 text-red-700 hover:bg-red-200' },
+                  PROCESSING: { on: 'bg-emerald-600 text-white', off: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' },
+                  PENDING: { on: 'bg-sky-600 text-white', off: 'bg-sky-100 text-sky-700 hover:bg-sky-200' },
+                }[st];
+                return (
                 <button
                   key={st}
                   onClick={() => setStatusFilter(st)}
                   className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase transition-all ${
-                    statusFilter === st 
-                      ? 'bg-slate-900 text-white' 
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    statusFilter === st ? tones.on : tones.off
                   }`}
                 >
                   {st}
                 </button>
-              ))}
+                );
+              })}
             </div>
 
             {/* Orders List */}
@@ -250,7 +224,6 @@ export default function ResultDeliveryManager({ orders, onCompletedNavigate }: R
                     key={order.id}
                     onClick={() => {
                       setSelectedOrderId(order.id);
-                      setIsConfidentialUnlocked(false);
                     }}
                     className={`p-3 rounded-lg border text-xs cursor-pointer transition-all ${
                       isSelected
@@ -261,7 +234,7 @@ export default function ResultDeliveryManager({ orders, onCompletedNavigate }: R
                     <div className="flex justify-between items-start">
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-900">{order.patientName}</span>
+                          <span className={`font-black ${patientNameTone(order.patientName)}`}>{order.patientName}</span>
                           <span className="text-[10px] text-slate-500">({order.age}y {order.gender[0]})</span>
                         </div>
                         <p className="text-[11px] text-primary font-medium">{order.testType}</p>
@@ -269,10 +242,12 @@ export default function ResultDeliveryManager({ orders, onCompletedNavigate }: R
 
                       <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider ${
                         order.status === 'CRITICAL'
-                          ? 'bg-rose-100 text-rose-800 animate-pulse'
+                          ? 'bg-red-600 text-white animate-pulse'
+                          : order.status === 'PROCESSING'
+                          ? 'bg-emerald-500 text-white'
                           : order.status === 'COMPLETED'
                           ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-amber-100 text-amber-800'
+                          : 'bg-sky-500 text-white'
                       }`}>
                         {order.status}
                       </span>
@@ -282,6 +257,16 @@ export default function ResultDeliveryManager({ orders, onCompletedNavigate }: R
                       <span className="font-mono">#{order.specimenId}</span>
                       <div className="flex items-center gap-1.5">
                         <span>{order.orderTime}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEnterResults?.(order);
+                          }}
+                          className="inline-flex items-center gap-0.5 text-sky-700 font-bold hover:underline"
+                        >
+                          <Pencil className="w-3 h-3" /> Enter results
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -310,14 +295,14 @@ export default function ResultDeliveryManager({ orders, onCompletedNavigate }: R
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <h2 className="text-lg font-bold text-slate-900 font-sans">
+                      <h2 className={`text-lg font-black font-sans ${patientNameTone(selectedOrder.patientName)}`}>
                         {selectedOrder.patientName}
                       </h2>
                       <span className="text-xs text-slate-500 font-medium">
                         • {selectedOrder.age} yrs • {selectedOrder.gender}
                       </span>
                       <span className="text-xs bg-slate-200 text-slate-800 font-mono px-2 py-0.5 rounded font-semibold">
-                        Specimen: #{selectedOrder.specimenId}
+                        Specimen: #{selectedOrder.specimenId} · Health ID: {uniqueHealthId(selectedOrder)}
                       </span>
                     </div>
                     <p className="text-xs text-slate-600 mt-0.5">
@@ -328,6 +313,14 @@ export default function ResultDeliveryManager({ orders, onCompletedNavigate }: R
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
+                      onClick={() => onEnterResults?.(selectedOrder)}
+                      className="px-3 py-1.5 border border-sky-700 text-sky-800 rounded-lg text-[11px] font-black uppercase tracking-wide inline-flex items-center gap-1.5 bg-white hover:bg-sky-50"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Enter results
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => {
                         onCompletedNavigate?.(selectedOrder);
                       }}
@@ -336,50 +329,14 @@ export default function ResultDeliveryManager({ orders, onCompletedNavigate }: R
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       Completed
                     </button>
-                  {/* Flexible Report Format Selector */}
-                  <div className="flex items-center gap-1 bg-white border border-slate-300 p-1 rounded-lg text-xs">
-                    {(['STANDARD', 'PRIVATE', 'CONFIDENTIAL', 'CUMULATIVE', 'INTERIM'] as DiagnosticReportFormat[]).map(fmt => (
-                      <button
-                        key={fmt}
-                        onClick={() => setReportFormat(fmt)}
-                        className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase transition-all ${
-                          reportFormat === fmt
-                            ? 'bg-primary text-white shadow-xs'
-                            : 'text-slate-600 hover:bg-slate-100'
-                        }`}
-                      >
-                        {fmt}
-                      </button>
-                    ))}
                   </div>
-                  </div>
-                </div>
-
-                {/* Report Format Explanatory Banner */}
-                <div className="p-2.5 bg-blue-50/60 border border-blue-100 rounded-lg text-xs text-slate-700 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <FileCheck className="w-4 h-4 text-primary shrink-0" />
-                    <span>
-                      {reportFormat === 'STANDARD' && 'Standard authorized pathology report with full diagnostic indices.'}
-                      {reportFormat === 'PRIVATE' && 'Private Reporting: View restricted exclusively to the credentialed ordering physician.'}
-                      {reportFormat === 'CONFIDENTIAL' && 'Confidential Mode: Sensitive biomarker data masked. Requires session authorization.'}
-                      {reportFormat === 'CUMULATIVE' && 'Cumulative Reporting: Longitudinal delta trends across multiple patient visits.'}
-                      {reportFormat === 'INTERIM' && 'Interim Reporting: Real-time preliminary release while confirmation cultures/assays run.'}
-                    </span>
-                  </div>
-
-                  <span className="text-[10px] font-mono text-slate-500 uppercase">
-                    Audit Token: SHA-256 Validated
-                  </span>
                 </div>
               </div>
 
               {/* Body Content based on selected Report Format */}
               <div className="p-5 space-y-6">
 
-                {/* Format 1: STANDARD REPORT */}
-                {reportFormat === 'STANDARD' && (
-                  <div className="space-y-4">
+                <div className="space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                       <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                         Assay Diagnostic Values ({selectedOrder.testType})
@@ -439,292 +396,6 @@ export default function ResultDeliveryManager({ orders, onCompletedNavigate }: R
                       </div>
                     )}
                   </div>
-                )}
-
-                {/* Format 2: PRIVATE REPORT */}
-                {reportFormat === 'PRIVATE' && (
-                  <div className="space-y-4">
-                    <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2">
-                      <div className="flex items-center gap-2 text-amber-900">
-                        <Lock className="w-4 h-4 text-amber-700" />
-                        <span className="font-bold text-xs uppercase tracking-wider">Private Clinician-Only Encrypted View</span>
-                      </div>
-                      <p className="text-xs text-amber-800 leading-relaxed">
-                        This diagnostic report is designated as <b>Private</b> under Australian Medway &amp; Sri Lanka MOH clinical governance protocols. Only authenticated ordering practitioners (Dr. Sunil Wickramasinghe / Dr. K. L. Fernando) or authorized delegates may view this record.
-                      </p>
-                    </div>
-
-                    <div className="p-4 bg-white border border-slate-200 rounded-lg text-xs space-y-2 font-mono">
-                      <div className="flex justify-between border-b border-slate-100 pb-2">
-                        <span className="text-slate-500">Authorized Clinician:</span>
-                        <span className="font-bold text-slate-900">Dr. Sunil Wickramasinghe (SLMC #44091)</span>
-                      </div>
-                      <div className="flex justify-between border-b border-slate-100 pb-2">
-                        <span className="text-slate-500">Security Clearance:</span>
-                        <span className="text-emerald-700 font-bold">Verified Direct Access</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Access Record:</span>
-                        <span className="text-slate-700">Logged to audit node #AUDIT-PVT-2026-99</span>
-                      </div>
-                    </div>
-
-                    {/* Render standard results under verified session */}
-                    <div className="border border-slate-200 rounded-lg overflow-hidden">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
-                          <tr>
-                            <th className="py-2.5 px-3">Parameter</th>
-                            <th className="py-2.5 px-3">Value</th>
-                            <th className="py-2.5 px-3">Reference Range</th>
-                            <th className="py-2.5 px-3 text-right">Private Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {selectedOrder.results?.map((res, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50">
-                              <td className="py-2.5 px-3 font-semibold text-slate-900">{res.parameter}</td>
-                              <td className="py-2.5 px-3 font-mono font-bold text-slate-900">{res.value} {res.unit}</td>
-                              <td className="py-2.5 px-3 text-slate-500 font-mono">{res.referenceRange}</td>
-                              <td className="py-2.5 px-3 text-right">
-                                <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-bold text-[10px]">
-                                  Private Access
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* Format 3: CONFIDENTIAL REPORT */}
-                {reportFormat === 'CONFIDENTIAL' && (
-                  <div className="space-y-4">
-                    {!isConfidentialUnlocked ? (
-                      <div className="p-6 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl text-center space-y-4">
-                        <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center mx-auto">
-                          <Lock className="w-6 h-6" />
-                        </div>
-                        <div className="max-w-md mx-auto">
-                          <h4 className="text-sm font-bold text-slate-900">Sensitive Diagnostic Data Protected</h4>
-                          <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                            This report contains protected genetic, infectious serology, or oncology markers. To access, please re-authenticate with your clinician session PIN.
-                          </p>
-                        </div>
-
-                        <form onSubmit={handleUnlockConfidential} className="max-w-xs mx-auto flex items-center gap-2">
-                          <input
-                            type="password"
-                            placeholder="Enter 4-digit PIN (1234)"
-                            value={confidentialPasscode}
-                            onChange={(e) => setConfidentialPasscode(e.target.value)}
-                            className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono text-center focus:outline-none focus:ring-2 focus:ring-primary"
-                          />
-                          <button
-                            type="submit"
-                            className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition-all"
-                          >
-                            Unlock
-                          </button>
-                        </form>
-
-                        {confidentialError && (
-                          <p className="text-xs text-rose-600 font-bold">
-                            Invalid PIN. Use clinician demo PIN: <b>1234</b>
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-xs text-emerald-900">
-                          <div className="flex items-center gap-2">
-                            <Unlock className="w-4 h-4 text-emerald-700" />
-                            <span className="font-bold">Confidential Record Unlocked via Session Re-Authentication</span>
-                          </div>
-                          <button
-                            onClick={() => setIsConfidentialUnlocked(false)}
-                            className="text-xs text-emerald-800 underline hover:text-emerald-950 font-semibold"
-                          >
-                            Re-lock Record
-                          </button>
-                        </div>
-
-                        {/* Unlocked Table */}
-                        <div className="border border-slate-200 rounded-lg overflow-hidden">
-                          <table className="w-full text-left text-xs">
-                            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
-                              <tr>
-                                <th className="py-2.5 px-3">Confidential Parameter</th>
-                                <th className="py-2.5 px-3">Value</th>
-                                <th className="py-2.5 px-3">Reference Range</th>
-                                <th className="py-2.5 px-3 text-right">Status</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                              {selectedOrder.results?.map((res, idx) => (
-                                <tr key={idx}>
-                                  <td className="py-2.5 px-3 font-semibold text-slate-900">{res.parameter}</td>
-                                  <td className="py-2.5 px-3 font-mono font-bold text-slate-900">{res.value} {res.unit}</td>
-                                  <td className="py-2.5 px-3 text-slate-500 font-mono">{res.referenceRange}</td>
-                                  <td className="py-2.5 px-3 text-right">
-                                    <span className="px-2 py-0.5 bg-purple-100 text-purple-800 rounded font-bold text-[10px]">
-                                      CONFIDENTIAL DECRYPTED
-                                    </span>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Format 4: CUMULATIVE RESULTS (HISTORICAL DELTA TRENDS) */}
-                {reportFormat === 'CUMULATIVE' && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                      <div>
-                        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                          <History className="w-4 h-4 text-primary" />
-                          Cumulative Longitudinal Pathology Trends
-                        </h4>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          Cross-visit delta comparisons over previous 6–12 months to evaluate therapy response &amp; organ kinetics
-                        </p>
-                      </div>
-                    </div>
-
-                    {cumulativeData && cumulativeData.length > 0 ? (
-                      <div className="space-y-4">
-                        {cumulativeData.map((hist, idx) => (
-                          <div key={idx} className="bg-slate-50/70 border border-slate-200 rounded-xl p-4 space-y-3">
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <span className="font-bold text-slate-900 text-xs">{hist.parameter}</span>
-                                <span className="text-[11px] text-slate-500 ml-1.5">({hist.unit})</span>
-                              </div>
-                              <span className="text-[10px] font-mono text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200 font-semibold">
-                                Ref Range: {hist.referenceRange}
-                              </span>
-                            </div>
-
-                            {/* History Timeline Columns */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                              {hist.history.map((pt, pIdx) => {
-                                const isLatest = pIdx === hist.history.length - 1;
-                                return (
-                                  <div 
-                                    key={pIdx} 
-                                    className={`p-3 rounded-lg border text-xs space-y-1 ${
-                                      isLatest 
-                                        ? 'bg-white border-primary shadow-xs' 
-                                        : 'bg-white border-slate-200'
-                                    }`}
-                                  >
-                                    <div className="flex justify-between text-[10px] text-slate-500">
-                                      <span className="font-semibold">{pt.visitLabel}</span>
-                                      <span>{pt.date}</span>
-                                    </div>
-                                    <div className="flex items-baseline justify-between pt-1">
-                                      <span className="text-base font-bold font-mono text-slate-900">
-                                        {pt.displayValue}
-                                      </span>
-                                      {pt.isAbnormal ? (
-                                        <span className="px-1.5 py-0.2 bg-rose-100 text-rose-800 rounded font-bold text-[9px] flex items-center gap-0.5">
-                                          <TrendingUp className="w-3 h-3" /> Abnormal
-                                        </span>
-                                      ) : (
-                                        <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded font-bold text-[9px] flex items-center gap-0.5">
-                                          <TrendingDown className="w-3 h-3" /> Target
-                                        </span>
-                                      )}
-                                    </div>
-                                    {pt.notes && (
-                                      <p className="text-[10px] text-slate-600 italic pt-1 border-t border-slate-100">
-                                        {pt.notes}
-                                      </p>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-8 text-center bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-500 italic">
-                        No previous historical visits logged for this patient. Current order represents primary baseline.
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Format 5: INTERIM RESULTS */}
-                {reportFormat === 'INTERIM' && (
-                  <div className="space-y-4">
-                    <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs text-amber-900">
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-amber-700" />
-                        <div>
-                          <span className="font-bold block">Interim Diagnostic Release (Preliminary Report)</span>
-                          <span className="text-[11px] text-amber-800">
-                            Immediate results released to assist urgent bedside decisions while secondary confirmations remain in progress.
-                          </span>
-                        </div>
-                      </div>
-                      <span className="px-2 py-0.5 bg-amber-200 text-amber-900 font-mono text-[10px] font-bold rounded">
-                        PARTIAL TAT
-                      </span>
-                    </div>
-
-                    <div className="border border-slate-200 rounded-lg overflow-hidden">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
-                          <tr>
-                            <th className="py-2.5 px-3">Assay Parameter</th>
-                            <th className="py-2.5 px-3">Value</th>
-                            <th className="py-2.5 px-3">Status</th>
-                            <th className="py-2.5 px-3 text-right">Action Required</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {selectedOrder.results?.map((res, idx) => (
-                            <tr key={idx} className="bg-emerald-50/30">
-                              <td className="py-2.5 px-3 font-semibold text-slate-900">{res.parameter}</td>
-                              <td className="py-2.5 px-3 font-mono font-bold text-slate-900">{res.value} {res.unit}</td>
-                              <td className="py-2.5 px-3">
-                                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px] flex items-center gap-1 w-max">
-                                  <CheckCircle2 className="w-3 h-3" /> Released (Preliminary)
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-3 text-right text-[11px] text-slate-600">
-                                Bedside review cleared
-                              </td>
-                            </tr>
-                          ))}
-                          
-                          {/* Simulated pending parameters */}
-                          <tr className="bg-slate-50/70">
-                            <td className="py-2.5 px-3 font-semibold text-slate-700">Extended Culture &amp; Antibiotic Sensitivity</td>
-                            <td className="py-2.5 px-3 text-slate-400 font-mono italic">Pending 48h Incubation</td>
-                            <td className="py-2.5 px-3">
-                              <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[10px] flex items-center gap-1 w-max">
-                                <Clock className="w-3 h-3" /> Incubating (ETA 24h)
-                              </span>
-                            </td>
-                            <td className="py-2.5 px-3 text-right text-[11px] text-slate-500">
-                              Auto-updates via MQLink
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
 
                 {/* Quick Share Audit Trail for Current Order */}
                 <div className="pt-4 border-t border-slate-200 space-y-3">

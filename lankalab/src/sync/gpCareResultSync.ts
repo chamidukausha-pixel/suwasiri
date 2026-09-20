@@ -1,6 +1,8 @@
-import { collection, doc, setDoc } from "firebase/firestore";
+import { collection, doc, getDocs, limit, query, setDoc, where } from "firebase/firestore";
 import { getFirebaseDb, isFirebaseConfigured } from "../firebase";
 import type { LabOrder } from "../types";
+import { splitInvestigations } from "../data/medicalTests";
+import { uniqueHealthId } from "../utils/healthId";
 import { GP_CARE_ORIGIN, publishCriticalAlertToFirestore } from "./gpCareCritical";
 
 export type ResultSyncOutcome = {
@@ -31,6 +33,40 @@ function orderPayload(order: LabOrder, critical: boolean) {
   };
 }
 
+async function findSuwasiriUser(order: LabOrder): Promise<{ id: string; barcode?: string } | null> {
+  if (!isFirebaseConfigured()) return null;
+  const db = getFirebaseDb();
+  const users = collection(db, "users");
+  const barcode = uniqueHealthId(order);
+  const phone = (order.phone || "").trim();
+  const attempts = [
+    barcode ? query(users, where("barcodeNumber", "==", barcode), limit(1)) : null,
+    barcode ? query(users, where("ceylonHealthId", "==", barcode), limit(1)) : null,
+    phone ? query(users, where("mobileNo", "==", phone), limit(1)) : null,
+    phone ? query(users, where("mobileNo", "==", phone.replace(/\s/g, "")), limit(1)) : null,
+  ].filter(Boolean);
+
+  for (const q of attempts) {
+    try {
+      const snap = await getDocs(q!);
+      if (snap.empty) continue;
+      const d = snap.docs[0];
+      const data = d.data();
+      return {
+        id: d.id,
+        barcode: String(data.barcodeNumber || data.ceylonHealthId || barcode || ""),
+      };
+    } catch {
+      /* portal may not be signed in */
+    }
+  }
+  return null;
+}
+
+function slugTest(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "test";
+}
+
 export async function publishLabReportToSuwasiriVault(opts: {
   patientId: string;
   order: LabOrder;
@@ -40,34 +76,46 @@ export async function publishLabReportToSuwasiriVault(opts: {
   const patientId = (opts.patientId || "").trim();
   if (!patientId) return false;
   const order = opts.order;
+  const healthId = uniqueHealthId(order);
   const critical = Boolean(opts.critical || order.flaggedCritical || order.status === "CRITICAL");
+  const tests = splitInvestigations(order.testType);
+  const names = tests.length ? tests : [order.testType];
   const metrics = (order.results || []).map((row) => ({
     name: row.parameter,
     value: `${row.value} ${row.unit}`.trim(),
     status: critical || row.isAbnormal ? (critical ? "critical" : "attention") : "normal",
     normalRange: row.referenceRange || "",
   }));
-  const id = `lankalab-lab-${order.specimenId || order.id}`;
-  await setDoc(
-    doc(collection(getFirebaseDb(), "vault"), id),
-    {
-      patientId,
-      title: order.testType,
-      issuedBy: "LankaLab",
-      date: new Date().toISOString(),
-      category: "Pathology",
-      facility: "LankaLab - Colombo Central",
-      requestedBy: order.connectedClinic || "LankaLab",
-      kind: "lab",
-      clinicalComments: order.notes || "",
-      source: "lankalab",
-      critical,
-      metrics: metrics.length
-        ? metrics
-        : [{ name: order.testType, value: "Report filed", status: critical ? "critical" : "normal", normalRange: "" }],
-    },
-    { merge: true }
-  );
+
+  for (const testName of names) {
+    const id = `lankalab-lab-${order.specimenId || order.id}-${slugTest(testName)}`;
+    const testMetrics = metrics.filter((m) =>
+      m.name.toLowerCase().includes(testName.toLowerCase().slice(0, 8))
+    );
+    await setDoc(
+      doc(collection(getFirebaseDb(), "vault"), id),
+      {
+        patientId,
+        barcodeNumber: healthId,
+        title: testName,
+        issuedBy: "LankaLab",
+        date: new Date().toISOString(),
+        category: "Pathology",
+        facility: "LankaLab - Colombo Central",
+        requestedBy: order.connectedClinic || "LankaLab",
+        kind: "lab",
+        clinicalComments: order.notes || "",
+        source: "lankalab",
+        critical,
+        metrics: (testMetrics.length ? testMetrics : metrics).length
+          ? testMetrics.length
+            ? testMetrics
+            : metrics
+          : [{ name: testName, value: "Report filed", status: critical ? "critical" : "normal", normalRange: "" }],
+      },
+      { merge: true }
+    );
+  }
   return true;
 }
 
@@ -99,15 +147,21 @@ export async function syncResultToGpCareClinic(order: LabOrder): Promise<ResultS
   }
 }
 
-/** Non-critical only: write Suwasiri Vault → Lab reports for that patient. */
+/** Write each selected test onto that Suwasiri patient's Vault → Lab reports. */
 export async function syncResultToSuwasiriVault(order: LabOrder, patientId?: string): Promise<ResultSyncOutcome> {
-  const id = (patientId || order.suwasiriBarcode || "").trim();
+  const healthId = uniqueHealthId(order);
+  const found = await findSuwasiriUser({ ...order, suwasiriBarcode: healthId });
+  const id = (found?.id || patientId || healthId).trim();
   if (!id) {
     return { ok: false, error: "No Unique Health ID / Suwasiri barcode on this order." };
   }
   try {
-    await publishLabReportToSuwasiriVault({ patientId: id, order, critical: false });
-    return { ok: true, suwasiriPatientId: id, patientName: order.patientName };
+    await publishLabReportToSuwasiriVault({
+      patientId: id,
+      order: { ...order, suwasiriBarcode: found?.barcode || healthId },
+      critical: false,
+    });
+    return { ok: true, suwasiriPatientId: found?.barcode || healthId, patientName: order.patientName };
   } catch (err: unknown) {
     return {
       ok: false,

@@ -18,8 +18,8 @@ import '../widgets/common_widgets.dart';
 import '../widgets/profile_avatar.dart';
 import 'unique_health_id_card.dart';
 
-const _kAccentPink = Color(0xFFFCE7F3);
-const _kAccentPinkDeep = Color(0xFFDB2777);
+const _kAccentPink = AppColors.emergencyRedSoft;
+const _kAccentPinkDeep = AppColors.emergencyRed;
 
 /// Accounts-style menu matching the product mockup.
 class AccountsMenuCard extends StatelessWidget {
@@ -92,7 +92,7 @@ class AccountsMenuCard extends StatelessWidget {
           const SizedBox(height: 8),
           Container(
             width: double.infinity,
-            color: dark ? const Color(0xFF1A1A1A) : const Color(0xFFF1F5F9),
+            color: dark ? const Color(0xFF1A1A1A) : AppColors.trustBlueSoft,
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             child: Text(
               'SWITCH ACCOUNT',
@@ -190,7 +190,7 @@ class _DarkModeMenuRow extends StatelessWidget {
       builder: (context, state) {
         final isDark = state.themeMode == ThemeMode.dark;
         final accent = AppColors.isDark(context)
-            ? const Color(0xFF3B1F2B)
+            ? AppColors.brandRedDeep.withValues(alpha: 0.35)
             : _kAccentPink;
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -263,7 +263,7 @@ class _SwitchAccountRow extends StatelessWidget {
         decoration: BoxDecoration(
           color: active
               ? (AppColors.isDark(context)
-                  ? const Color(0xFF3B1F2B)
+                  ? AppColors.brandRedDeep.withValues(alpha: 0.35)
                   : _kAccentPink)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(14),

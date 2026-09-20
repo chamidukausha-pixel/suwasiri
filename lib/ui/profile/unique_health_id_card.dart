@@ -35,7 +35,7 @@ class UniqueHealthIdCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF065F46), Color(0xFF059669)],
+                colors: [AppColors.brandGreenDeep, AppColors.emerald],
               ),
               borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
             ),
@@ -74,7 +74,7 @@ class UniqueHealthIdCard extends StatelessWidget {
                     fontSize: 20,
                     color: AppColors.isDark(context)
                         ? Colors.white
-                        : const Color(0xFF065F46),
+                        : AppColors.brandGreenDeep,
                   ),
                 ),
                 if (user.allergyLabel.isNotEmpty) ...[
@@ -146,7 +146,7 @@ class UniqueHealthIdCard extends StatelessWidget {
                               textAlign: TextAlign.center,
                               style: AppTheme.mono(
                                 fontSize: 13,
-                                color: const Color(0xFF065F46),
+                                color: AppColors.brandGreenDeep,
                                 weight: FontWeight.w700,
                               ),
                             ),
@@ -181,7 +181,7 @@ class UniqueHealthIdCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFECFDF5),
+        color: AppColors.emeraldSoft,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -190,7 +190,7 @@ class UniqueHealthIdCard extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
-              color: Color(0xFF047857),
+              color: AppColors.brandGreenDeep,
               fontSize: 10,
               fontWeight: FontWeight.w700,
             ),
@@ -199,7 +199,7 @@ class UniqueHealthIdCard extends StatelessWidget {
           Text(
             value,
             style: const TextStyle(
-              color: Color(0xFF065F46),
+              color: AppColors.brandGreenDeep,
               fontWeight: FontWeight.w800,
               fontSize: 13,
             ),

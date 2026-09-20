@@ -1,130 +1,9 @@
 import React, { useMemo, useState } from "react";
 import { Pencil, Plus, User, History, FileSearch, Activity, Check, Printer } from "lucide-react";
 import type { LabOrder } from "../types";
+import { panelsForTestType, type Panel, type Param } from "../data/medicalTests";
 
 type ResultRow = NonNullable<LabOrder["results"]>[number];
-
-type FormulaId = "abs-neu" | "abs-lym" | "abs-eos" | "abs-mono" | "abs-bas" | "nlr";
-
-type Param = {
-  id: string;
-  name: string;
-  unit: string;
-  ref: string;
-  indent?: boolean;
-  formula?: FormulaId;
-  formulaExpr?: string;
-};
-
-type Panel = { department: string; title: string; params: Param[] };
-
-const CBC: Panel = {
-  department: "HAEMATOLOGY",
-  title: "CBC (WITH ABSOLUTE COUNTS)",
-  params: [
-    { id: "hb", name: "Hemoglobin", unit: "g/dl", ref: "12 - 15" },
-    { id: "esr", name: "ESR", unit: "mm/hr", ref: "0 - 15" },
-    { id: "tlc", name: "Total Leukocyte Count", unit: "cumm", ref: "4,800 - 10,800" },
-    { id: "diff", name: "Differential Leukocyte Count", unit: "", ref: "" },
-    { id: "neu", name: "Neutrophils", unit: "%", ref: "40 - 80", indent: true },
-    { id: "lym", name: "Lymphocyte", unit: "%", ref: "20 - 40", indent: true },
-    { id: "eos", name: "Eosinophils", unit: "%", ref: "1 - 6", indent: true },
-    { id: "mono", name: "Monocytes", unit: "%", ref: "2 - 10", indent: true },
-    { id: "bas", name: "Basophils", unit: "%", ref: "< 2", indent: true },
-    { id: "diff-abs", name: "Differential Leukocyte Count (Absolute count)", unit: "", ref: "" },
-    {
-      id: "abs-neu",
-      name: "Neutrophils",
-      unit: "x10^3/µL",
-      ref: "2 - 7",
-      indent: true,
-      formula: "abs-neu",
-      formulaExpr: "(TLC × Neutrophils %) ÷ 100 ÷ 1000",
-    },
-    {
-      id: "abs-lym",
-      name: "Lymphocytes",
-      unit: "x10^3/µL",
-      ref: "1 - 3",
-      indent: true,
-      formula: "abs-lym",
-      formulaExpr: "(TLC × Lymphocyte %) ÷ 100 ÷ 1000",
-    },
-    {
-      id: "abs-eos",
-      name: "Eosinophils",
-      unit: "x10^3/µL",
-      ref: "0.02 - 0.5",
-      indent: true,
-      formula: "abs-eos",
-      formulaExpr: "(TLC × Eosinophils %) ÷ 100 ÷ 1000",
-    },
-    {
-      id: "abs-mono",
-      name: "Monocytes",
-      unit: "x10^3/µL",
-      ref: "0.1 - 1",
-      indent: true,
-      formula: "abs-mono",
-      formulaExpr: "(TLC × Monocytes %) ÷ 100 ÷ 1000",
-    },
-    {
-      id: "abs-bas",
-      name: "Basophils",
-      unit: "x10^3/µL",
-      ref: "0.02 - 0.1",
-      indent: true,
-      formula: "abs-bas",
-      formulaExpr: "(TLC × Basophils %) ÷ 100 ÷ 1000",
-    },
-    {
-      id: "nlr",
-      name: "Neutrophil Lymphocyte Ratio",
-      unit: "",
-      ref: "",
-      formula: "nlr",
-      formulaExpr: "Neutrophils % ÷ Lymphocyte %",
-    },
-    { id: "plt", name: "Platelet Count", unit: "lakhs/cumm", ref: "1.5 - 4.1" },
-    { id: "rbc", name: "Total RBC Count", unit: "million/cumm", ref: "3.9 - 4.8" },
-    { id: "hct", name: "Hematocrit Value, HCT", unit: "%", ref: "36 - 46" },
-    { id: "mcv", name: "Mean Corpuscular Volume, MCV", unit: "fL", ref: "83 - 101" },
-    { id: "rdw-cv", name: "R.D.W. - CV (Optional)", unit: "%", ref: "11.6 - 14" },
-    { id: "rdw-sd", name: "R.D.W. - SD (Optional)", unit: "fL", ref: "39 - 46" },
-  ],
-};
-
-const KFT: Panel = {
-  department: "BIOCHEMISTRY",
-  title: "KFT WITHOUT EGFR",
-  params: [
-    { id: "bun", name: "BUN", unit: "mg/dl", ref: "7.9 - 20" },
-    { id: "urea", name: "Serum Urea", unit: "mg/dl", ref: "13 - 40" },
-    { id: "creat", name: "Serum Creatinine", unit: "mg/dl", ref: "0.55 - 1.02" },
-    { id: "ca", name: "Serum Calcium", unit: "mg/dl", ref: "8.8 - 10.6" },
-    { id: "k", name: "Serum Potassium", unit: "mmol/L", ref: "3.5 - 5.1" },
-    { id: "na", name: "Serum Sodium", unit: "mmol/L", ref: "136 - 146" },
-  ],
-};
-
-const LFT: Panel = {
-  department: "BIOCHEMISTRY",
-  title: "LIVER FUNCTION TEST",
-  params: [
-    { id: "ast", name: "AST (SGOT)", unit: "U/L", ref: "0 - 40" },
-    { id: "alt", name: "ALT (SGPT)", unit: "U/L", ref: "0 - 41" },
-    { id: "alp", name: "Alkaline Phosphatase", unit: "U/L", ref: "40 - 129" },
-    { id: "bili-t", name: "Total Bilirubin", unit: "mg/dl", ref: "0.1 - 1.2" },
-    { id: "alb", name: "Albumin", unit: "g/dl", ref: "3.5 - 5.2" },
-  ],
-};
-
-function panelsFor(testType: string): Panel[] {
-  const t = testType.toLowerCase();
-  const out: Panel[] = [CBC, KFT];
-  if (/lft|liver|bilirubin/.test(t)) out.push(LFT);
-  return out;
-}
 
 function isAbnormal(value: string, ref: string) {
   const n = Number(value);
@@ -243,7 +122,7 @@ export default function EnterResultsPage({
   onFinal: (results: ResultRow[], extra: ResultExtra) => void;
   onSignOff: (results: ResultRow[], extra: ResultExtra) => void;
 }) {
-  const panels = useMemo(() => panelsFor(order.testType), [order.testType]);
+  const panels = useMemo(() => panelsForTestType(order.testType), [order.testType]);
   const [values, setValues] = useState<Record<string, string>>(() => {
     const seed: Record<string, string> = {};
     (order.results || []).forEach((r) => {

@@ -747,13 +747,13 @@ class _LiveConsultationCard extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE6F4EA),
+                  color: AppColors.emeraldSoft,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   l.t('secureV3'),
                   style: const TextStyle(
-                    color: Color(0xFF1E8E3E),
+                    color: AppColors.emerald,
                     fontWeight: FontWeight.w800,
                     fontSize: 11,
                   ),
@@ -772,7 +772,7 @@ class _LiveConsultationCard extends StatelessWidget {
           const SizedBox(height: 12),
           _InfoRow(
             icon: Icons.medical_services_outlined,
-            iconBg: const Color(0xFFE0F2FE),
+            iconBg: AppColors.trustBlueSoft,
             iconColor: AppColors.trustBlue,
             label: l.t('onlineVideoConsult'),
             value: doctorName,
@@ -1136,7 +1136,7 @@ class _InCallMessagesCard extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: m.fromPatient
                               ? AppColors.trustBlueSoft
-                              : const Color(0xFFF8FAFC),
+                              : AppColors.canvas,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: AppColors.border),
                         ),

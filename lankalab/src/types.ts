@@ -15,6 +15,9 @@ export interface PatientDocument {
 export interface LabOrder {
   id: string;
   patientName: string;
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: string; // YYYY-MM-DD
   avatarColor?: string; // used for patient initials avatar (e.g., bg-primary-container)
   age: number;
   gender: 'Male' | 'Female' | 'Other';
@@ -41,6 +44,12 @@ export interface LabOrder {
   flaggedCritical?: boolean;
   gpCareSyncedAt?: string;
   suwasiriSyncedAt?: string;
+  billedAmount?: number;
+  paidAmount?: number;
+  discountAmount?: number;
+  paymentMode?: string;
+  billItems?: { name: string; amount: number }[];
+  completedAt?: string;
 }
 
 export interface CourierRoute {

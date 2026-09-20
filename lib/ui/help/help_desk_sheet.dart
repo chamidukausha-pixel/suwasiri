@@ -23,7 +23,7 @@ Future<void> showHelpDeskSheet(BuildContext context) {
   );
 }
 
-/// Compact yellow Help button that can be dragged anywhere on screen.
+/// Compact blue Help button that can be dragged anywhere on screen.
 class DraggableHelpFab extends StatefulWidget {
   const DraggableHelpFab({super.key});
 
@@ -114,9 +114,9 @@ class _HelpFabVisual extends StatelessWidget {
         width: DraggableHelpFab.size,
         height: DraggableHelpFab.size,
         decoration: BoxDecoration(
-          color: const Color(0xFFFFD400),
+          color: AppColors.trustBlue,
           shape: BoxShape.circle,
-          border: Border.all(color: const Color(0xFFE6B800), width: 1),
+          border: Border.all(color: AppColors.brandBlueDeep, width: 1),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.16),
@@ -130,14 +130,14 @@ class _HelpFabVisual extends StatelessWidget {
           children: [
             const Icon(
               Icons.chat_bubble_outline_rounded,
-              color: Colors.black87,
+              color: Colors.white,
               size: 20,
             ),
             const SizedBox(height: 1),
             Text(
               l.t('help'),
               style: const TextStyle(
-                color: Colors.black87,
+                color: Colors.white,
                 fontWeight: FontWeight.w800,
                 fontSize: 10,
                 height: 1,
@@ -458,12 +458,12 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
                     width: 42,
                     height: 42,
                     decoration: const BoxDecoration(
-                      color: Color(0xFFFFD400),
+                      color: AppColors.trustBlue,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
                       Icons.chat_bubble_outline_rounded,
-                      color: Colors.black87,
+                      color: Colors.white,
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -647,7 +647,7 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
                       Material(
                         color: _listening
                             ? AppColors.emergencyRed
-                            : const Color(0xFFFFD400),
+                            : AppColors.trustBlue,
                         borderRadius: BorderRadius.circular(12),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(12),
@@ -657,7 +657,7 @@ class _HelpDeskSheetState extends State<_HelpDeskSheet> {
                             height: 48,
                             child: Icon(
                               _listening ? Icons.stop_rounded : Icons.mic_rounded,
-                              color: Colors.black87,
+                              color: Colors.white,
                               size: 22,
                             ),
                           ),
@@ -742,8 +742,8 @@ class _QuickChip extends StatelessWidget {
       padding: const EdgeInsets.only(right: 8),
       child: ActionChip(
         onPressed: onTap,
-        backgroundColor: const Color(0xFFFFF7CC),
-        side: const BorderSide(color: Color(0xFFFFD400)),
+        backgroundColor: AppColors.trustBlueSoft,
+        side: const BorderSide(color: AppColors.trustBlue),
         label: Text(
           label,
           style: const TextStyle(

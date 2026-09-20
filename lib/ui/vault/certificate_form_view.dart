@@ -36,7 +36,7 @@ class CertificateFormView extends StatelessWidget {
         border: Border.all(color: const Color(0xFFDDD6FE), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF7C3AED).withValues(alpha: 0.08),
+            color: AppColors.trustBlueSoft,
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -56,7 +56,7 @@ class CertificateFormView extends StatelessWidget {
                 Text(
                   l.t('digitalCertificate'),
                   style: const TextStyle(
-                    color: Color(0xFF7C3AED),
+                    color: AppColors.trustBlue,
                     fontWeight: FontWeight.w800,
                     fontSize: 11,
                     letterSpacing: 1.0,

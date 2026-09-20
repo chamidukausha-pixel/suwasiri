@@ -163,10 +163,13 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] Reception Lobby / Patient Clinical Records: click the patient name for a **read-only** GP Exam Room file (left Clinical sections). Reception cannot edit or add. Check In / Call to Exam Room stay status-only.
 - [x] Platform Console **Suspend** deactivates a medical centre: hidden from Suwasiri Doctors search and from the GP Care top-bar clinic picker until **Reactivate**
 - [x] LankaLab Operations Overview: removed Critical Results KPI, Sample Dispatch Monitor, and Active Alerts Feed
-- [x] LankaLab Operations Overview **Critical** opens that patient in GP Care (red name + Red alert badge); PENDING TESTS (amber) and SAMPLES IN TRANSIT (teal) cards plus colour-coded pending/processing rows
+- [x] LankaLab Operations Overview **Critical** opens that patient in GP Care (red name + Red alert badge); PENDING (blue), PROCESSING (green), CRITICAL (red) cards plus colour-coded rows
 - [x] LankaLab Operations Overview is more colourful; **Active Lab Orders** shows completed tests only; pending / processing / critical stay on **Pending Results**
 - [x] LankaLab Active Lab Orders actions: download / print report; sync to the requesting GP Care clinic (e.g. PrimeCare); non-critical **App** sync to Suwasiri Vault → Lab reports; **Critical** opens that GP Care patient in red; email and SMS/phone share (critical uses email + text)
 - [x] LankaLab sidebar **Lab / Business / Manage** stay collapsed until the main item is clicked
+- [x] LankaLab new bills appear on **Electronic Result Delivery**; **Enter results** there; after sign-off the case moves to Operations Overview and leaves Result Delivery
+- [x] LankaLab left sidebar (Operations Overview through Settings) uses red / green / blue section colours so pending, processing, and critical are easy to spot
+- [x] LankaLab Daily Business: right-hand month calendar; click a date for that day’s income / charges; completed reports with payment appear on the completion date
 - [x] LankaLab Operations Overview **Completed** syncs the report to the requesting medical centre and opens SMS to the patient’s phone; Connected Practice Software moved to Settings; Supplementary Add-On Tests removed from Electronic Result Delivery
 - [x] LankaLab pathology portal sign-in (`chamidukausha@gmail.com` / `Admin@123`) before the existing lab workspace
 - [x] LankaLab **New bills** worklist (replaces Cases / Today’s reports) and **New bill** form (no left sidebar; Create adds the bill)
@@ -178,6 +181,18 @@ Living tracker for implementation. **Update this file when you finish or start a
 - [x] LankaLab Today's reports **Enter results**: CBC / KFT value entry, interpretations, Sign off / Final / Save only; Sign off marks **Completed** and opens Operations Overview → Active Lab Orders
 - [x] LankaLab Enter results: Differential Leukocyte Count (absolute) auto-calculates from TLC × % / 100 / 1000
 - [x] LankaLab Enter results **Final** opens the printable report extract; Interpretations are editable by the lab person
+- [x] LankaLab **NEW BILLS** sits next to LankaLab Portal / Colombo Central Patholab; removed from Sign out / profile and the floating button
+- [x] LankaLab Active Lab Orders no longer shows the pending count chip; pending work stays on Lab → Today's reports
+- [x] LankaLab English medical-test list (CBC, HbA1c, LFT, ECG, …) on NEW BILLS; selected tests open result sheets with units and reference ranges
+- [x] LankaLab Operations Overview no longer shows the Critical KPI card; Urgent Live Alerts removed from the sidebar
+- [x] LankaLab Settings dropdown: Lab settings, Clinical Trials Portal, GP & Mobile Sync
+- [x] LankaLab Finance & Invoices dropdown includes Business (Daily Business, Expenses, dues, and the rest)
+- [x] LankaLab Operations Overview no longer shows the Completed KPI card
+- [x] LankaLab Electronic Result Delivery: Medway wording removed; colourful patient names; Standard / Private / Confidential / Cumulative tabs removed; Unique Health ID on the specimen line
+- [x] LankaLab Operations Overview **App** writes each selected test into that patient’s Suwasiri Vault → Lab reports under the test name
+- [x] LankaLab Operations Overview shows a live analog + digital clock under the Sign out / profile area
+- [x] LankaLab Lab → Today's reports: month calendar (click a date for that day’s ongoing / completed reports and View); search by date of birth or last name across all dates with date/time; Email and Suwasiri App sync from the row
+- [x] LankaLab Today's reports **View** shows the lab report only (no bill / payment); preview can email the referring doctor
 
 ## In progress / next
 

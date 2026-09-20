@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Calendar,
   ChevronLeft,
@@ -97,12 +97,13 @@ export default function BusinessHub({ orders, panel }: { orders: LabOrder[]; pan
   const priced = useMemo(
     () =>
       orders.map((o) => {
-        const price = getTestPrice(o.testType);
-        const base = PAID[o.id] ?? (o.status === "COMPLETED" ? price : Math.round(price * 0.4));
+        const price = o.billedAmount ?? getTestPrice(o.testType);
+        const stored = o.paidAmount;
+        const base = stored != null ? stored : PAID[o.id] ?? (o.status === "COMPLETED" ? price : Math.round(price * 0.4));
         const paid = Math.min(price, base + (paidExtra[o.id] || 0));
         const due = Math.max(0, price - paid);
-        const mode = paid === 0 ? "due" : paid < price ? "partial" : o.priority === "Critical" ? "card" : "cash";
-        const ts = o.orderTimestamp instanceof Date ? o.orderTimestamp : new Date();
+        const mode = o.paymentMode || (paid === 0 ? "due" : paid < price ? "partial" : o.priority === "Critical" ? "card" : "cash");
+        const ts = o.completedAt ? new Date(o.completedAt) : o.orderTimestamp instanceof Date ? o.orderTimestamp : new Date();
         return { o, price, paid, due, charge: paid > 0 ? COLLECT_CHARGE : 0, mode, day: toYmd(ts) };
       }),
     [orders, paidExtra]
@@ -442,6 +443,102 @@ type Priced = {
   day: string;
 };
 
+function monthCells(year: number, month: number) {
+  const first = new Date(year, month, 1);
+  const startPad = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: { ymd: string | null; day: number | null }[] = [];
+  for (let i = 0; i < startPad; i++) cells.push({ ymd: null, day: null });
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ymd = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    cells.push({ ymd, day: d });
+  }
+  return cells;
+}
+
+function BusinessMonthCalendar({
+  date,
+  onDate,
+  counts,
+  completedCounts,
+}: {
+  date: string;
+  onDate: (ymd: string) => void;
+  counts: Record<string, number>;
+  completedCounts: Record<string, number>;
+}) {
+  const selected = new Date(`${date}T12:00:00`);
+  const [cursor, setCursor] = useState({ y: selected.getFullYear(), m: selected.getMonth() });
+  useEffect(() => {
+    const s = new Date(`${date}T12:00:00`);
+    setCursor({ y: s.getFullYear(), m: s.getMonth() });
+  }, [date]);
+  const today = toYmd(new Date());
+  const title = new Date(cursor.y, cursor.m, 1).toLocaleString("en-GB", { month: "long", year: "numeric" });
+  const cells = monthCells(cursor.y, cursor.m);
+
+  return (
+    <aside className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden xl:sticky xl:top-4">
+      <div className="px-3 py-3 border-b bg-[#0B1220] text-white flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-[#F97316]" />
+          <p className="text-sm font-bold">{title}</p>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setCursor((c) => (c.m === 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m: c.m - 1 }))}
+            className="p-1 rounded hover:bg-white/10"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setCursor((c) => (c.m === 11 ? { y: c.y + 1, m: 0 } : { y: c.y, m: c.m + 1 }))}
+            className="p-1 rounded hover:bg-white/10"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+      <div className="p-3">
+        <div className="grid grid-cols-7 text-[10px] font-bold uppercase text-slate-400 text-center mb-1">
+          {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => (
+            <span key={d}>{d}</span>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {cells.map((c, i) => {
+            if (!c.ymd) return <span key={`e${i}`} />;
+            const n = counts[c.ymd] || 0;
+            const done = completedCounts[c.ymd] || 0;
+            const on = c.ymd === date;
+            const isToday = c.ymd === today;
+            return (
+              <button
+                key={c.ymd}
+                type="button"
+                onClick={() => onDate(c.ymd!)}
+                className={`h-9 rounded-md text-[12px] font-semibold relative ${
+                  on ? "bg-[#F97316] text-white" : isToday ? "bg-sky-50 text-sky-800" : "hover:bg-slate-50 text-slate-700"
+                }`}
+              >
+                {c.day}
+                {n > 0 && !on && <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-sky-500" />}
+                {done > 0 && !on && <span className="absolute bottom-0.5 left-[58%] w-1 h-1 rounded-full bg-emerald-500" />}
+              </button>
+            );
+          })}
+        </div>
+        <button type="button" onClick={() => onDate(today)} className="mt-3 w-full text-[11px] font-semibold text-sky-700 border rounded-md py-1.5 hover:bg-sky-50">
+          Jump to today
+        </button>
+        <p className="text-[10px] text-slate-400 mt-2">Click a date to see that day’s income, charges, bills and completed reports.</p>
+      </div>
+    </aside>
+  );
+}
+
 function DailyBusinessBoard({
   date,
   onDate,
@@ -551,6 +648,15 @@ function DailyBusinessBoard({
   const amountTotal = txRows.reduce((s, row) => s + (row.sign === "+" ? row.amount : -row.amount), 0);
   const billsTotal = visibleBills.reduce((s, r) => s + r.paid, 0);
   const expenseTotal = dayExpenses.reduce((s, e) => s + e.amount, 0);
+  const completedToday = dayPriced.filter((r) => r.o.status === "COMPLETED").length;
+  const counts = priced.reduce((m, r) => {
+    m[r.day] = (m[r.day] || 0) + 1;
+    return m;
+  }, {} as Record<string, number>);
+  const completedCounts = priced.reduce((m, r) => {
+    if (r.o.status === "COMPLETED") m[r.day] = (m[r.day] || 0) + 1;
+    return m;
+  }, {} as Record<string, number>);
 
   const tabBtn = (id: typeof dailyTab, label: string, count: number) => (
     <button
@@ -566,7 +672,17 @@ function DailyBusinessBoard({
 
   return (
     <div className="space-y-4 -mt-2">
-      {bill && <BillView order={bill.order} paid={bill.paid} receivedBy={bill.receivedBy} onClose={() => setBill(null)} />}
+      {bill && (
+        <BillView
+          order={bill.order}
+          paid={bill.paid}
+          receivedBy={bill.receivedBy}
+          items={bill.order.billItems}
+          discount={bill.order.discountAmount}
+          mode={bill.order.paymentMode}
+          onClose={() => setBill(null)}
+        />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-serif text-3xl font-bold text-primary tracking-tight">Daily business</h1>
         <div className="flex items-center gap-2">
@@ -595,6 +711,8 @@ function DailyBusinessBoard({
           )}
         </div>
       </div>
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-4 items-start">
+      <div className="space-y-4 min-w-0">
       <div className="flex flex-wrap items-stretch gap-2">
         <div className="flex-1 min-w-[220px] rounded-xl bg-gradient-to-br from-emerald-400 to-green-600 text-white px-4 py-3 shadow-md shadow-emerald-200">
           <p className="text-[10px] uppercase tracking-wider font-bold text-white/80">Total Income</p>
@@ -618,6 +736,10 @@ function DailyBusinessBoard({
         <div className="rounded-xl bg-gradient-to-br from-amber-300 to-orange-500 text-amber-950 px-4 py-3 min-w-[160px] shadow-md shadow-amber-200">
           <p className="text-[10px] font-bold uppercase tracking-wider">Date</p>
           <p className="text-sm font-black">{timeLabel}, {dateLabel}</p>
+        </div>
+        <div className="rounded-xl bg-gradient-to-br from-slate-700 to-[#0B1220] text-white px-4 py-3 min-w-[160px] shadow-md">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-white/80">Reports completed</p>
+          <p className="text-2xl font-black">{completedToday}</p>
         </div>
         <button type="button" onClick={onToggleHelp} className="self-center inline-flex items-center gap-1 text-[11px] font-semibold text-sky-800 bg-sky-50 border border-sky-200 px-3 py-2 rounded-lg">
           <HelpCircle className="w-3.5 h-3.5" /> How collection charges work?
@@ -736,7 +858,7 @@ function DailyBusinessBoard({
                         onClick={() => setBill({ order: row.order!, paid: row.amount, receivedBy: row.received })}
                         className="inline-flex items-center gap-1 text-sky-700 text-[11px] font-semibold"
                       >
-                        <Eye className="w-3.5 h-3.5" /> View bill
+                        <Eye className="w-3.5 h-3.5" /> {row.order.status === "COMPLETED" ? "View report" : "View bill"}
                       </button>
                     ) : (
                       <span className="text-slate-300 text-[11px]">Refund</span>
@@ -769,13 +891,14 @@ function DailyBusinessBoard({
                 <th className="px-3 py-2">Patient</th>
                 <th className="px-3 py-2">Test</th>
                 <th className="px-3 py-2">Amount</th>
+                <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2" />
               </tr>
             </thead>
             <tbody>
               {visibleBills.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-slate-400">
+                  <td colSpan={6} className="px-3 py-8 text-center text-slate-400">
                     No bills on {dateLabel}.
                   </td>
                 </tr>
@@ -787,12 +910,23 @@ function DailyBusinessBoard({
                   <td className="px-3 py-2">{r.o.testType}</td>
                   <td className="px-3 py-2 font-bold text-emerald-600">+ {rs(r.paid)}</td>
                   <td className="px-3 py-2">
+                    {r.o.status === "COMPLETED" ? (
+                      <span className="text-[10px] font-bold uppercase bg-emerald-500 text-white px-2 py-0.5 rounded">Completed</span>
+                    ) : r.o.status === "CRITICAL" ? (
+                      <span className="text-[10px] font-bold uppercase bg-red-600 text-white px-2 py-0.5 rounded">Critical</span>
+                    ) : r.o.status === "PROCESSING" ? (
+                      <span className="text-[10px] font-bold uppercase bg-emerald-500 text-white px-2 py-0.5 rounded">Processing</span>
+                    ) : (
+                      <span className="text-[10px] font-bold uppercase bg-sky-500 text-white px-2 py-0.5 rounded">{r.o.status}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
                     <button
                       type="button"
                       onClick={() => setBill({ order: r.o, paid: r.paid, receivedBy: chief })}
                       className="inline-flex items-center gap-1 text-sky-700 text-[11px] font-semibold"
                     >
-                      <Eye className="w-3.5 h-3.5" /> View bill
+                      <Eye className="w-3.5 h-3.5" /> {r.o.status === "COMPLETED" ? "View report" : "View bill"}
                     </button>
                   </td>
                 </tr>
@@ -804,7 +938,7 @@ function DailyBusinessBoard({
                   Total
                 </td>
                 <td className="px-3 py-2 font-black text-emerald-700">+ {rs(billsTotal)}</td>
-                <td />
+                <td colSpan={2} />
               </tr>
             </tfoot>
           </table>
@@ -828,6 +962,9 @@ function DailyBusinessBoard({
           )}
         </div>
       )}
+      </div>
+      <BusinessMonthCalendar date={date} onDate={onDate} counts={counts} completedCounts={completedCounts} />
+      </div>
     </div>
   );
 }

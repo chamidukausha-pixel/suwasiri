@@ -13,15 +13,25 @@ import {
   TrialFinancialInvoice
 } from '../types';
 
+function atDay(offsetDays: number, hour: number, minute: number) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  d.setHours(hour, minute, 0, 0);
+  return d;
+}
+
 export const initialOrders: LabOrder[] = [
   {
     id: '1',
     patientName: 'Anura Perera',
+    firstName: 'Anura',
+    lastName: 'Perera',
+    dateOfBirth: '1981-03-15',
     age: 45,
     gender: 'Male',
     testType: 'FBC + ESR',
     orderTime: 'Today, 08:45 AM',
-    orderTimestamp: new Date(Date.now() - 8 * 60 * 60 * 1000), // 8 hours ago
+    orderTimestamp: atDay(0, 8, 45),
     specimenId: 'LNK-24901',
     status: 'PROCESSING',
     priority: 'Routine',
@@ -52,11 +62,14 @@ export const initialOrders: LabOrder[] = [
   {
     id: '2',
     patientName: 'Kamala Gunawardena',
+    firstName: 'Kamala',
+    lastName: 'Gunawardena',
+    dateOfBirth: '1964-01-08',
     age: 62,
     gender: 'Female',
     testType: 'Cardiac Enzymes (Troponin)',
     orderTime: 'Today, 09:12 AM',
-    orderTimestamp: new Date(Date.now() - 7 * 60 * 60 * 1000), // 7 hours ago
+    orderTimestamp: atDay(0, 9, 12),
     specimenId: 'LNK-24915',
     status: 'CRITICAL',
     priority: 'Critical',
@@ -97,11 +110,14 @@ export const initialOrders: LabOrder[] = [
   {
     id: '3',
     patientName: 'Sunil Mendis',
+    firstName: 'Sunil',
+    lastName: 'Mendis',
+    dateOfBirth: '1973-05-12',
     age: 53,
     gender: 'Male',
     testType: 'Lipid Profile',
     orderTime: 'Today, 07:30 AM',
-    orderTimestamp: new Date(Date.now() - 9.5 * 60 * 60 * 1000), // 9.5 hours ago
+    orderTimestamp: atDay(0, 7, 30),
     specimenId: 'LNK-24888',
     status: 'PENDING',
     priority: 'Routine',
@@ -116,13 +132,17 @@ export const initialOrders: LabOrder[] = [
   {
     id: '4',
     patientName: 'Dilani Rodrigo',
+    firstName: 'Dilani',
+    lastName: 'Rodrigo',
+    dateOfBirth: '1988-07-21',
     age: 38,
     gender: 'Female',
     testType: 'HbA1c + Fasting Glucose',
     orderTime: 'Yesterday, 04:15 PM',
-    orderTimestamp: new Date(Date.now() - 25 * 60 * 60 * 1000), // 25 hours ago
+    orderTimestamp: atDay(-1, 16, 15),
     specimenId: 'LNK-24850',
     status: 'COMPLETED',
+    completedAt: atDay(-1, 17, 0).toISOString(),
     priority: 'Routine',
     wardOrDept: 'Family Medicine',
     notes: 'Known pre-diabetes monitoring. Compliance reviews.',
@@ -151,11 +171,14 @@ export const initialOrders: LabOrder[] = [
   {
     id: '5',
     patientName: 'Mohamed Wazeer',
+    firstName: 'Mohamed',
+    lastName: 'Wazeer',
+    dateOfBirth: '1997-11-03',
     age: 29,
     gender: 'Male',
     testType: 'Liver Function Test (LFT)',
     orderTime: 'Today, 09:55 AM',
-    orderTimestamp: new Date(Date.now() - 6.5 * 60 * 60 * 1000), // 6.5 hours ago
+    orderTimestamp: atDay(0, 9, 55),
     specimenId: 'LNK-24922',
     status: 'PENDING',
     priority: 'Routine',
@@ -163,6 +186,55 @@ export const initialOrders: LabOrder[] = [
     notes: 'Reviewing minor abdominal discomfort and medication clearance.',
     phone: '+94 77 987 6543',
     email: 'wazeer.med@gmail.lk',
+    documents: []
+  },
+  {
+    id: '6',
+    patientName: 'Saman Perera',
+    firstName: 'Saman',
+    lastName: 'Perera',
+    dateOfBirth: '1981-03-15',
+    age: 45,
+    gender: 'Male',
+    testType: 'KFT panel',
+    orderTime: 'Yesterday, 11:20 AM',
+    orderTimestamp: atDay(-1, 11, 20),
+    specimenId: 'LNK-24861',
+    status: 'COMPLETED',
+    completedAt: atDay(-1, 14, 5).toISOString(),
+    priority: 'Routine',
+    wardOrDept: 'OPD Clinic B',
+    notes: 'Same date of birth as Anura Perera — cohort search demo.',
+    phone: '+94 76 222 3344',
+    email: 'saman.perera@mail.lk',
+    suwasiriBarcode: 'SUWA-24861',
+    connectedClinic: 'Kandy General Medical Clinic',
+    results: [
+      { parameter: 'Urea', value: '28', unit: 'mg/dL', referenceRange: '15 - 40', isAbnormal: false },
+      { parameter: 'Creatinine', value: '1.1', unit: 'mg/dL', referenceRange: '0.7 - 1.3', isAbnormal: false }
+    ],
+    documents: []
+  },
+  {
+    id: '7',
+    patientName: 'Nadee Perera',
+    firstName: 'Nadee',
+    lastName: 'Perera',
+    dateOfBirth: '1992-06-04',
+    age: 34,
+    gender: 'Female',
+    testType: 'CBC with absolute counts',
+    orderTime: 'Today, 10:40 AM',
+    orderTimestamp: atDay(0, 10, 40),
+    specimenId: 'LNK-24930',
+    status: 'PROCESSING',
+    priority: 'Routine',
+    wardOrDept: 'Main',
+    notes: 'Last-name search demo with Anura and Saman Perera.',
+    phone: '+94 71 444 7788',
+    email: 'nadee.perera@health.lk',
+    suwasiriBarcode: 'SUWA-24930',
+    connectedClinic: 'PrimeCare Medical Centre - Colombo Central',
     documents: []
   }
 ];

@@ -141,8 +141,8 @@ class _MainShellState extends State<MainShell> {
           backgroundColor: AppColors.cardBg(context),
           indicatorColor: _index == 2
               ? (AppColors.isDark(context)
-                  ? const Color(0xFF064E3B)
-                  : const Color(0xFFD1FAE5))
+                  ? AppColors.brandGreenDeep
+                  : AppColors.emeraldSoft)
               : (_index == 3 || _index == 4)
                   ? AppColors.emerald.withValues(alpha: 0.18)
                   : AppColors.trustBlue.withValues(alpha: 0.12),
@@ -164,12 +164,12 @@ class _MainShellState extends State<MainShell> {
                 height: 28,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFD1FAE5),
+                  color: AppColors.emeraldSoft,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Icon(
                   Icons.videocam,
-                  color: Color(0xFF065F46),
+                  color: AppColors.emerald,
                   size: 20,
                 ),
               ),

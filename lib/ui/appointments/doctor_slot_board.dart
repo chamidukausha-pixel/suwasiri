@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/theme/app_colors.dart';
 import '../../data/catalogs/doctor_schedule_slots.dart';
 import '../../data/models/appointment.dart';
 import '../../data/repositories/health_repository.dart';
@@ -25,10 +26,10 @@ class DoctorSlotBoard extends StatefulWidget {
 }
 
 class _DoctorSlotBoardState extends State<DoctorSlotBoard> {
-  static const coral = Color(0xFFE85D4C);
-  static const sage = Color(0xFF8FA88E);
-  static const sageBorder = Color(0xFF6F8B6E);
-  static const ink = Color(0xFF1A1A1A);
+  static const coral = AppColors.emergencyRed;
+  static const sage = AppColors.emerald;
+  static const sageBorder = AppColors.brandGreenDeep;
+  static const ink = AppColors.trustBlueDark;
   static const muted = Color(0xFF8A8A8A);
   static const chip = Color(0xFFF0EFED);
   static const line = Color(0xFFE4E2DE);

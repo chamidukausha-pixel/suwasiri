@@ -525,7 +525,7 @@ Color _color(NotificationPayloadType t) {
     case NotificationPayloadType.labResult:
       return AppColors.trustBlue;
     case NotificationPayloadType.appointment:
-      return const Color(0xFF0F766E);
+      return AppColors.emerald;
     case NotificationPayloadType.sync:
       return AppColors.tipTeal;
     case NotificationPayloadType.dose:

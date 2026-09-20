@@ -48,7 +48,7 @@ Keep `lankalab/` as the exact React/Vite/Express lab portal. Do not change Flutt
 
 1. Copy is in-repo; Gemini AI analyze / consult / parse-report still use `server.ts` + mock orders
 2. Local URL is **http://localhost:3001** (GP Care stays on **3000**; PharmaCloud on **3002**)
-3. Sample Dispatch bags from GP Care **Collected** / **Delivered** (driver, phone, vials, vehicle, clinic) show on Transit Logistics Clinic Sample Collection Log. Remaining: Unique Health ID barcode lookup, `vault` lab-report push — [LANKALAB.md](LANKALAB.md)
+3. Sample Dispatch bags from GP Care **Collected** / **Delivered** (driver, phone, vials, vehicle, clinic) show on Transit Logistics Clinic Sample Collection Log. Today's reports calendar, DOB / last-name search, Email, and Suwasiri App vault sync are on the Lab desk. Remaining: Unique Health ID barcode lookup — [LANKALAB.md](LANKALAB.md)
 
 ## Parallel web (PharmaCloud)
 

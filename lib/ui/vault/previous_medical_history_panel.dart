@@ -139,12 +139,12 @@ class PreviousMedicalHistoryPanel extends StatelessWidget {
                       width: 42,
                       height: 42,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF7C3AED).withValues(alpha: 0.12),
+                        color: AppColors.trustBlueSoft,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
                         Icons.folder_shared_outlined,
-                        color: Color(0xFF7C3AED),
+                        color: AppColors.trustBlue,
                       ),
                     ),
                     const SizedBox(width: 12),

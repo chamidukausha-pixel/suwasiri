@@ -88,15 +88,71 @@ export function downloadLabReport(order: LabOrder) {
   URL.revokeObjectURL(url);
 }
 
-export function emailLabReport(order: LabOrder, opts?: { critical?: boolean }) {
-  const to = (order.email || "").trim();
+export type ReferringDoctor = { name: string; email: string; clinic: string };
+
+const FALLBACK_DOCTORS: ReferringDoctor[] = [
+  { name: "Dr. Ambika Perera", clinic: "Kandy General Medical Clinic", email: "ambika@kgmc.lk" },
+  { name: "Dr. Saubhik Bhaumik", clinic: "PrimeCare Medical Centre", email: "saubhik@primecare.lk" },
+  { name: "Dr. SAUBHIK BHAUMIK", clinic: "PrimeCare Medical Centre - Colombo Central", email: "saubhik@primecare.lk" },
+  { name: "Dr. Nalin Perera", clinic: "Colombo National Medical Clinic", email: "nalin@cnmc.lk" },
+  { name: "Dr. Sunil Wickramasinghe", clinic: "Nawala Preventive Health Center", email: "sunil.w@nawala.lk" },
+];
+
+function loadManageDoctors(): ReferringDoctor[] {
+  try {
+    const raw = localStorage.getItem("lankalab-manage-v1");
+    if (!raw) return [];
+    const data = JSON.parse(raw) as { doctors?: { name?: string; email?: string; clinic?: string }[] };
+    return (data.doctors || []).map((d) => ({
+      name: d.name || "",
+      email: d.email || "",
+      clinic: d.clinic || "",
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function norm(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+export function resolveReferringDoctor(order: LabOrder): ReferringDoctor | null {
+  const key = (order.connectedClinic || "").trim();
+  if (!key) return null;
+  if (key.includes("@")) return { name: key, email: key, clinic: key };
+  const needle = norm(key);
+  const all = [...loadManageDoctors(), ...FALLBACK_DOCTORS];
+  const hit = all.find((d) => {
+    const name = norm(d.name);
+    const clinic = norm(d.clinic);
+    return needle === name || needle === clinic || needle.includes(name) || name.includes(needle) || needle.includes(clinic) || clinic.includes(needle);
+  });
+  return hit?.email ? hit : { name: key, email: "", clinic: key };
+}
+
+export function emailLabReport(order: LabOrder, opts?: { critical?: boolean; to?: string; doctor?: boolean }) {
+  const doctor = opts?.doctor ? resolveReferringDoctor(order) : null;
+  const to = (opts?.to || (opts?.doctor ? doctor?.email : order.email) || "").trim();
   if (!to) {
-    alert(`No email on file for ${order.patientName}. Add an email on the order first.`);
+    alert(
+      opts?.doctor
+        ? `No email on file for the referring doctor (${order.connectedClinic || "not set"}). Add the doctor under Manage → Doctor access.`
+        : `No email on file for ${order.patientName}. Add an email on the order first.`
+    );
     return;
   }
   const critical = Boolean(opts?.critical || order.flaggedCritical || order.status === "CRITICAL");
-  const subject = `${critical ? "CRITICAL — " : ""}${order.testType} · ${order.patientName}`;
-  window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(reportSummaryText(order))}`;
+  const who = opts?.doctor ? doctor?.name || "referring doctor" : order.patientName;
+  const subject = `${critical ? "CRITICAL — " : ""}Lab report · ${order.testType} · ${order.patientName}`;
+  const intro = opts?.doctor
+    ? `Dear ${who},\n\nPlease find the LankaLab report for your patient ${order.patientName}.\n\n`
+    : "";
+  window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(intro + reportSummaryText(order))}`;
+}
+
+export function emailLabReportToDoctor(order: LabOrder, opts?: { email?: string; critical?: boolean }) {
+  emailLabReport(order, { critical: opts?.critical, to: opts?.email, doctor: true });
 }
 
 export function textLabReport(order: LabOrder, opts?: { critical?: boolean }) {

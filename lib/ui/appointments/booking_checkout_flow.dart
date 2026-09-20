@@ -61,7 +61,7 @@ Future<void> showBookingCheckoutFlow(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    backgroundColor: const Color(0xFFFAF9F7),
+    backgroundColor: AppColors.canvas,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),

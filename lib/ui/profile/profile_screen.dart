@@ -437,7 +437,7 @@ Future<void> _showAddFamilyMemberSheet(BuildContext context) async {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
+                        color: AppColors.trustBlueSoft,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -644,7 +644,7 @@ class _CommunicationCard extends StatelessWidget {
             title: l.t('whatsappNotifications'),
             subtitle: l.t('whatsappHint'),
             value: whatsapp,
-            activeColor: const Color(0xFF25D366),
+            activeColor: AppColors.emerald,
             onChanged: onWhatsapp,
           ),
           if (whatsapp) ...[

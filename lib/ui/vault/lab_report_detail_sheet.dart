@@ -255,7 +255,7 @@ class _ReportHeader extends StatelessWidget {
                     : l.t('diagnosticAttention'),
                 style: TextStyle(
                   color: allNormal
-                      ? const Color(0xFF065F46)
+                      ? AppColors.emerald
                       : AppColors.warning,
                   fontWeight: FontWeight.w800,
                   fontSize: 10,
@@ -377,7 +377,7 @@ class _MarkerCard extends StatelessWidget {
                   metric.value,
                   style: TextStyle(
                     color: normal
-                        ? const Color(0xFF065F46)
+                        ? AppColors.emerald
                         : AppColors.warning,
                     fontWeight: FontWeight.w800,
                     fontSize: 12,

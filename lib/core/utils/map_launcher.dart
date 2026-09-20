@@ -123,8 +123,8 @@ abstract final class MapLauncher {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFE8F5E9),
-                  child: Icon(Icons.map, color: Color(0xFF2E7D32)),
+                  backgroundColor: const Color(0xFFE8F5E9),
+                  child: Icon(Icons.map, color: AppColors.emerald),
                 ),
                 title: Text(l.t('openInAppleMaps')),
                 trailing: const Icon(Icons.chevron_right),

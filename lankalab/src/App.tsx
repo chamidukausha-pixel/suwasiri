@@ -12,6 +12,7 @@ import LabModule from './components/LabModule';
 import SuwasiriGateway from './components/SuwasiriGateway';
 import SettingsSection from './components/SettingsSection';
 import ResultDeliveryManager from './components/ResultDeliveryManager';
+import EnterResultsPage from './components/EnterResultsPage';
 import ClinicalTrialsPortal from './components/ClinicalTrialsPortal';
 import { subscribeGpCareClinicCollections, type ClinicCollectionLog } from './sync/gpCareCollections';
 import { flagCriticalToGpCare } from './sync/gpCareCritical';
@@ -19,15 +20,16 @@ import { flagCompletedCritical } from './sync/gpCareResultSync';
 import { syncClinicAndTextPatient } from './sync/completeNotify';
 import LabOrderActions from './components/LabOrderActions';
 import { downloadLabReport, printLabReport } from './utils/labReportShare';
+import { uniqueHealthId } from './utils/healthId';
 import LoginView, { clearLankaLabSession, readLankaLabSession } from './components/LoginView';
 import PathologyDesk, { type DeskTab } from './components/pathology/PathologyDesk';
 import NewBillPage from './components/pathology/NewBillPage';
 import BusinessHub from './components/BusinessHub';
 import ManageHub from './components/ManageHub';
+import PortalClock from './components/PortalClock';
 import { 
   Activity, 
   Search, 
-  Bell, 
   Settings, 
   Plus, 
   Truck, 
@@ -122,9 +124,11 @@ export default function App() {
 
   // New Order Modal
   const [isNewOrderOpen, setIsNewOrderOpen] = useState(false);
-  const [businessOpen, setBusinessOpen] = useState(false);
+  const [financeOpen, setFinanceOpen] = useState(false);
   const [labMenuOpen, setLabMenuOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [deliveryEnteringId, setDeliveryEnteringId] = useState<string | null>(null);
 
   // Gemini AI Consultation & Analysis State
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -177,7 +181,9 @@ export default function App() {
     const critical = queued.filter(o => o.status === 'CRITICAL').length;
     const completed = orders.filter(o => o.status === 'COMPLETED').length;
     const transit = routes.reduce((sum, r) => sum + r.totalSamples, 0);
-    return { critical, queued: queued.length, completed, transit };
+    const pending = orders.filter((o) => o.status === 'PENDING').length;
+    const processing = orders.filter((o) => o.status === 'PROCESSING').length;
+    return { critical, queued: queued.length, pending, processing, completed, transit };
   }, [orders, routes]);
 
   // Handle adding new order
@@ -214,6 +220,9 @@ export default function App() {
     setOrders(prevOrders => prevOrders.map(order => {
       if (order.id === orderId) {
         let updatedOrder = { ...order, status: newStatus };
+        if (newStatus === 'COMPLETED') {
+          updatedOrder.completedAt = order.completedAt || new Date().toISOString();
+        }
         if (newStatus === 'COMPLETED' && (!order.results || order.results.length === 0)) {
           // Add default simulation results
           updatedOrder.results = [
@@ -268,6 +277,7 @@ export default function App() {
     const updated: LabOrder = {
       ...current,
       status: 'COMPLETED',
+      completedAt: current.completedAt || new Date().toISOString(),
       results:
         current.results && current.results.length > 0
           ? current.results
@@ -304,6 +314,7 @@ export default function App() {
       results: nextResults,
       notes,
       status: 'COMPLETED',
+      completedAt: order.completedAt || new Date().toISOString(),
       ...(mode === 'sign' ? { gpCareSyncedAt: new Date().toISOString() } : {}),
     };
     setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, ...updated } : o)));
@@ -318,9 +329,11 @@ export default function App() {
       },
       ...prev,
     ]);
-    if (mode === 'sign') {
+    if (mode === 'final' || mode === 'sign') {
       setSelectedOrder(updated);
       setCurrentPage(1);
+    }
+    if (mode === 'sign') {
       setActiveTab('overview');
     }
   };
@@ -532,6 +545,28 @@ The lab results indicate a significantly elevated level indicating pathology. Th
     });
   };
 
+  const sideNav = (on: boolean, tone: 'red' | 'green' | 'blue') => {
+    const idle = { red: 'text-red-200 hover:bg-red-500/20', green: 'text-emerald-200 hover:bg-emerald-500/20', blue: 'text-sky-200 hover:bg-sky-500/20' }[tone];
+    const active = { red: 'bg-red-600/30 text-white border-r-4 border-red-400', green: 'bg-emerald-600/30 text-white border-r-4 border-emerald-400', blue: 'bg-sky-600/30 text-white border-r-4 border-sky-400' }[tone];
+    return `w-full flex items-center justify-between px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${on ? active : idle}`;
+  };
+  const sideIcon = (on: boolean, tone: 'red' | 'green' | 'blue') => {
+    const idle = { red: 'text-red-300 bg-red-500/15', green: 'text-emerald-300 bg-emerald-500/15', blue: 'text-sky-300 bg-sky-500/15' }[tone];
+    const active = { red: 'text-white bg-red-500', green: 'text-white bg-emerald-500', blue: 'text-white bg-sky-500' }[tone];
+    return `material-symbols-outlined text-base p-1 rounded-md shrink-0 ${on ? active : idle}`;
+  };
+  const sideBadge = (tone: 'red' | 'green' | 'blue') =>
+    ({
+      red: 'text-[10px] bg-red-500/25 text-red-100 px-1.5 py-0.5 rounded font-mono font-bold',
+      green: 'text-[10px] bg-emerald-500/25 text-emerald-100 px-1.5 py-0.5 rounded font-mono font-bold',
+      blue: 'text-[10px] bg-sky-500/25 text-sky-100 px-1.5 py-0.5 rounded font-mono font-bold',
+    })[tone];
+  const sideSub = (on: boolean, tone: 'red' | 'green' | 'blue') => {
+    const idle = { red: 'text-red-200/80 hover:bg-red-500/15', green: 'text-emerald-200/80 hover:bg-emerald-500/15', blue: 'text-sky-200/80 hover:bg-sky-500/15' }[tone];
+    const active = { red: 'bg-red-500/35 text-white', green: 'bg-emerald-500/35 text-white', blue: 'bg-sky-500/35 text-white' }[tone];
+    return `w-full text-left px-2 py-1.5 rounded-md text-[11px] font-bold ${on ? active : idle}`;
+  };
+
   if (!sessionEmail) {
     return <LoginView onSignedIn={(email) => setSessionEmail(email)} />;
   }
@@ -543,9 +578,12 @@ The lab results indicate a significantly elevated level indicating pathology. Th
         onCreate={(order) => {
           handleAddOrder(order);
         }}
-        onClose={() => setActiveTab('overview')}
+        onClose={() => setActiveTab('results')}
         onSettings={() => setActiveTab('settings')}
-        onEnterResults={() => setActiveTab('lab-today')}
+        onEnterResults={(order) => {
+          setDeliveryEnteringId(order.id);
+          setActiveTab('results');
+        }}
       />
     );
   }
@@ -578,12 +616,21 @@ The lab results indicate a significantly elevated level indicating pathology. Th
       {/* TopNavBar */}
       <header className="fixed top-0 w-full z-50 flex justify-between items-center px-6 h-16 border-b border-[#c1c7cf] bg-[#f0f3ff]">
         <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab('overview')}>
-            <span className="material-symbols-outlined text-primary text-3.5xl">science</span>
-            <div className="flex flex-col">
-              <span className="font-semibold text-lg md:text-xl text-primary tracking-tight leading-none">LankaLab Portal</span>
-              <span className="text-[9px] text-[#41474e] font-sans font-bold tracking-wider uppercase leading-none mt-1">Colombo Central Patholab</span>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab('overview')}>
+              <span className="material-symbols-outlined text-primary text-3.5xl">science</span>
+              <div className="flex flex-col">
+                <span className="font-semibold text-lg md:text-xl text-primary tracking-tight leading-none">LankaLab Portal</span>
+                <span className="text-[9px] text-[#41474e] font-sans font-bold tracking-wider uppercase leading-none mt-1">Colombo Central Patholab</span>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('newbill')}
+              className="hidden sm:flex bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg font-black tracking-wide items-center gap-1 text-xs shadow-sm"
+            >
+              <Plus className="w-4 h-4" /> NEW BILLS
+            </button>
           </div>
         </div>
 
@@ -615,15 +662,6 @@ The lab results indicate a significantly elevated level indicating pathology. Th
           </div>
 
           <button 
-            onClick={() => setActiveTab('notifications')}
-            className={`p-2 rounded-full hover:bg-slate-200 transition-colors relative ${activeTab === 'notifications' ? 'bg-[#dee8ff]' : ''}`}
-            title="Urgent Alerts and System Updates"
-          >
-            <Bell className="w-5 h-5 text-[#41474e]" />
-            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-600 rounded-full animate-pulse border-2 border-white"></span>
-          </button>
-          
-          <button 
             onClick={() => setActiveTab('settings')}
             className={`p-2 rounded-full hover:bg-slate-200 transition-colors relative ${activeTab === 'settings' ? 'bg-[#dee8ff]' : ''}`}
             title="Settings"
@@ -649,13 +687,6 @@ The lab results indicate a significantly elevated level indicating pathology. Th
               className="w-9 h-9 rounded-full object-cover border border-[#c1c7cf] sm:block hover:ring-2 hover:ring-primary"
             />
           </div>
-
-          <button 
-            onClick={() => setActiveTab('newbill')}
-            className="hidden md:flex bg-[#0a2547] text-white px-4 py-2 rounded-lg font-black tracking-wide hover:bg-[#123a6b] transition-colors items-center gap-1 text-xs shadow-md shadow-blue-950/30 ring-2 ring-[#1e4a7a]/60"
-          >
-            <Plus className="w-4 h-4" /> NEW BILL
-          </button>
         </div>
       </header>
 
@@ -663,74 +694,41 @@ The lab results indicate a significantly elevated level indicating pathology. Th
       <div className="flex-1 shrink-0 flex mt-16 relative">
         
         {/* SideNavBar */}
-        <aside className="h-[calc(100vh-64px)] w-60 fixed left-0 top-16 border-r border-[#c1c7cf] bg-white flex flex-col py-6 px-3 z-40 hidden md:flex">
+        <aside className="h-[calc(100vh-64px)] w-60 fixed left-0 top-16 border-r border-white/10 bg-[#0B1220] flex flex-col py-6 px-3 z-40 hidden md:flex">
           <div className="mb-6 px-3">
             <div className="flex items-center gap-2 mb-1">
-              <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold">
-                <Activity className="w-4 h-4 text-primary" />
+              <div className="w-7 h-7 rounded-lg bg-white/10 text-white flex items-center justify-center font-bold">
+                <Activity className="w-4 h-4 text-white" />
               </div>
-              <h2 className="font-semibold text-primary font-sans text-sm tracking-wide uppercase">GP Suite</h2>
+              <h2 className="font-semibold text-white font-sans text-sm tracking-wide uppercase">GP Suite</h2>
             </div>
-            <p className="text-[#41474e] font-sans text-[10px] font-bold tracking-wider opacity-70">DIAGNOSTICS DIVISION</p>
+            <p className="text-slate-400 font-sans text-[10px] font-bold tracking-wider">DIAGNOSTICS DIVISION</p>
           </div>
 
           <nav className="flex-1 space-y-1 overflow-y-auto pr-0.5">
             <button 
-              onClick={() => setActiveTab('newbill')}
-              className="w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-black text-xs tracking-wide text-white bg-[#0a2547] shadow-md shadow-blue-950/30 ring-2 ring-[#1e4a7a]/70 mb-2 hover:bg-[#123a6b]"
-            >
-              <span className="material-symbols-outlined text-base text-[#0a2547] bg-blue-100 p-1 rounded-md shrink-0">receipt_long</span>
-              <span>NEW BILLS</span>
-            </button>
-
-            <button 
               onClick={() => setActiveTab('overview')}
-              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
-                activeTab === 'overview' 
-                  ? 'bg-blue-50/80 text-blue-950 shadow-sm border-l-4 border-blue-600' 
-                  : 'text-[#41474e] hover:bg-slate-100'
-              }`}
+              className={sideNav(activeTab === 'overview', 'green')}
             >
               <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-base text-blue-600 bg-blue-100 p-1 rounded-md shrink-0">dashboard</span>
+                <span className={sideIcon(activeTab === 'overview', 'green')}>dashboard</span>
                 <span>Operations Overview</span>
               </div>
-              <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono font-bold">
+              <span className={sideBadge('green')}>
                 {orders.length}
               </span>
             </button>
 
             <button 
               onClick={() => setActiveTab('results')}
-              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
-                activeTab === 'results' 
-                  ? 'bg-sky-50/80 text-sky-950 shadow-sm border-l-4 border-sky-600' 
-                  : 'text-[#41474e] hover:bg-slate-100'
-              }`}
+              className={sideNav(activeTab === 'results', 'blue')}
             >
               <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-base text-sky-600 bg-sky-100 p-1 rounded-md shrink-0">mark_email_read</span>
+                <span className={sideIcon(activeTab === 'results', 'blue')}>mark_email_read</span>
                 <span>Electronic Result Delivery</span>
               </div>
-              <span className="text-[9px] bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded font-mono font-bold">
-                Medway
-              </span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('trials')}
-              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
-                activeTab === 'trials' 
-                  ? 'bg-violet-50/80 text-violet-950 shadow-sm border-l-4 border-violet-600' 
-                  : 'text-[#41474e] hover:bg-slate-100'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-base text-violet-600 bg-violet-100 p-1 rounded-md shrink-0">clinical_notes</span>
-                <span>Clinical Trials Portal</span>
-              </div>
-              <span className="text-[9px] bg-violet-100 text-violet-800 px-1.5 py-0.5 rounded font-mono font-bold">
-                GCP
+              <span className={sideBadge('blue')}>
+                Live
               </span>
             </button>
 
@@ -738,17 +736,14 @@ The lab results indicate a significantly elevated level indicating pathology. Th
               type="button"
               onClick={() => {
                 setLabMenuOpen((v) => !v);
-                setBusinessOpen(false);
+                setFinanceOpen(false);
                 setManageOpen(false);
+                setSettingsOpen(false);
               }}
-              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
-                String(activeTab).startsWith('lab-') || activeTab === 'pending'
-                  ? 'bg-amber-50/80 text-amber-950 shadow-sm border-l-4 border-amber-600'
-                  : 'text-[#41474e] hover:bg-slate-100'
-              }`}
+              className={sideNav(String(activeTab).startsWith('lab-') || activeTab === 'pending', 'green')}
             >
               <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-base text-amber-600 bg-amber-100 p-1 rounded-md shrink-0">biotech</span>
+                <span className={sideIcon(String(activeTab).startsWith('lab-') || activeTab === 'pending', 'green')}>biotech</span>
                 <span>Lab</span>
               </div>
               <ChevronDown className={`w-3.5 h-3.5 ${labMenuOpen ? 'rotate-180' : ''}`} />
@@ -770,9 +765,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                     key={id}
                     type="button"
                     onClick={() => setActiveTab(id)}
-                    className={`w-full text-left px-2 py-1.5 rounded-md text-[11px] font-bold ${
-                      activeTab === id ? 'bg-amber-100 text-amber-950' : 'text-slate-600 hover:bg-slate-50'
-                    }`}
+                    className={sideSub(activeTab === id, 'green')}
                   >
                     {label}
                   </button>
@@ -782,54 +775,39 @@ The lab results indicate a significantly elevated level indicating pathology. Th
 
             <button 
               onClick={() => setActiveTab('logistics')}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
-                activeTab === 'logistics' 
-                  ? 'bg-orange-50/80 text-orange-950 shadow-sm border-l-4 border-orange-600' 
-                  : 'text-[#41474e] hover:bg-slate-100'
-              }`}
+              className={sideNav(activeTab === 'logistics', 'blue')}
             >
-              <span className="material-symbols-outlined text-base text-orange-600 bg-orange-100 p-1 rounded-md shrink-0">local_shipping</span>
-              <span>Transit Logistics Monitor</span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('integration')}
-              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
-                activeTab === 'integration' 
-                  ? 'bg-purple-50/80 text-purple-950 shadow-sm border-l-4 border-purple-600' 
-                  : 'text-[#41474e] hover:bg-slate-100'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-base text-purple-600 bg-purple-100 p-1 rounded-md shrink-0">cloud_sync</span>
-                <span className="text-[#111c2d] font-bold">GP &amp; Mobile Sync</span>
-              </div>
-              <span className="text-[10px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded font-mono font-bold animate-pulse">
-                Auto
+              <span className="flex items-center gap-2.5">
+                <span className={sideIcon(activeTab === 'logistics', 'blue')}>local_shipping</span>
+                <span>Transit Logistics Monitor</span>
               </span>
             </button>
 
             <button
               type="button"
               onClick={() => {
-                setBusinessOpen((v) => !v);
+                setFinanceOpen((v) => !v);
                 setLabMenuOpen(false);
                 setManageOpen(false);
+                setSettingsOpen(false);
               }}
-              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
-                String(activeTab).startsWith('biz-')
-                  ? 'bg-emerald-50/80 text-emerald-950 shadow-sm border-l-4 border-emerald-600'
-                  : 'text-[#41474e] hover:bg-slate-100'
-              }`}
+              className={sideNav(activeTab === 'billing' || String(activeTab).startsWith('biz-'), 'green')}
             >
               <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-base text-emerald-700 bg-emerald-100 p-1 rounded-md shrink-0">work</span>
-                <span>Business</span>
+                <span className={sideIcon(activeTab === 'billing' || String(activeTab).startsWith('biz-'), 'green')}>payments</span>
+                <span>Finance &amp; Invoices</span>
               </div>
-              <ChevronDown className={`w-3.5 h-3.5 ${businessOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-3.5 h-3.5 ${financeOpen ? 'rotate-180' : ''}`} />
             </button>
-            {businessOpen && (
+            {financeOpen && (
               <div className="pl-9 pr-1 space-y-0.5 pb-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('billing')}
+                  className={sideSub(activeTab === 'billing', 'green')}
+                >
+                  Invoices
+                </button>
                 {(
                   [
                     ['biz-daily', 'Daily Business'],
@@ -845,9 +823,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                     key={id}
                     type="button"
                     onClick={() => setActiveTab(id)}
-                    className={`w-full text-left px-2 py-1.5 rounded-md text-[11px] font-bold ${
-                      activeTab === id ? 'bg-emerald-100 text-emerald-950' : 'text-slate-600 hover:bg-slate-50'
-                    }`}
+                    className={sideSub(activeTab === id, 'green')}
                   >
                     {label}
                   </button>
@@ -855,54 +831,16 @@ The lab results indicate a significantly elevated level indicating pathology. Th
               </div>
             )}
 
-            <button 
-              onClick={() => setActiveTab('billing')}
-              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
-                activeTab === 'billing' 
-                  ? 'bg-emerald-50/80 text-emerald-950 shadow-sm border-l-4 border-emerald-600' 
-                  : 'text-[#41474e] hover:bg-slate-100'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-base text-emerald-600 bg-emerald-100 p-1 rounded-md shrink-0">payments</span>
-                <span>Finance &amp; Invoices</span>
-              </div>
-              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-mono font-bold">
-                LKR
-              </span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab('notifications')}
-              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
-                activeTab === 'notifications' 
-                  ? 'bg-rose-50/80 text-rose-950 shadow-sm border-l-4 border-rose-600' 
-                  : 'text-[#41474e] hover:bg-slate-100'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-base text-rose-600 bg-rose-100 p-1 rounded-md shrink-0">notifications</span>
-                <span>Urgent Live Alerts</span>
-              </div>
-              <span className="text-[10px] bg-red-100 text-red-800 px-1.5 py-0.5 rounded font-mono font-bold">
-                {notifications.filter(n => n.type === 'CRITICAL').length}
-              </span>
-            </button>
-
             {/* Suwasiri Digital Health Gateway section */}
             <button 
               onClick={() => setActiveTab('suwasiri')}
-              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
-                activeTab === 'suwasiri' 
-                  ? 'bg-cyan-50/80 text-cyan-950 shadow-sm border-l-4 border-cyan-600' 
-                  : 'text-[#41474e] hover:bg-slate-100'
-              }`}
+              className={sideNav(activeTab === 'suwasiri', 'blue')}
             >
               <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-base text-cyan-600 bg-cyan-100 p-1 rounded-md shrink-0">qr_code_scanner</span>
+                <span className={sideIcon(activeTab === 'suwasiri', 'blue')}>qr_code_scanner</span>
                 <span>Suwasiri Gateway</span>
               </div>
-              <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-mono font-bold">
+              <span className={sideBadge('blue')}>
                 MOH
               </span>
             </button>
@@ -911,17 +849,14 @@ The lab results indicate a significantly elevated level indicating pathology. Th
               type="button"
               onClick={() => {
                 setManageOpen((v) => !v);
-                setBusinessOpen(false);
+                setFinanceOpen(false);
                 setLabMenuOpen(false);
+                setSettingsOpen(false);
               }}
-              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
-                String(activeTab).startsWith('manage-')
-                  ? 'bg-indigo-50/80 text-indigo-950 shadow-sm border-l-4 border-indigo-600'
-                  : 'text-[#41474e] hover:bg-slate-100'
-              }`}
+              className={sideNav(String(activeTab).startsWith('manage-'), 'blue')}
             >
               <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-base text-indigo-600 bg-indigo-100 p-1 rounded-md shrink-0">manage_accounts</span>
+                <span className={sideIcon(String(activeTab).startsWith('manage-'), 'blue')}>manage_accounts</span>
                 <span>Manage</span>
               </div>
               <ChevronDown className={`w-3.5 h-3.5 ${manageOpen ? 'rotate-180' : ''}`} />
@@ -941,9 +876,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                     key={id}
                     type="button"
                     onClick={() => setActiveTab(id)}
-                    className={`w-full text-left px-2 py-1.5 rounded-md text-[11px] font-bold ${
-                      activeTab === id ? 'bg-indigo-100 text-indigo-950' : 'text-slate-600 hover:bg-slate-50'
-                    }`}
+                    className={sideSub(activeTab === id, 'blue')}
                   >
                     {label}
                   </button>
@@ -951,33 +884,45 @@ The lab results indicate a significantly elevated level indicating pathology. Th
               </div>
             )}
 
-            {/* Settings section */}
-            <button 
-              onClick={() => setActiveTab('settings')}
-              className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg font-bold text-xs transition-all ${
-                activeTab === 'settings' 
-                  ? 'bg-indigo-50/80 text-indigo-950 shadow-sm border-l-4 border-indigo-600' 
-                  : 'text-[#41474e] hover:bg-slate-100'
-              }`}
+            <button
+              type="button"
+              onClick={() => {
+                setSettingsOpen((v) => !v);
+                setLabMenuOpen(false);
+                setFinanceOpen(false);
+                setManageOpen(false);
+              }}
+              className={sideNav(activeTab === 'settings' || activeTab === 'trials' || activeTab === 'integration', 'blue')}
             >
               <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-base text-indigo-600 bg-indigo-100 p-1 rounded-md shrink-0">settings</span>
+                <span className={sideIcon(activeTab === 'settings' || activeTab === 'trials' || activeTab === 'integration', 'blue')}>settings</span>
                 <span>Settings</span>
               </div>
-              <span className="text-[9px] bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded font-mono font-semibold">
-                Config
-              </span>
+              <ChevronDown className={`w-3.5 h-3.5 ${settingsOpen ? 'rotate-180' : ''}`} />
             </button>
+            {settingsOpen && (
+              <div className="pl-9 pr-1 space-y-0.5 pb-2">
+                <button type="button" onClick={() => setActiveTab('settings')} className={sideSub(activeTab === 'settings', 'blue')}>
+                  Lab settings
+                </button>
+                <button type="button" onClick={() => setActiveTab('trials')} className={sideSub(activeTab === 'trials', 'blue')}>
+                  Clinical Trials Portal
+                </button>
+                <button type="button" onClick={() => setActiveTab('integration')} className={sideSub(activeTab === 'integration', 'blue')}>
+                  GP &amp; Mobile Sync
+                </button>
+              </div>
+            )}
           </nav>
 
-          <div className="mt-auto space-y-1 pt-4 border-t border-[#c1c7cf]">
+          <div className="mt-auto space-y-1 pt-4 border-t border-white/10">
             {/* Quick stats panel inside sidebar */}
-            <div className="bg-slate-50 border border-slate-200 rounded p-2.5 mb-2">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">SYSTEM INSTANCE</p>
+            <div className="bg-white/5 border border-white/10 rounded p-2.5 mb-2">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">SYSTEM INSTANCE</p>
               <div className="flex items-center justify-between">
-                <span className="text-[11px] text-slate-800 font-semibold">Gemini Patholabs:</span>
-                <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 bg-emerald-700 rounded-full animate-ping"></span> Live
+                <span className="text-[11px] text-slate-200 font-semibold">Gemini Patholabs:</span>
+                <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping"></span> Live
                 </span>
               </div>
             </div>
@@ -986,18 +931,18 @@ The lab results indicate a significantly elevated level indicating pathology. Th
               onClick={() => {
                 alert("LankaLab Support Team can be reached 24/7 at support@lankalab.lk or toll-free hotlines.");
               }}
-              className="w-full flex items-center gap-3 px-3 py-2 text-[#41474e] hover:bg-slate-100 rounded-lg font-bold text-xs transition-all"
+              className="w-full flex items-center gap-3 px-3 py-2 text-slate-400 hover:bg-white/5 hover:text-white rounded-lg font-bold text-xs transition-all"
             >
-              <HelpCircle className="w-4 h-4 text-slate-500" />
+              <HelpCircle className="w-4 h-4" />
               <span>Contact Support</span>
             </button>
             <button 
               onClick={() => {
                 alert("Loading historic diagnostics archives (2020-2025)... To fetch earlier archives, please connect central Sri Lanka ministry servers.");
               }}
-              className="w-full flex items-center gap-3 px-3 py-2 text-[#41474e] hover:bg-slate-100 rounded-lg font-bold text-xs transition-all"
+              className="w-full flex items-center gap-3 px-3 py-2 text-slate-400 hover:bg-white/5 hover:text-white rounded-lg font-bold text-xs transition-all"
             >
-              <RotateCcw className="w-4 h-4 text-slate-500" />
+              <RotateCcw className="w-4 h-4" />
               <span>Past Archives</span>
             </button>
           </div>
@@ -1008,7 +953,10 @@ The lab results indicate a significantly elevated level indicating pathology. Th
           
           {/* Active Tab: Overview (Main Workspace) */}
           {activeTab === 'overview' && (
-            <div className="space-y-6">
+            <div className="space-y-6 xl:pr-[200px]">
+              <div className="hidden xl:block fixed top-[72px] right-5 z-40">
+                <PortalClock compact />
+              </div>
               
               {/* Header block */}
               <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -1016,59 +964,48 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                   <h1 className="font-serif text-3xl font-bold bg-gradient-to-r from-sky-700 via-indigo-700 to-violet-700 bg-clip-text text-transparent tracking-tight">Lab Operations Dashboard</h1>
                   <p className="text-indigo-700/80 text-xs mt-1 font-medium">Completed assays on this board · pending work lives in Lab → Today&apos;s reports</p>
                 </div>
-                <div className="flex items-center gap-3 bg-gradient-to-r from-emerald-100 to-teal-100 px-3 py-1.5 rounded-full text-xs font-semibold text-emerald-900 border border-emerald-300">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
-                  <span>Live System Status: Optimal</span>
+                <div className="flex flex-col items-end gap-3">
+                  <div className="flex items-center gap-3 bg-gradient-to-r from-emerald-100 to-teal-100 px-3 py-1.5 rounded-full text-xs font-semibold text-emerald-900 border border-emerald-300">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
+                    <span>Live System Status: Optimal</span>
+                  </div>
+                  <div className="xl:hidden">
+                    <PortalClock compact />
+                  </div>
                 </div>
               </div>
 
               {/* Metrics Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 
                 <div 
                   onClick={() => setActiveTab('lab-today')}
-                  className="cursor-pointer bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-100 border-2 border-amber-400 p-4 rounded-xl shadow-md hover:ring-2 hover:ring-amber-500/50 hover:shadow-lg transition-all relative overflow-hidden group"
+                  className="cursor-pointer bg-gradient-to-br from-sky-50 via-blue-50 to-indigo-100 border-2 border-sky-500 p-4 rounded-xl shadow-md hover:ring-2 hover:ring-sky-500/50 hover:shadow-lg transition-all relative overflow-hidden group"
                 >
-                  <div className="absolute right-0 top-0 p-3 opacity-20 group-hover:opacity-35 transition-opacity text-amber-600">
+                  <div className="absolute right-0 top-0 p-3 opacity-20 group-hover:opacity-35 transition-opacity text-sky-600">
                     <Clock className="w-16 h-16" />
                   </div>
-                  <h3 className="text-[11px] font-black text-amber-800 uppercase tracking-wider mb-1">PENDING TESTS</h3>
+                  <h3 className="text-[11px] font-black text-sky-800 uppercase tracking-wider mb-1">PENDING</h3>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3.5xl font-bold font-sans text-amber-600">{metrics.queued}</span>
-                    {metrics.critical > 0 && (
-                      <span className="text-[10px] font-black text-red-700 bg-red-100 px-1.5 py-0.5 rounded">{metrics.critical} critical</span>
-                    )}
+                    <span className="text-3.5xl font-bold font-sans text-sky-600">{metrics.pending}</span>
+                    <span className="text-xs text-sky-700 font-semibold">not started</span>
                   </div>
-                  <p className="text-[11px] text-amber-900/80 mt-2 font-medium">Open Lab → Today&apos;s reports to process the queue</p>
+                  <p className="text-[11px] text-sky-900/80 mt-2 font-medium">Open Lab → Today&apos;s reports to start the queue</p>
                 </div>
 
                 <div 
-                  onClick={() => setActiveTab('logistics')}
-                  className="cursor-pointer bg-gradient-to-br from-teal-50 via-cyan-50 to-sky-100 border-2 border-teal-400 p-4 rounded-xl shadow-md hover:ring-2 hover:ring-teal-500/50 hover:shadow-lg transition-all relative overflow-hidden group"
+                  onClick={() => setActiveTab('lab-today')}
+                  className="cursor-pointer bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100 border-2 border-emerald-500 p-4 rounded-xl shadow-md hover:ring-2 hover:ring-emerald-500/50 hover:shadow-lg transition-all relative overflow-hidden group"
                 >
-                  <div className="absolute right-0 top-0 p-3 opacity-20 group-hover:opacity-35 transition-opacity text-teal-600">
+                  <div className="absolute right-0 top-0 p-3 opacity-20 group-hover:opacity-35 transition-opacity text-emerald-600">
                     <Truck className="w-16 h-16" />
                   </div>
-                  <h3 className="text-[11px] font-black text-teal-800 uppercase tracking-wider mb-1">SAMPLES IN TRANSIT</h3>
+                  <h3 className="text-[11px] font-black text-emerald-800 uppercase tracking-wider mb-1">PROCESSING</h3>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3.5xl font-bold font-sans text-teal-600">{metrics.transit}</span>
-                    <span className="text-xs text-sky-700 font-semibold">3 courier routes</span>
+                    <span className="text-3.5xl font-bold font-sans text-emerald-600">{metrics.processing}</span>
+                    <span className="text-xs text-emerald-700 font-semibold">in bench</span>
                   </div>
-                  <p className="text-[11px] text-teal-900/80 mt-2 font-medium">Last courier dispatch: 14 mins ago</p>
-                </div>
-
-                <div 
-                  className="bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100 border-2 border-emerald-400 p-4 rounded-xl shadow-md relative overflow-hidden"
-                >
-                  <div className="absolute right-0 top-0 p-3 opacity-20 text-emerald-600">
-                    <CheckCircle className="w-16 h-16" />
-                  </div>
-                  <h3 className="text-[11px] font-black text-emerald-800 uppercase tracking-wider mb-1">COMPLETED TESTS</h3>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3.5xl font-bold font-sans text-emerald-600">{metrics.completed}</span>
-                    <span className="text-xs text-teal-700 font-semibold">on this board</span>
-                  </div>
-                  <p className="text-[11px] text-emerald-900/80 mt-2 font-medium">Validated assays only — listed below</p>
+                  <p className="text-[11px] text-emerald-900/80 mt-2 font-medium">Assays being entered — still on Today&apos;s reports</p>
                 </div>
 
               </div>
@@ -1088,14 +1025,6 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                       </div>
                       
                       <div className="flex items-center gap-2 self-end sm:self-auto">
-                        <button
-                          type="button"
-                          onClick={() => setActiveTab('lab-today')}
-                          className="px-2.5 py-1 rounded-md text-[11px] font-black uppercase bg-amber-400 text-amber-950 hover:bg-amber-300"
-                        >
-                          {metrics.queued} pending
-                        </button>
-
                         {/* Order-specific search field */}
                         <div className="relative">
                           <input 
@@ -1143,9 +1072,9 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                                   isCriticalStatus
                                     ? 'bg-red-50 hover:bg-red-100/90 border-red-600'
                                     : isPendingStatus
-                                      ? 'bg-amber-50 hover:bg-amber-100/80 border-amber-400'
+                                      ? 'bg-sky-50 hover:bg-sky-100/80 border-sky-500'
                                       : isProcessingStatus
-                                        ? 'bg-orange-50 hover:bg-orange-100/80 border-orange-400'
+                                        ? 'bg-emerald-50 hover:bg-emerald-100/80 border-emerald-500'
                                         : isCompletedStatus
                                           ? 'bg-emerald-50/70 hover:bg-emerald-100/80 border-emerald-400'
                                           : 'hover:bg-[#e7eeff] border-transparent'
@@ -1156,16 +1085,16 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                                   <div className="flex items-center gap-2.5">
                                     <div className={`w-7.5 h-7.5 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                                       isCriticalStatus ? 'bg-red-600 text-white' :
-                                      isPendingStatus ? 'bg-amber-400 text-amber-950' :
-                                      isProcessingStatus ? 'bg-orange-500 text-white' :
-                                      isCompletedStatus ? 'bg-emerald-500 text-white' :
+                                      isPendingStatus ? 'bg-sky-500 text-white' :
+                                      isProcessingStatus ? 'bg-emerald-500 text-white' :
+                                      isCompletedStatus ? 'bg-emerald-600 text-white' :
                                       'bg-sky-100 text-primary-container'
                                     }`}>
                                       {avatarChar}
                                     </div>
                                     <div>
                                       <div className="flex items-center flex-wrap gap-1.5">
-                                        <p className={`text-xs ${isCriticalStatus ? 'text-red-700 font-bold' : isPendingStatus ? 'text-amber-900 font-bold' : 'text-primary font-semibold'}`}>
+                                        <p className={`text-xs ${isCriticalStatus ? 'text-red-700 font-bold' : isPendingStatus ? 'text-sky-900 font-bold' : isProcessingStatus ? 'text-emerald-900 font-bold' : 'text-primary font-semibold'}`}>
                                           {order.patientName}
                                         </p>
                                         {order.suwasiriBarcode && (
@@ -1190,7 +1119,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                                   {order.testType}
                                 </td>
 
-                                <td className={`px-3 py-3.5 text-xs ${isCriticalStatus ? 'text-red-600 font-bold' : isPendingStatus ? 'text-amber-800 font-semibold' : 'text-slate-600'}`}>
+                                <td className={`px-3 py-3.5 text-xs ${isCriticalStatus ? 'text-red-600 font-bold' : isPendingStatus ? 'text-sky-800 font-semibold' : isProcessingStatus ? 'text-emerald-800 font-semibold' : 'text-slate-600'}`}>
                                   {order.orderTime}
                                 </td>
 
@@ -1200,7 +1129,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
 
                                 <td className="px-3 py-3.5">
                                   {order.status === 'PROCESSING' && (
-                                    <span className="px-2 py-0.5 rounded-full border border-orange-400 bg-orange-500 text-white text-[9px] font-bold uppercase tracking-wider">
+                                    <span className="px-2 py-0.5 rounded-full border border-emerald-500 bg-emerald-500 text-white text-[9px] font-bold uppercase tracking-wider">
                                       Processing
                                     </span>
                                   )}
@@ -1210,7 +1139,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                                     </span>
                                   )}
                                   {order.status === 'PENDING' && (
-                                    <span className="px-2 py-0.5 rounded-full border border-amber-500 bg-amber-400 text-amber-950 text-[9px] font-black uppercase tracking-wider">
+                                    <span className="px-2 py-0.5 rounded-full border border-sky-500 bg-sky-500 text-white text-[9px] font-black uppercase tracking-wider">
                                       Pending
                                     </span>
                                   )}
@@ -1370,7 +1299,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                             {selectedOrder.patientName}
                           </h3>
                           <p className="text-[11px] text-indigo-100 mt-1 font-medium italic">
-                            Specimen: #{selectedOrder.specimenId} • Room: {selectedOrder.wardOrDept}
+                            Specimen: #{selectedOrder.specimenId} · Health ID: {uniqueHealthId(selectedOrder)} • Room: {selectedOrder.wardOrDept}
                           </p>
                         </div>
 
@@ -1559,7 +1488,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
               <div className="flex justify-between items-end border-b border-slate-200 pb-3">
                 <div>
                   <h1 className="font-serif text-3xl font-bold text-primary tracking-tight">Electronic Result Delivery &amp; Management</h1>
-                  <p className="text-on-surface-variant text-xs mt-1">Medway Secure Real-Time Clinician Reporting &amp; MDT Share</p>
+                  <p className="text-on-surface-variant text-xs mt-1">New bills appear here until results are entered and signed off. Completed cases move to Operations Overview.</p>
                 </div>
                 <button 
                   onClick={() => setActiveTab('overview')}
@@ -1570,6 +1499,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
               </div>
               <ResultDeliveryManager
                 orders={orders}
+                onEnterResults={(order) => setDeliveryEnteringId(order.id)}
                 onCompletedNavigate={(order) => {
                   void (async () => {
                     const completed = await completeAssayAndNotify(order.id);
@@ -1634,6 +1564,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                 setSelectedOrder(order);
                 setActiveTab('results');
               }}
+              onPatch={patchOrder}
             />
           )}
 
@@ -1663,21 +1594,21 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                   {pendingQueue.map(o => (
                     <div key={o.id} className={`p-5 transition-all flex flex-col md:flex-row justify-between md:items-center gap-4 border-l-4 ${
                       o.status === 'CRITICAL' ? 'bg-red-50 border-red-600' :
-                      o.status === 'PROCESSING' ? 'bg-orange-50 border-orange-400' :
-                      'bg-amber-50 border-amber-400'
+                      o.status === 'PROCESSING' ? 'bg-emerald-50 border-emerald-500' :
+                      'bg-sky-50 border-sky-500'
                     }`}>
                       
                       <div className="flex gap-4 items-start col-span-2">
                         <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                           o.status === 'CRITICAL' ? 'bg-red-600 text-white animate-pulse' :
-                          o.status === 'PROCESSING' ? 'bg-orange-500 text-white' :
-                          'bg-amber-400 text-amber-950'
+                          o.status === 'PROCESSING' ? 'bg-emerald-500 text-white' :
+                          'bg-sky-500 text-white'
                         }`}>
                           {o.patientName ? o.patientName.split(' ').map(n=>n[0]).join('') : 'PT'}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <h4 className={`font-semibold text-sm ${o.status === 'CRITICAL' ? 'text-red-700' : o.status === 'PENDING' ? 'text-amber-900' : 'text-primary'}`}>{o.patientName}</h4>
+                            <h4 className={`font-semibold text-sm ${o.status === 'CRITICAL' ? 'text-red-700' : o.status === 'PENDING' ? 'text-sky-900' : o.status === 'PROCESSING' ? 'text-emerald-900' : 'text-primary'}`}>{o.patientName}</h4>
                             <span className="text-[10px] text-slate-500 font-medium">({o.age}y {o.gender})</span>
                             <span className={`px-2 py-0.5 rounded text-[8px] uppercase tracking-wider font-bold ${
                               o.priority === 'Critical' ? 'bg-red-100 text-red-700' : o.priority === 'Urgent' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'
@@ -1701,7 +1632,7 @@ The lab results indicate a significantly elevated level indicating pathology. Th
                         <div>
                           <span className="text-[10px] text-slate-500 uppercase tracking-widest block font-bold">Current Phase</span>
                           <span className={`px-3 py-1 rounded text-xs font-bold uppercase tracking-wide inline-block mt-1 ${
-                            o.status === 'CRITICAL' ? 'bg-red-600 text-white animate-pulse' : o.status === 'PROCESSING' ? 'bg-orange-500 text-white' : 'bg-amber-400 text-amber-950'
+                            o.status === 'CRITICAL' ? 'bg-red-600 text-white animate-pulse' : o.status === 'PROCESSING' ? 'bg-emerald-500 text-white' : 'bg-sky-500 text-white'
                           }`}>
                             {o.status}
                           </span>
@@ -2102,66 +2033,6 @@ The lab results indicate a significantly elevated level indicating pathology. Th
             />
           )}
 
-          {/* Active Tab: Notifications / Live Alerts */}
-          {activeTab === 'notifications' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-end border-b border-slate-200 pb-4">
-                <div>
-                  <h1 className="font-serif text-3xl font-bold text-primary tracking-tight">System Alerts &amp; Auditing Log</h1>
-                  <p className="text-on-surface-variant text-xs mt-1">Comprehensive audit path of pathology alarms, supply orders and system updates</p>
-                </div>
-                <button 
-                  onClick={() => {
-                    setNotifications(initialNotifications);
-                    alert("Alarms audit path successfully reset.");
-                  }}
-                  className="px-3 py-1.5 border border-slate-350 bg-white hover:bg-slate-50 rounded-lg text-xs font-bold text-slate-700 transition-all"
-                >
-                  Clear All Alarms
-                </button>
-              </div>
-
-              <div className="bg-white border border-[#c1c7cf] rounded-xl overflow-hidden shadow-sm">
-                <div className="divide-y divide-slate-100">
-                  {notifications.map((notif) => {
-                    const isCritical = notif.type === 'CRITICAL';
-                    const isWarning = notif.type === 'WARNING';
-                    
-                    return (
-                      <div key={notif.id} className="p-5 flex gap-4 hover:bg-slate-50 transition-colors">
-                        <span className="material-symbols-outlined text-4xl shrink-0" style={{
-                          color: isCritical ? '#ba1a1a' : isWarning ? '#452900' : '#00334f'
-                        }}>
-                          {isCritical ? 'warning' : isWarning ? 'inventory_2' : 'info'}
-                        </span>
-                        
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`font-bold text-xs uppercase tracking-wider px-2 py-0.5 rounded ${
-                              isCritical ? 'bg-red-100 text-red-700' : isWarning ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-primary'
-                            }`}>
-                              {notif.title}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-mono">{notif.timeAgo}</span>
-                          </div>
-                          
-                          <p className="text-slate-800 text-sm mt-2 leading-relaxed font-medium">
-                            {notif.message}
-                          </p>
-                          
-                          <p className="text-[10px] text-slate-500 mt-1 font-semibold italic">
-                            Logged via Colombo General Practice Patholab Node • {notif.timestamp.toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-            </div>
-          )}
-
           {/* Active Tab: Suwasiri Digital Health Gateway */}
           {activeTab === 'suwasiri' && (
             <SuwasiriGateway 
@@ -2195,20 +2066,38 @@ The lab results indicate a significantly elevated level indicating pathology. Th
         </main>
       </div>
 
-      <button 
-        onClick={() => setActiveTab('newbill')}
-        className="fixed bottom-8 right-8 w-14 h-14 bg-[#0a2547] text-white rounded-full shadow-2xl shadow-blue-950/40 flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50 group ring-4 ring-[#1e4a7a]/50 hover:bg-[#123a6b]"
-      >
-        <Plus className="w-8 h-8 text-white" />
-        <span className="absolute right-16 bg-[#0a2547] text-white px-3 py-1.5 rounded-lg text-xs font-black tracking-wide opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-md">
-          NEW BILL
-        </span>
-      </button>
-
       {isNewOrderOpen && (
         <OrderForm 
           onClose={() => setIsNewOrderOpen(false)}
           onAddOrder={handleAddOrder}
+        />
+      )}
+
+      {deliveryEnteringId && orders.find((o) => o.id === deliveryEnteringId) && (
+        <EnterResultsPage
+          order={orders.find((o) => o.id === deliveryEnteringId)!}
+          onCancel={() => {
+            const current = orders.find((o) => o.id === deliveryEnteringId);
+            setDeliveryEnteringId(null);
+            if (current?.status === 'COMPLETED') {
+              setSelectedOrder(current);
+              setCurrentPage(1);
+              setActiveTab('overview');
+            }
+          }}
+          onSave={(results, extra) => {
+            const current = orders.find((o) => o.id === deliveryEnteringId);
+            if (current) persistEnteredResults(current, results, extra, 'save');
+          }}
+          onFinal={(results, extra) => {
+            const current = orders.find((o) => o.id === deliveryEnteringId);
+            if (current) persistEnteredResults(current, results, extra, 'final');
+          }}
+          onSignOff={(results, extra) => {
+            const current = orders.find((o) => o.id === deliveryEnteringId);
+            setDeliveryEnteringId(null);
+            if (current) persistEnteredResults(current, results, extra, 'sign');
+          }}
         />
       )}
     </div>

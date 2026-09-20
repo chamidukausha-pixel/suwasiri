@@ -179,6 +179,35 @@ export default function BillView({
                   </tr>
                 </tbody>
               </table>
+              {order.results && order.results.length > 0 && (
+                <div className="mt-6">
+                  <p className="text-center text-[11px] tracking-[0.2em] text-slate-400">✦ LABORATORY REPORT ✦</p>
+                  <p className="text-center text-[12px] font-semibold mb-2">{order.testType}</p>
+                  {order.status === "COMPLETED" && (
+                    <p className="text-center text-[11px] text-emerald-700 font-bold mb-2">COMPLETED</p>
+                  )}
+                  <table className="w-full text-[12px]">
+                    <thead>
+                      <tr className="border-y">
+                        <th className="text-left py-1 font-semibold">TEST</th>
+                        <th className="text-left py-1 font-semibold">VALUE</th>
+                        <th className="text-left py-1 font-semibold">UNIT</th>
+                        <th className="text-left py-1 font-semibold">REFERENCE</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {order.results.map((r) => (
+                        <tr key={r.parameter} className={r.isAbnormal ? "font-black" : ""}>
+                          <td className="py-0.5">{r.parameter}</td>
+                          <td className="py-0.5">{r.value}</td>
+                          <td className="py-0.5">{r.unit}</td>
+                          <td className="py-0.5">{r.referenceRange}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
               <p className="text-center text-slate-400 mt-8">~~~~ Thank You ~~~~</p>
             </div>
             <div className="flex flex-wrap items-center gap-2 mt-3">
@@ -188,9 +217,11 @@ export default function BillView({
               <button type="button" onClick={printBill} className="inline-flex items-center gap-1 px-3 py-1.5 border rounded text-xs font-semibold">
                 <FileText className="w-3.5 h-3.5" /> Print PDF
               </button>
+              {order.status !== "COMPLETED" && (
               <button type="button" onClick={onEnterResults || onClose} className="inline-flex items-center gap-1 px-3 py-1.5 border rounded text-xs font-semibold">
                 <Pencil className="w-3.5 h-3.5" /> Enter results
               </button>
+              )}
               <a href={wa} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 text-white rounded text-xs font-semibold">
                 <MessageCircle className="w-3.5 h-3.5" /> WhatsApp bill
               </a>

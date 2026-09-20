@@ -33,9 +33,9 @@ class VaccineBookingSheet extends StatelessWidget {
       };
 
   static Color _typeTagColor(FacilityType t) => switch (t) {
-        FacilityType.mohClinic => const Color(0xFF7C3AED),
-        FacilityType.hospital => const Color(0xFF0369A1),
-        FacilityType.privateHospital => const Color(0xFFB45309),
+        FacilityType.mohClinic => AppColors.trustBlue,
+        FacilityType.hospital => AppColors.brandBlueDeep,
+        FacilityType.privateHospital => AppColors.emerald,
         FacilityType.all => AppColors.slateMuted,
       };
 
@@ -326,7 +326,7 @@ class VaccineBookingSheet extends StatelessWidget {
                                     Text(
                                       'Price: LKR ${NumberFormat('#,###').format(c.priceLkr)}',
                                       style: const TextStyle(
-                                        color: Color(0xFFB45309),
+                                        color: AppColors.emerald,
                                         fontWeight: FontWeight.w800,
                                         fontSize: 13,
                                       ),
@@ -455,9 +455,9 @@ class VaccineBookingSheet extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFF7ED),
+                  color: AppColors.emeraldSoft,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFFDBA74)),
+                  border: Border.all(color: AppColors.emerald),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -467,7 +467,7 @@ class VaccineBookingSheet extends StatelessWidget {
                       height: 28,
                       alignment: Alignment.center,
                       decoration: const BoxDecoration(
-                        color: Color(0xFFFB923C),
+                        color: AppColors.emerald,
                         shape: BoxShape.circle,
                       ),
                       child: const Text(
@@ -497,7 +497,7 @@ class VaccineBookingSheet extends StatelessWidget {
                                 text:
                                     'LKR ${NumberFormat('#,###').format(price)}.',
                                 style: const TextStyle(
-                                  color: Color(0xFFC2410C),
+                                  color: AppColors.brandGreenDeep,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -509,7 +509,7 @@ class VaccineBookingSheet extends StatelessWidget {
                               const TextSpan(
                                 text: 'LKR 850 max.',
                                 style: TextStyle(
-                                  color: Color(0xFFC2410C),
+                                  color: AppColors.brandGreenDeep,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),

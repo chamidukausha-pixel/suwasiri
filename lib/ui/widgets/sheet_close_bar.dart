@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_colors.dart';
 import '../../localization/app_localizations.dart';
 
 /// Close text button plus an X — use on modal sheets / sub-pages.
@@ -33,7 +34,7 @@ class SheetCloseActions extends StatelessWidget {
           tooltip: l.t('close'),
           onPressed: close,
           style: IconButton.styleFrom(
-            backgroundColor: const Color(0xFFF1F5F9),
+            backgroundColor: AppColors.trustBlueSoft,
           ),
           icon: const Icon(Icons.close, size: 20),
         ),

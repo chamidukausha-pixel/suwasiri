@@ -185,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   case 0:
                     return _ServiceNeedCard(
                       icon: Icons.medication_rounded,
-                      iconBg: const Color(0xFF22C55E),
+                      iconBg: AppColors.emerald,
                       label: l.t('repeatPrescription'),
                       onTap: () => _openDoctorsForService(
                         visitReasonKey: 'visitReasonRepeatPrescription',
@@ -205,7 +205,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   default:
                     return _ServiceNeedCard(
                       icon: Icons.analytics_rounded,
-                      iconBg: const Color(0xFF8B5CF6),
+                      iconBg: AppColors.emergencyRed,
                       label: l.t('reviewResults'),
                       onTap: () => _openDoctorsForService(
                         visitReasonKey: 'visitReasonReviewResults',
@@ -788,7 +788,7 @@ class _HealthTipCard extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: const Color(0xFFD1FAE5),
+              color: AppColors.emeraldSoft,
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(

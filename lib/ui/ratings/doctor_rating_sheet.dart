@@ -91,7 +91,7 @@ Future<void> showDoctorRatingSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    barrierColor: const Color(0xCC0B3D32),
+    barrierColor: AppColors.trustBlueDark.withValues(alpha: 0.8),
     builder: (ctx) {
       return _DoctorRatingSheet(
         appointment: appointment,
@@ -215,7 +215,7 @@ class _DoctorRatingSheetState extends State<_DoctorRatingSheet> {
                       children: [
                         CircleAvatar(
                           radius: 42,
-                          backgroundColor: const Color(0xFFE8F3F0),
+                          backgroundColor: AppColors.emeraldSoft,
                           backgroundImage: photo != null && photo.isNotEmpty
                               ? NetworkImage(photo)
                               : null,
@@ -224,7 +224,7 @@ class _DoctorRatingSheetState extends State<_DoctorRatingSheet> {
                               : Text(
                                   initials,
                                   style: const TextStyle(
-                                    color: Color(0xFF0F766E),
+                                    color: AppColors.emerald,
                                     fontWeight: FontWeight.w800,
                                     fontSize: 26,
                                   ),
@@ -297,7 +297,7 @@ class _DoctorRatingSheetState extends State<_DoctorRatingSheet> {
                                 ? Icons.star_rounded
                                 : Icons.star_outline_rounded,
                             color: i <= _stars
-                                ? const Color(0xFFF5C518)
+                                ? AppColors.emerald
                                 : AppColors.line(context),
                           ),
                         ),
@@ -331,7 +331,7 @@ class _DoctorRatingSheetState extends State<_DoctorRatingSheet> {
                                 ? Colors.white
                                 : AppColors.ink(context),
                           ),
-                          selectedColor: const Color(0xFF0F766E),
+                          selectedColor: AppColors.emerald,
                           backgroundColor: AppColors.softFill(context),
                           shape: const StadiumBorder(),
                           side: BorderSide.none,
